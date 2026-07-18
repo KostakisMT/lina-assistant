@@ -162,9 +162,9 @@
 - [x] LICENSE (Apache 2.0) + NOTICE.md (2026-07-16)
 - [x] README + CONTRIBUTING publikumstauglich (2026-07-16)
 - [x] Landingpage `docs/index.html` (barrierefrei, Hochkontrast) (2026-07-16)
-- [ ] Frisches öffentliches Repo ohne History erzeugen und pushen (Nutzer-Entscheidung – alte History enthält persönliche Daten!)
-- [ ] GitHub Pages aktivieren (Settings → Pages → main /docs)
-- [ ] GitHub-Repo-Beschreibung + Topics setzen (accessibility, android, voice-assistant, tts, stt)
+- [x] Frisches öffentliches Repo ohne History: `KostakisMT/lina-assistant` (alt: `lina-assistant-private`, bleibt Archiv) – 2026-07-18
+- [x] GitHub Pages aktiv: https://kostakismt.github.io/lina-assistant/ – 2026-07-18
+- [x] Repo-Beschreibung, Homepage + Topics gesetzt – 2026-07-18
 
 ---
 

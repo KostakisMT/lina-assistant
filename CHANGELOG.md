@@ -17,6 +17,18 @@
 
 ---
 
+## [2026-07-18] Öffentlicher Launch: Repo + GitHub Pages live
+
+**Was:** Frisches öffentliches Repo `KostakisMT/lina-assistant` (ein Initial-Commit, keine Alt-History) erstellt und gepusht; bisheriges privates Repo als Archiv umbenannt zu `lina-assistant-private` (volle History bleibt dort erhalten). GitHub Pages aktiviert (main /docs) → Landingpage live: https://kostakismt.github.io/lina-assistant/ – Repo-Beschreibung, Homepage-URL und Topics gesetzt. Lokales Arbeitsverzeichnis: `origin` = öffentliches Repo, `archive` = privates Archiv, Branch `old-main-archiv` sichert die alte History zusätzlich lokal.
+
+**Warum:** Open-Source-Launch; die alte Git-History enthielt personenbezogene Daten und durfte nie öffentlich werden – daher History-freier Neustart.
+
+**Dateien:** (Repo-Struktur; TODO.md, CHANGELOG.md)
+
+**Offen:** Release-APK + F-Droid (Phase 2), Kurzvorstellung in Accessibility-Communities.
+
+---
+
 ## [2026-07-16] Open-Source-Launch-Paket: LICENSE, NOTICE, README, Landingpage
 
 **Was:** `LICENSE` (Apache 2.0, kanonischer Text) und `NOTICE.md` (Attribution aller Modelle/Bibliotheken, insb. Piper-Stimme de_DE-dii-high CC BY-NC-SA mit Gemeinnützigkeits-Begründung nach ADR-016). README publikumstauglich umgeschrieben (Features, Technik-Tabelle, Build-Anleitung, Träger), `CONTRIBUTING.md` mit Grundregeln. Barrierefreie Hochkontrast-Landingpage `docs/index.html` für GitHub Pages (main /docs).

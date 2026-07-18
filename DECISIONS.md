@@ -173,6 +173,5 @@
 **Konsequenzen:**
 - Ohne Internet oder API-Key funktionieren weiterhin alle Kernbefehle – nur die freie Konversation entfällt (Prinzip "Offline where possible" bleibt gewahrt)
 - API-Key liegt in `local.properties` (nicht im Git); pro Gerät zu hinterlegen
-- Laufende API-Kosten trägt der Verein – bei Skalierung auf viele Testnutzer neu bewerten
 - Datenschutz: freie Konversation verlässt das Gerät; muss im Onboarding/der Doku transparent gemacht werden
 - `LlmIntentResolver` (lokales Modell) bleibt als möglicher späterer Offline-Pfad im Backlog

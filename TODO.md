@@ -151,10 +151,29 @@
 
 ---
 
-## 🟡 Nächste Schritte (nach Tablet-Test)
+## 🟡 Plan bis zum Bewerbungsfenster (Stand 2026-07-18)
 
-- [x] Custom Wake Word "Hey Lina" trainiert (training/, synthetisch + echte Aufnahmen, 2026-07-04)
+### Etappe 1 – Juli: Claude-Anbindung verifizieren & Release-fähig werden
+- [ ] `CLAUDE_API_KEY` in local.properties hinterlegen (Nutzer) + Tablet-Test der freien Konversation (inkl. Verhörer-Befehle wie "Rumfe mal den Boris an" → Do-Intent)
+- [ ] Bestätigungston/Earcon während STT-Transkription und Claude-Wartezeit (kleines Feature, großer UX-Effekt)
+- [ ] Release-Keystore anlegen (`.jks`, lokal) + signiertes `assembleRelease`-APK
 - [ ] SSH-Key für GitHub einrichten (aktuell HTTPS)
+
+### Etappe 2 – August: Robustheit & Gerätetest komplett
+- [ ] Raumdistanz-Spike: GTCRN-Entrauschen vor Whisper (sherpa-onnx) prototypisch einbauen und auf dem Tablet messen (Fehlerrate vorher/nachher)
+- [ ] Offene Gerätetests abarbeiten (siehe Auslieferungs-Checkliste oben: Anrufe, SMS, RSS, Hörbücher, Onboarding)
+- [ ] Dauerbetrieb: Service-Stabilität 1h / 4h / über Nacht auf dem Lenovo (ZUI-Battery-Killer)
+- [ ] Tablet des Zieltestnutzers vorbereiten: Wake-Word-Nachtraining mit seiner Stimme ("Aufnahme"-Befehl → training/)
+
+### Etappe 3 – September: Sichtbarkeit & Antragsreife
+- [ ] 2-Minuten-Demo-Video: Lina auf dem Tablet (Anruf, Nachrichten, Konversation) – für Landingpage und Anträge
+- [ ] Demo-Video auf Landingpage einbinden (mit Transkript/Untertiteln – barrierefrei)
+- [ ] Fördermittel-Unterlagen finalisieren (intern, siehe lokaler Ordner)
+- [ ] Kurzanleitung für Nutzer in Audioform aufnehmen
+
+### Etappe 4 – Oktober/November: Einreichen & erzählen
+- [ ] Förderbewerbung einreichen (Fenster: 01.10.–30.11.2026)
+- [ ] Lina in Accessibility-/FOSS-Communities vorstellen (Foren, Mastodon, ggf. Vortrag)
 
 ## 🟢 Open-Source-Launch
 

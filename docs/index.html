@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lina – VoiceFirst Assistant für blinde Menschen</title>
+  <meta name="description" content="Lina ist eine Open-Source-Sprachassistentin für Android, gebaut für blinde und sehbehinderte Menschen. Anrufe, SMS, Nachrichten und Hörbücher – komplett per Sprache, Kernfunktionen offline.">
+  <style>
+    :root {
+      --bg: #000000;
+      --fg: #ffffff;
+      --accent: #ffd700;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 1.25rem;
+      line-height: 1.7;
+    }
+    main {
+      max-width: 46rem;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    header { text-align: center; padding: 3rem 1rem 1rem; }
+    h1 { font-size: 3rem; margin: 0; color: var(--accent); }
+    .tagline { font-size: 1.5rem; margin: 0.75rem 0 0; }
+    h2 {
+      color: var(--accent);
+      font-size: 1.75rem;
+      margin-top: 2.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.25rem;
+    }
+    a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+    a:focus-visible, .button:focus-visible {
+      outline: 4px solid var(--fg);
+      outline-offset: 3px;
+    }
+    ul { padding-left: 1.4rem; }
+    li { margin: 0.6rem 0; }
+    .beispiel {
+      border-left: 5px solid var(--accent);
+      margin: 1rem 0;
+      padding: 0.5rem 1rem;
+      font-style: italic;
+    }
+    .buttons { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem; }
+    .button {
+      display: inline-block;
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 700;
+      text-decoration: none;
+      padding: 1.1rem 1.8rem; /* großes Touch-Target */
+      border-radius: 0.5rem;
+      font-size: 1.25rem;
+    }
+    footer {
+      border-top: 1px solid var(--fg);
+      margin-top: 3rem;
+      padding: 1.5rem 0 2rem;
+      font-size: 1.05rem;
+    }
+    .footer-inner { max-width: 46rem; margin: 0 auto; padding: 0 1.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lina</h1>
+    <p class="tagline">„Hey Lina" – und das Leben wird ein bisschen leichter.</p>
+  </header>
+
+  <main>
+    <p>
+      Lina ist eine <strong>Open-Source-Sprachassistentin für Android</strong>,
+      gebaut für blinde und sehbehinderte Menschen. Kein Bildschirm nötig, kein
+      Login, keine Cloud-Pflicht: Die Kernfunktionen laufen komplett auf dem
+      Gerät. Getragen wird das Projekt vom gemeinnützigen Verein
+      <strong>Inklusiv&nbsp;Aktiv&nbsp;e.V.</strong>
+    </p>
+
+    <p class="buttons">
+      <a class="button" href="https://github.com/KostakisMT/lina-assistant">Quellcode auf GitHub</a>
+    </p>
+
+    <h2>Was Lina kann</h2>
+    <ul>
+      <li><strong>Anrufe:</strong> Kontakte anrufen, eingehende Anrufe annehmen oder ablehnen – nur mit der Stimme.</li>
+      <li><strong>Nachrichten schreiben und vorlesen:</strong> SMS senden, empfangene Nachrichten vorlesen lassen, direkt antworten.</li>
+      <li><strong>Zeitung hören:</strong> Nachrichten aus vertrauten Quellen – erst die Zusammenfassung, auf Wunsch der ganze Artikel.</li>
+      <li><strong>Hörbücher:</strong> Eigene Bibliothek und kostenlose Librivox-Hörbücher, mit Schlaf-Timer.</li>
+      <li><strong>Einfach reden:</strong> Optional beantwortet Lina freie Fragen und unterhält sich – wie eine gute Bekannte.</li>
+    </ul>
+
+    <h2>So klingt das</h2>
+    <p class="beispiel">„Hey Lina, ruf Boris an." – „Ich rufe Boris an."</p>
+    <p class="beispiel">„Hey Lina, was gibt es Neues?" – „Drei Meldungen. Erstens: …"</p>
+    <p class="beispiel">„Hey Lina, spiel mein Hörbuch weiter." – „Weiter geht's bei Kapitel vier."</p>
+
+    <h2>Warum noch eine Assistentin?</h2>
+    <p>
+      Siri, Alexa und Co. sind für sehende Menschen gebaut – Bildschirm-Dialoge,
+      visuelle Rückfragen, begrenzte Antworten. Lina ist von Grund auf
+      <strong>Voice-First</strong>: Jede Aktion wird gesprochen bestätigt, nichts
+      setzt Sehen voraus. Und weil sie Open Source ist, kann jede Community sie
+      an ihre Bedürfnisse anpassen.
+    </p>
+
+    <h2>Technik in einem Satz</h2>
+    <p>
+      Weckwort-Erkennung (OpenWakeWord), Spracherkennung (Whisper) und
+      Sprachausgabe (Piper) laufen offline auf dem Tablet; für freie Gespräche
+      kann optional die Claude-API angebunden werden. Alles unter
+      Apache-2.0-Lizenz.
+    </p>
+
+    <h2>Mitmachen</h2>
+    <p>
+      Lina sucht Mitstreiter:innen – Entwickler:innen, Tester:innen und
+      besonders Menschen mit eigener Seheinschränkungs-Erfahrung.
+      Der gesamte Code, die Dokumentation und die offenen Aufgaben liegen auf
+      <a href="https://github.com/KostakisMT/lina-assistant">GitHub</a>.
+    </p>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>
+        Ein Projekt von Inklusiv Aktiv e.V. (gemeinnützig) ·
+        Code unter <a href="https://github.com/KostakisMT/lina-assistant/blob/main/LICENSE">Apache 2.0</a> ·
+        <a href="https://github.com/KostakisMT/lina-assistant/blob/main/NOTICE.md">Lizenzhinweise zu Sprachmodellen</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

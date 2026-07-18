@@ -1,0 +1,30 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.jks
+*.gguf
+*.onnx
+app/src/main/assets/vosk-model*/
+app/src/main/assets/openwakeword/
+app/src/main/assets/piper/
+app/src/main/assets/whisper/
+app/libs/*.aar
+app/build/
+# Wake-Word-Training: Scripts sind versioniert, Daten/Umgebungen nicht
+training/venv/
+training/data/
+training/tts/
+__pycache__/
+
+# Persönliche Daten des Primärnutzers – bleibt lokal
+NUTZERPROFIL.md
+
+# Förderanträge – intern, nicht veröffentlichen
+foerderantrag/

@@ -249,7 +249,7 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
         /**
          * Reihenfolge = Nummer im Sprachbefehl "Stimme <n>".
          * Gewählt am 2026-07-04 (ADR-016): de_DE-dii-high (OpenVoiceOS,
-         * CC BY-NC-SA – ok, da Träger Inklusiv Aktiv e.V. gemeinnützig).
+         * CC BY-NC-SA – ok, da gemeinnütziger Träger, kein kommerzieller Vertrieb).
          * Weitere Testkandidaten: siehe scripts/download-models.sh.
          */
         val AVAILABLE_VOICES = listOf(

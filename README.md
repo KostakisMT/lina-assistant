@@ -8,7 +8,7 @@ Lina is an open-source voice assistant for Android, built from the ground up for
 blind and visually impaired people. Fully controllable by voice, core features
 run offline, no login, no cloud requirement.
 
-Carried by Inklusiv Aktiv e.V. (non-profit) – not a commercial product.
+Carried by a German non-profit association – not a commercial product.
 The app currently speaks **German**; the architecture is designed
 language-agnostic, and an English release is a stated goal – contributions
 welcome.
@@ -84,7 +84,7 @@ Lina ist eine Open-Source-Sprachassistentin für Android, gebaut für blinde und
 sehbehinderte Menschen. Komplett per Sprache steuerbar, Kernfunktionen offline,
 kein Login, keine Cloud-Pflicht.
 
-Getragen von Inklusiv Aktiv e.V. (gemeinnützig) – kein kommerzielles Produkt.
+Getragen von einem gemeinnützigen Verein – kein kommerzielles Produkt.
 
 ## Was Lina kann
 

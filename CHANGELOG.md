@@ -79,7 +79,7 @@
 
 ## [2026-07-04] Stimmen-A/B-Test → neue Standard-Stimme de_DE-dii-high
 
-**Was:** Laufzeit-Stimmwechsler in `PiperTtsEngine` (`AVAILABLE_VOICES`, `switchVoice()`, thread-sicher via engineLock) + Sprach-/Debug-Befehl "Stimme <n>" / "nächste Stimme" in `LauncherActivity`. Sechs Stimmen auf dem Gerät verglichen (ramona/kerstin/eva_k low, thorsten medium, dii/miro high). Bugfix: AudioTrack-Puffergröße auf Framegröße (4 Bytes) gerundet – 22.05kHz-Modelle crashten sonst mit "Invalid audio buffer size". Gewählt: **de_DE-dii-high** (OpenVoiceOS) als Default, übrige Modelle aus Assets entfernt. Projektträger Inklusiv Aktiv e.V. (gemeinnützig) in CLAUDE.md dokumentiert – macht die CC-BY-NC-SA-Lizenz der Stimme nutzbar (ADR-016).
+**Was:** Laufzeit-Stimmwechsler in `PiperTtsEngine` (`AVAILABLE_VOICES`, `switchVoice()`, thread-sicher via engineLock) + Sprach-/Debug-Befehl "Stimme <n>" / "nächste Stimme" in `LauncherActivity`. Sechs Stimmen auf dem Gerät verglichen (ramona/kerstin/eva_k low, thorsten medium, dii/miro high). Bugfix: AudioTrack-Puffergröße auf Framegröße (4 Bytes) gerundet – 22.05kHz-Modelle crashten sonst mit "Invalid audio buffer size". Gewählt: **de_DE-dii-high** (OpenVoiceOS) als Default, übrige Modelle aus Assets entfernt. Gemeinnützige, nicht-kommerzielle Trägerschaft in CLAUDE.md dokumentiert – macht die CC-BY-NC-SA-Lizenz der Stimme nutzbar (ADR-016).
 
 **Warum:** Nutzerfeedback: ramona-low klanglich unzureichend; alle freien deutschen Piper-Frauenstimmen sind nur "low"-Qualität.
 

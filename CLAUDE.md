@@ -12,7 +12,7 @@
 **Name:** Lina – VoiceFirst Assistant
 **Weckwort:** "Hey Lina"
 **Art:** Open-Source Android-App (GitHub)
-**Träger:** Inklusiv Aktiv e.V. (gemeinnützig) – kein kommerzieller Vertrieb
+**Träger:** Gemeinnütziger Verein (Name vorerst nicht öffentlich, intern dokumentiert) – kein kommerzieller Vertrieb
 **Lizenz:** Apache 2.0 (Code). Modelle können abweichende Lizenzen haben –
 NC-Lizenzen (z.B. CC BY-NC-SA bei OVOS-Piper-Stimmen) sind durch die
 Gemeinnützigkeit nutzbar, aber pro Modell in DECISIONS.md zu dokumentieren.

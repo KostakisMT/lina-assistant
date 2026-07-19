@@ -17,6 +17,18 @@
 
 ---
 
+## [2026-07-19] Weckwort v3: Nachtraining mit Testnutzer-Stimme
+
+**Was:** Die fünf Weckwort-Aufnahmen aus der Ersteinrichtung des Testnutzers ins Training aufgenommen (`user_positive`, 40-fach übergewichtet), seine fünf Befehls-Aufnahmen als Hard Negatives. Bisherige Entwickler-Clips bleiben drin (beide Stimmen sollen wecken). Pipeline unverändert (`training/`), Validierung: Recall 0,886–0,93 bei Schwelle 0,3 über beide Stimmen, Fehlalarmrate 0,27 %/Fenster. Modell auf dem Tablet deployed.
+
+**Warum:** Weckwort v2 war nur auf die Entwicklerstimme nachtrainiert; beim Testnutzer soll die Erkennung genauso zuverlässig sein (Besuch #2 nächste Woche).
+
+**Dateien:** training/data (lokal, gitignored), assets/openwakeword/hey_lina_v1.onnx (gitignored)
+
+**Offen:** 5/5-Verifikation mit der Entwicklerstimme jetzt; mit der Testnutzer-Stimme erst vor Ort bei Besuch #2. Bei Fehlalarmen im Alltag: Schwelle in OpenWakeWordEngine anheben.
+
+---
+
 ## [2026-07-19] Onboarding-Politur + Uhrzeit-Intent + pause_turn-Härtung
 
 **Was:** (1) Onboarding: Region als sechste Frage (füllt `user_region` für Wetter/Regionalnachrichten – ersetzt den manuellen Pref-Eingriff); Whisper-Stille-Erkennung während der Fragephase 1200→1800 ms (`WhisperSttEngine.endSilenceMs`, ältere Nutzer machen Denkpausen – drei von fünf Antworten waren beim Feldtest abgeschnitten); Pause nach Ansagen 500→800 ms (Ansage-Tail nicht mehr in der Aufnahme); Debug-Aufnahme-Ansage generisch + Startton (dient jetzt auch Zukunftsbefehl-Aufnahmen). (2) Neuer Offline-Intent `Time`: „Wie spät ist es?" → lokale Uhrzeit-Ansage, ohne Cloud. (3) `pause_turn` bei Websuche-Läufen wird erkannt und ehrlich beantwortet („Die Suche dauert gerade zu lange…") statt leerer Antwort; kein voller Resume (Java-SDK-Blockrekonstruktion unverhältnismäßig).

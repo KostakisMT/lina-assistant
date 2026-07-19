@@ -14,6 +14,7 @@ Die Modelle sind **nicht** Teil dieses Repositories – sie werden per
 | Komponente | Quelle | Lizenz | Hinweis |
 |---|---|---|---|
 | TTS-Stimme `de_DE-dii-high` | [OpenVoiceOS / pipertts_de-DE_dii](https://huggingface.co/OpenVoiceOS) | **CC BY-NC-SA 4.0** | Nicht-kommerziell. Nutzung zulässig, da das Projekt gemeinnützig getragen wird und kein kommerzieller Vertrieb stattfindet (siehe ADR-016). Wer die App kommerziell weiterverbreiten will, muss diese Stimme ersetzen. |
+| TTS-Stimme `de_DE-thorsten_emotional-medium` | [Thorsten-Voice](https://www.thorsten-voice.de/) (Thorsten Müller) via Piper | CC0 / frei | Alternative Stimme („fröhlich", Sprecher 0); frei auch für kommerzielle Nutzung |
 | Whisper base (int8, ONNX) | [OpenAI Whisper](https://github.com/openai/whisper) via [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | MIT | |
 | Vosk `vosk-model-small-de` | [Alpha Cephei / Vosk](https://alphacephei.com/vosk/models) | Apache 2.0 | Fallback-STT |
 | OpenWakeWord Basismodelle (`melspectrogram.onnx`, `embedding_model.onnx`) | [dscripka/openWakeWord](https://github.com/dscripka/openWakeWord) | Apache 2.0 | |

@@ -65,7 +65,10 @@ class LocalCommandResolver : IntentResolver {
     }
 
     private fun resolveNews(input: String): ResolvedIntent? = when {
-        input.matches(Regex(""".*(?:was gibt es neues|nachrichten|news|neuigkeiten|was ist passiert).*""")) ->
+        // Regionale/thematische Nachrichtenwünsche ("... aus Hannover", "... zur
+        // Politik") gehen an Ebene 2 (Claude + Websuche), nicht an den RSS-Reader
+        input.matches(Regex(""".*(?:was gibt es neues|nachrichten|news|neuigkeiten|was ist passiert).*""")) &&
+            !input.matches(Regex(""".*(?:\baus\b|\büber\b|\bzur\b|\bzum\b|\bregion\b|\bthema\b).*""")) ->
             ResolvedIntent.ReadNews
         input.matches(Regex(""".*(?:mehr dazu|ausführlich|ganzer artikel|vollständig|detail).*""")) ->
             ResolvedIntent.NewsDetail
@@ -113,7 +116,10 @@ class LocalCommandResolver : IntentResolver {
         val patterns = listOf(
             Regex("""(?:such|suche|finde?)\s+(?:hörbuch\s+)?(.+)"""),
             Regex("""(?:hörbuch|buch)\s+(?:von|über)\s+(.+)"""),
-            Regex("""(?:gibt es|hast du)\s+(?:etwas |was )?(?:von\s+)?(.+?)(?:\s+als hörbuch)?$"""),
+            // "gibt es" nur mit Hörbuch-Bezug – sonst frisst das Muster Fragen
+            // wie "Was gibt es Neues aus Hannover?" (gehört zu Ebene 2/Claude)
+            Regex("""(?:gibt es|hast du)\s+(?:etwas\s+|was\s+)?von\s+(.+?)(?:\s+als hörbuch)?$"""),
+            Regex("""(?:gibt es|hast du)\s+(.+?)\s+als hörbuch\??$"""),
         )
         for (pattern in patterns) {
             pattern.find(input)?.let { match ->

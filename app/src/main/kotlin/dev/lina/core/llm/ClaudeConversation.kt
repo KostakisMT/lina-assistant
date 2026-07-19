@@ -4,6 +4,8 @@ import android.util.Log
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
+import com.anthropic.errors.AnthropicServiceException
+import com.anthropic.errors.RateLimitException
 import com.anthropic.models.messages.CacheControlEphemeral
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
@@ -11,6 +13,7 @@ import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigDisabled
 import com.anthropic.models.messages.Tool
 import com.anthropic.models.messages.ToolUseBlock
+import com.anthropic.models.messages.WebSearchTool20260209
 import dev.lina.core.intent.ResolvedIntent
 
 /** Ergebnis einer Claude-Anfrage. */
@@ -23,6 +26,9 @@ sealed class LinaReply {
 
     /** Fehler (offline, API nicht erreichbar …) – Meldung vorlesen. */
     data class Error(val text: String) : LinaReply()
+
+    /** Eingabe war nicht an Lina gerichtet (Raumgespräch) – still beenden. */
+    object End : LinaReply()
 }
 
 /**
@@ -40,6 +46,8 @@ class ClaudeConversation(
     contactNames: List<String> = emptyList(),
     /** Interessen des Nutzers für passendere Konversation (aus lokalem Profil). */
     interests: String = "",
+    /** Wohnregion für Wetter/Regionalnachrichten via Websuche (aus lokalem Profil). */
+    region: String = "",
 ) {
 
     private val client: AnthropicClient =
@@ -56,6 +64,25 @@ class ClaudeConversation(
         if (interests.isNotBlank()) {
             append("\n- Der Nutzer interessiert sich für: ").append(interests).append(".")
         }
+        if (region.isNotBlank()) {
+            append("\n- Der Nutzer wohnt in der Region ").append(region)
+            append(". Bei Wetter oder Regionalem ohne Ortsangabe ist diese Region gemeint.")
+        }
+        append(
+            "\n- Für Aktuelles (Wetter, Nachrichten, Ereignisse) nutzt du die " +
+                "Websuche. Nachrichten fasst du in zwei bis drei Meldungen mit je " +
+                "ein bis zwei Sätzen zusammen – vorlesbar, ohne Quellen-URLs. " +
+                "Das Werkzeug nachrichten_vorlesen ist nur für die gespeicherten " +
+                "Standard-Schlagzeilen; bei regionalen oder thematischen " +
+                "Nachrichtenwünschen suche stattdessen selbst."
+        )
+        append(
+            "\n- Nutze dein Wissen über den Nutzer unaufdringlich: Es prägt Tiefe " +
+                "und Tonfall deiner Antworten, aber du erwähnst seine Interessen " +
+                "oder Kontakte nicht von dir aus und sagst nie Dinge wie " +
+                "\"das passt zu deinem Interesse an ...\". Keine ungefragten " +
+                "Zusatzangebote am Ende der Antwort."
+        )
     }
 
     /** Dialoggedächtnis: nur Textwechsel, damit die History API-gültig bleibt. */
@@ -66,10 +93,28 @@ class ClaudeConversation(
         trimHistory()
         return try {
             val response = client.messages().create(buildParams())
+            Log.d(
+                TAG,
+                "stopReason=${response.stopReason()} blocks=" +
+                    response.content().joinToString(",") { b ->
+                        when {
+                            b.text().isPresent -> "text"
+                            b.toolUse().isPresent -> "toolUse(${b.toolUse().get().name()})"
+                            b.serverToolUse().isPresent -> "serverToolUse"
+                            b.webSearchToolResult().isPresent -> "searchResult"
+                            else -> "sonstig"
+                        }
+                    }
+            )
 
             for (block in response.content()) {
                 val toolUse = block.toolUse()
                 if (toolUse.isPresent) {
+                    if (toolUse.get().name() == "gespraech_beenden") {
+                        // Nicht an Lina gerichtet – aus dem Gedächtnis entfernen
+                        history.removeLast()
+                        return LinaReply.End
+                    }
                     val intent = toIntent(toolUse.get())
                     if (intent != null) {
                         history.addLast(
@@ -90,8 +135,20 @@ class ClaudeConversation(
             }
             history.addLast(message(MessageParam.Role.ASSISTANT, text))
             LinaReply.Say(text)
+        } catch (e: RateLimitException) {
+            Log.e(TAG, "Claude-Anfrage fehlgeschlagen (Rate-Limit)", e)
+            history.removeLast()
+            LinaReply.Error("Gerade ist viel los bei mir. Versuch es gleich noch einmal.")
+        } catch (e: AnthropicServiceException) {
+            // 4xx/5xx vom Dienst (z.B. kein Guthaben, ungültiger Key) – kein Netzproblem
+            Log.e(TAG, "Claude-Anfrage fehlgeschlagen (Dienst)", e)
+            history.removeLast()
+            LinaReply.Error(
+                "Mein Sprachdienst meldet ein Problem. " +
+                    "Bitte sag deinem Betreuer Bescheid."
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Claude-Anfrage fehlgeschlagen", e)
+            Log.e(TAG, "Claude-Anfrage fehlgeschlagen (Verbindung)", e)
             history.removeLast()
             LinaReply.Error(
                 "Ich kann gerade nicht nachdenken. " +
@@ -105,7 +162,7 @@ class ClaudeConversation(
     private fun buildParams(): MessageCreateParams {
         val builder = MessageCreateParams.builder()
             .model(MODEL)
-            .maxTokens(300L)
+            .maxTokens(500L)
             // Sonnet 5 denkt sonst per Default adaptiv mit – kostet Sprachassistenz-
             // Latenz und Thinking-Tokens zählen gegen maxTokens
             .thinking(ThinkingConfigDisabled.builder().build())
@@ -119,6 +176,8 @@ class ClaudeConversation(
             )
             .messages(history.toList())
         TOOLS.forEach { builder.addTool(it) }
+        // Server-Tool: Websuche für Wetter/aktuelle Nachrichten (läuft bei Anthropic)
+        builder.addTool(WebSearchTool20260209.builder().maxUses(3L).build())
         return builder.build()
     }
 
@@ -175,6 +234,14 @@ class ClaudeConversation(
               wie ein Gerätebefehl aussieht (anrufen, SMS, Nachrichten, Hörbuch),
               nutze das passende Werkzeug statt zu antworten.
             - Wenn du etwas nicht weißt oder nicht kannst, sag es ehrlich und kurz.
+            - Wichtig: Das Mikrofon hört nach deinen Antworten automatisch weiter.
+              Nicht alles, was du hörst, ist an dich gerichtet! Wirkt die Eingabe
+              wie ein Gespräch im Raum, eine Antwort an eine andere Person oder
+              Fernsehton, nutze das Werkzeug gespraech_beenden und antworte nicht.
+            - Frag bei unklaren oder fragmentarischen Eingaben NICHT nach. Nur wenn
+              eine Eingabe erkennbar eine Frage oder Bitte AN DICH ist, darfst du
+              um Wiederholung bitten. Alles andere: gespraech_beenden. Eine echte
+              Frage kommt wieder – Hineinreden in ein Gespräch stört dagegen sehr.
         """.trimIndent()
 
         private val TOOLS: List<Tool> = listOf(
@@ -201,6 +268,14 @@ class ClaudeConversation(
             tool(
                 "stopp",
                 "Stoppt Vorlesen oder Wiedergabe.",
+                emptyMap(), emptyList(),
+            ),
+            tool(
+                "gespraech_beenden",
+                "Nutze dies, wenn die letzte Eingabe offensichtlich NICHT an dich " +
+                    "gerichtet war – z.B. ein Gespräch zwischen Personen im Raum, " +
+                    "Antworten an jemand anderen (\"ja\", \"okay, machen wir\"), " +
+                    "Fernseher oder Selbstgespräche. Du antwortest dann gar nicht.",
                 emptyMap(), emptyList(),
             ),
         )

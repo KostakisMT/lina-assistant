@@ -23,6 +23,13 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
     private var listenThread: Thread? = null
     @Volatile private var listening = false
 
+    /**
+     * Optional: wird aufgerufen, sobald die Aufnahme beendet ist und die
+     * (~2s dauernde) Transkription beginnt – z.B. für einen Bestätigungston.
+     * Nicht Teil des SttEngine-Interface (Whisper-spezifisch, da Vosk streamt).
+     */
+    var onSpeechCaptured: (() -> Unit)? = null
+
     fun initialize(onReady: () -> Unit, onError: (Exception) -> Unit) {
         Thread({
             try {
@@ -68,6 +75,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
                 onResult("")
                 return@Thread
             }
+            onSpeechCaptured?.invoke()
 
             val t0 = System.currentTimeMillis()
             val text = try {

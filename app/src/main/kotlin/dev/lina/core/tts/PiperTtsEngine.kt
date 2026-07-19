@@ -36,6 +36,13 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
     fun isSpeaking(): Boolean =
         playing || queue.isNotEmpty() ||
             System.currentTimeMillis() - lastPlaybackEnd < ECHO_GUARD_MS
+
+    /**
+     * Wie [isSpeaking], aber ohne den 2s-Echo-Nachlauf – für Folgefenster
+     * (Gespräch/Nachrichten/Onboarding), die direkt nach dem letzten Wort
+     * weitermachen sollen. Der Nachlauf ist nur für die Weckwort-Erkennung da.
+     */
+    fun isBusySpeaking(): Boolean = playing || queue.isNotEmpty()
     private val queue = LinkedBlockingDeque<Pair<String, TtsPriority>>()
     private var audioTrack: AudioTrack? = null
     private var workerThread: Thread? = null
@@ -137,10 +144,17 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
                 } catch (_: InterruptedException) {
                     break
                 }
+                // Ab Entnahme gilt "spricht": sonst meldet isSpeaking() während
+                // der Synthese (0.5–3s, Queue leer, noch keine Wiedergabe) fälschlich
+                // Stille – und der Gesprächsmodus nimmt Linas eigene Antwort auf
+                playing = true
                 try {
                     synthesizeAndPlay(text)
                 } catch (e: Exception) {
                     Log.e(TAG, "Sprachausgabe fehlgeschlagen: \"$text\"", e)
+                } finally {
+                    playing = false
+                    lastPlaybackEnd = System.currentTimeMillis()
                 }
             }
         }, "piper-speak").apply { start() }
@@ -253,7 +267,8 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
          * Weitere Testkandidaten: siehe scripts/download-models.sh.
          */
         val AVAILABLE_VOICES = listOf(
-            "de_DE-dii-high",        // 1 – Default (weiblich klingend, high)
+            "de_DE-dii-high",                   // 1 – Default (weiblich klingend, high)
+            "de_DE-thorsten_emotional-medium",  // 2 – Thorsten "fröhlich" (amused = sid 0, CC0)
         )
     }
 }

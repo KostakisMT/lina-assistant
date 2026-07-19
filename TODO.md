@@ -155,9 +155,15 @@
 
 ### Etappe 1 – Juli: Claude-Anbindung verifizieren & Release-fähig werden
 - [ ] `CLAUDE_API_KEY` in local.properties hinterlegen (Nutzer) + Tablet-Test der freien Konversation (inkl. Verhörer-Befehle wie "Rumfe mal den Boris an" → Do-Intent)
-- [ ] Bestätigungston/Earcon während STT-Transkription und Claude-Wartezeit (kleines Feature, großer UX-Effekt)
+- [x] Bestätigungston/Earcon während STT-Transkription und Claude-Wartezeit (Earcons.kt; Klang auf Gerät noch validieren) – 2026-07-18
 - [ ] Release-Keystore anlegen (`.jks`, lokal) + signiertes `assembleRelease`-APK
 - [ ] SSH-Key für GitHub einrichten (aktuell HTTPS)
+
+### Besuch Testnutzer #2 – nächste Woche (verschoben von 2026-07-19)
+- [ ] Aufnahme-Runden Zukunftsbefehle (Wetter/Nachrichten/Brief/Podcast – Liste siehe Chat/Session)
+- [ ] Wetter + Regionalnachrichten live mit Testnutzer durchspielen
+- [ ] Nachtrainiertes Weckwort-Modell aufspielen und 5/5-Test wiederholen
+- [ ] Battery-Whitelist + Dauerbetrieb prüfen, Abschluss Übergabe-Checkliste
 
 ### Etappe 2 – August: Robustheit & Gerätetest komplett
 - [ ] Raumdistanz-Spike: GTCRN-Entrauschen vor Whisper (sherpa-onnx) prototypisch einbauen und auf dem Tablet messen (Fehlerrate vorher/nachher)

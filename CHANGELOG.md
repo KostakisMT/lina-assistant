@@ -17,6 +17,100 @@
 
 ---
 
+## [2026-07-19] Websuche: Wetter + Regional-/Themen-Nachrichten über Claude
+
+**Was:** Server-Tool `web_search_20260209` (max. 3 Suchen/Anfrage) in `ClaudeConversation` aktiviert. Neuer Persona-Parameter `region` (Pref `user_region`, wird lokal auf dem Gerät gesetzt): Wetter- und Regionalfragen ohne Ortsangabe beziehen sich darauf. Prompt: Aktuelles über Websuche beantworten, Nachrichten als 2–3 vorlesbare Meldungen ohne URLs; `nachrichten_vorlesen`-Tool nur noch für die Standard-Schlagzeilen. Resolver entschärft: qualifizierte Nachrichtenfragen („… aus X", „… zur Politik") gehen an Ebene 2 statt an den RSS-Reader; Hörbuchsuche-Muster „gibt es …" braucht jetzt Hörbuch-Bezug (fraß vorher beliebige Fragen). Debug-Logging der Antwortblöcke. Auf dem Gerät verifiziert: Wetterbericht (Temperatur, Regen, Windwarnung) und Regionalnachrichten für die Testregion sauber.
+
+**Warum:** Nutzerwunsch vor Ort: Wetterfragen + Regionalnachrichten (RSS-Feed unbefriedigend). Websuche deckt beides ohne eigene Wetter-/News-Infrastruktur.
+
+**Dateien:** ClaudeConversation.kt, LauncherActivity.kt, LocalCommandResolver.kt, WakeWordService.kt
+
+**Offen:** `pause_turn` bei langen Suchläufen nicht behandelt (bisher nicht aufgetreten; maxUses 3 hält Läufe kurz). Region wird noch nicht im Onboarding erfragt (To-do). RSS-Pfad langfristig durch Claude-kuratierte Nachrichten ersetzen? (ADR wert, nach Feldtest-Erfahrung). Einzelner Claude-Fehlgriff beobachtet (stopp-Tool auf Wetterfrage, nicht reproduzierbar). Zudem Crash-Fix: FGS-Start aus Hintergrund (Bildschirm aus) wird jetzt am Aufrufer abgefangen.
+
+---
+
+## [2026-07-19] Raumgespräch-Schutz: Lina redet nicht mehr dazwischen
+
+**Was:** Folgefenster reagierten auf jedes Gespräch im Raum („ja", „okay" an einen Freund → Lina antwortete oder suchte Kontakte). Drei Maßnahmen: (1) Neues Claude-Werkzeug `gespraech_beenden` + Prompt-Regel: Erkennt Claude eine nicht an Lina gerichtete Eingabe (Raumgespräch, Fernseher), beendet sie still (`LinaReply.End`), die Äußerung fliegt aus dem Dialoggedächtnis. (2) News-Fenster strikt: Nur klare Schlüsselwörter oder lokale Befehle zählen, alles andere schließt still; „ja" aus der Schlüsselwortliste entfernt. (3) Gesprächsfenster routet alles über Claude statt über die Regex-Ebene – die matchte Raumgespräche wie „ich ruf dich später an" als Anruf-Befehl; nur „Stopp" bleibt lokal (Sofortwirkung).
+
+**Warum:** Live-Test: Lina mischte sich in ein Gespräch zwischen Nutzer und Freund ein.
+
+**Dateien:** ClaudeConversation.kt, LauncherActivity.kt
+
+**Offen:** Grenzfälle beobachten (Claude fragte bei „ok, schau" nach, statt zu beenden – Prompt ggf. nachschärfen). Weckwort-Fehlauslösungen im Raumgespräch separat beobachten.
+
+---
+
+## [2026-07-19] Nachrichten-Dialog + schnellere Folgefenster (Nutzerfeedback)
+
+**Was:** (1) Nachrichten sind keine Sackgasse mehr: Nach jedem Teaser öffnet sich ein Zuhörfenster – „mehr" (ganzer Artikel), „nächste" (nächste Schlagzeile) oder „stopp" reichen, ohne neues Weckwort; einmaliger gesprochener Hinweis beim ersten Mal; gilt auch, wenn Claude die Nachrichten erkannt hat (Do-Intent). Redundante „Nachrichten werden geladen"-Ansage entfernt (landete in der TTS-Queue *nach* den Meldungen). (2) Neues `isBusySpeaking()` ohne den 2s-Weckwort-Echo-Nachlauf – Folgefenster (Gespräch + News) und Onboarding reagieren ~2s schneller pro Zug. (3) Echo-Fix: `playing`-Flag gilt ab Queue-Entnahme, sonst nahm das Folgefenster Linas eigene Antwort während der Synthese auf. (4) System-Prompt: Interessen/Kontakte nicht mehr ungefragt ausspielen, keine ungefragten Zusatzangebote (Live-Feedback).
+
+**Warum:** Direkte Testrunde mit Nutzer: „zu träge", „News enden im Nichts", „Lina hört sich selbst", „Personalisierung nervt".
+
+**Dateien:** LauncherActivity.kt, PiperTtsEngine.kt, ClaudeConversation.kt
+
+**Offen:** „weiter" ist doppeldeutig (weiterlesen vs. nächste) – aktuell = weiterlesen; mit Testnutzer beobachten. Vereinzelter Verbindungsfehler bei Claude-Anfrage gesehen (11:09) – beobachten.
+
+---
+
+## [2026-07-19] Crash-Fix: FGS-Race zwischen Wake-Neustart und Gesprächsmodus
+
+**Was:** Absturz `ForegroundServiceDidNotStartInTimeException` behoben: Im Sprachpfad wurde der Weckwort-Neustart immer geplant (2s-Timer), auch wenn die Eingabe an Claude ging – traf Claudes Antwort kurz nach dem Timer ein, rief der Gesprächsmodus `stopService` Millisekunden nach `startForegroundService` → System-Kill. Fix: `processDebugInput()` meldet jetzt zurück, ob Claude (oder das Onboarding) übernimmt – dann wird kein Wake-Neustart geplant; `wakeResumeRunnable` prüft zusätzlich auf laufendes Onboarding. Auf dem Gerät regressionsgetestet (Claude-Antwort + Gesprächsmodus, App stabil).
+
+**Warum:** Beim Live-Test mit aktivem API-Guthaben reproduzierbar abgestürzt.
+
+**Dateien:** LauncherActivity.kt
+
+---
+
+## [2026-07-19] Gesprächsmodus für freie Konversation
+
+**Was:** Nach einer freien Claude-Antwort (`Say`) hört Lina direkt weiter zu – heller Ton als Hinweis, kein neues „Hey Lina" nötig. Folgefragen gehen mit Dialoggedächtnis weiter an Claude; Befehle (Stopp, Anrufen, …) oder ~5s Stille beenden das Gespräch und reaktivieren das Weckwort. Dazu `resumeWakeWordListening()` cancellbar gemacht (Race: Wake-Service startete per Timer neu, während Claude noch rechnete). Claude-`maxTokens` 300→500 (abgeschnittene Sätze beim Vorlesen vermeiden). Fehleransagen nach Typ differenziert (Rate-Limit/Dienst/Netz, typisierte SDK-Exceptions).
+
+**Warum:** Freie Konversation ist laut Nutzer-Priorität der Kern – ein Gespräch, bei dem jede Nachfrage ein Weckwort braucht, ist keins.
+
+**Dateien:** LauncherActivity.kt, ClaudeConversation.kt
+
+**Offen:** Ende-zu-Ende-Test mit aktivem API-Guthaben; Gesprächsmodus-Timing (5s-Stille) mit echtem Nutzer kalibrieren.
+
+---
+
+## [2026-07-19] Zweite Stimme: Thorsten „fröhlich" (CC0)
+
+**Was:** `de_DE-thorsten_emotional-medium` als Stimme 2 in `AVAILABLE_VOICES` (Sprechervariante „amused" = Sprecher-ID 0, passt zum bestehenden `sid = 0`). Download-Script + NOTICE.md ergänzt. Wechsel zur Laufzeit per „Stimme 2" / „nächste Stimme". Auf dem Tablet installiert und verifiziert. APK wächst auf ~545 MB.
+
+**Warum:** Nutzerwunsch (fröhlicher Klang als Option); zudem erste komplett frei lizenzierte Stimme (CC0, Thorsten-Voice) neben der NC-belasteten dii-Stimme.
+
+**Dateien:** PiperTtsEngine.kt, scripts/download-models.sh, NOTICE.md
+
+**Offen:** A/B-Vergleich mit dem Testnutzer (dii vs. thorsten-fröhlich); Default bleibt vorerst dii-high.
+
+---
+
+## [2026-07-18] Gesprochene Ersteinrichtung + Fernwartung (Auslieferungs-Vorbereitung)
+
+**Was:** (1) `VoiceOnboarding` (feature/onboarding): komplett gesprochener Erststart-Flow – 5× Weckwort einsprechen (WAVs für Nachtraining), 5 Kernbefehle nachsprechen, 5 Fragen (Anrede, Nachrichten-Interessen, Bücher, wichtigste Person, Wünsche) per Whisper transkribiert → `answers.json`; Anrede + Interessen fließen automatisch in die Claude-Persona (neuer `interests`-Parameter wird aus SharedPreferences gefüllt, Claude wird nach Einrichtung neu initialisiert). Startet automatisch beim allerersten Start (erst wenn STT bereit), Guards gegen Weckwort-/Mikrofon-Konflikte (onResume, onWakeWordDetected). Debug-Befehle: "einrichtung", "einrichtung zurücksetzen". (2) `WavRecorder` (core/audio) als wiederverwendbare Aufnahme-Utility, `Earcons.go()` als Sprech-Signal. (3) Fernwartung: `scripts/remote.sh` (connect/status/logs/deploy/pull-onboarding/screen via Tailscale+adb) + `WARTUNG.md` mit Einwilligungs-Hinweisen und Übergabe-Checkliste.
+
+**Warum:** Auslieferung an den Testnutzer; Einrichtung ohne sehende Hilfe; Betreuung des Geräts aus der Ferne (Updates einspielen, Aufnahmen abholen, Status prüfen).
+
+**Dateien:** feature/onboarding/VoiceOnboarding.kt (neu), core/audio/WavRecorder.kt (neu), Earcons.kt, LauncherActivity.kt, scripts/remote.sh (neu), WARTUNG.md (neu)
+
+**Offen:** Gerätetest des kompletten Flows (heute); Tailscale-Einrichtung auf Tablet+Mac; Klang/Zeitverhalten der Einrichtung mit echtem Nutzer beobachten. WLAN-adb muss nach Tablet-Reboot ggf. neu aktiviert werden.
+
+---
+
+## [2026-07-18] Earcons: akustische Rückmeldung in Wartezeiten
+
+**Was:** Neue Utility `Earcons` (core/audio): synthetisierte weiche Sinus-Blips mit Hüllkurve über AudioTrack (USAGE_ASSISTANT, fire-and-forget). Zwei Signale: `ack()` (einzelner Blip, 880 Hz) sobald die Sprachaufnahme steht und die ~2s-Whisper-Transkription beginnt – via neuem optionalen Callback `WhisperSttEngine.onSpeechCaptured`; `thinking()` (zwei aufsteigende Blips) beim Start einer Claude-Anfrage in `askClaude()`.
+
+**Warum:** Zwischen Sprechen und Antwort liegen 2–5 s Stille – für blinde Nutzer nicht unterscheidbar von "nicht gehört". Der Ton bestätigt sofort: Lina arbeitet. (Plan Etappe 1)
+
+**Dateien:** core/audio/Earcons.kt (neu), WhisperSttEngine.kt, LauncherActivity.kt
+
+**Offen:** Klang auf dem Tablet-Lautsprecher prüfen (Lautstärke/Charakter), ggf. Frequenzen anpassen. Auf dem Gerät testen, dass der Ack-Ton nicht in eine laufende Aufnahme zurückkoppelt (Aufnahme ist beim Abspielen bereits beendet – sollte sicher sein).
+
+---
+
 ## [2026-07-18] Öffentlicher Launch: Repo + GitHub Pages live
 
 **Was:** Frisches öffentliches Repo `KostakisMT/lina-assistant` (ein Initial-Commit, keine Alt-History) erstellt und gepusht; bisheriges privates Repo als Archiv umbenannt zu `lina-assistant-private` (volle History bleibt dort erhalten). GitHub Pages aktiviert (main /docs) → Landingpage live: https://kostakismt.github.io/lina-assistant/ – Repo-Beschreibung, Homepage-URL und Topics gesetzt. Lokales Arbeitsverzeichnis: `origin` = öffentliches Repo, `archive` = privates Archiv, Branch `old-main-archiv` sichert die alte History zusätzlich lokal.

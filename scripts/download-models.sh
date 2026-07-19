@@ -59,6 +59,7 @@ fi
 # und in PiperTtsEngine.AVAILABLE_VOICES eintragen.
 PIPER_MODELS=(
     "vits-piper-de_DE-dii-high"  # Default – OpenVoiceOS, CC BY-NC-SA (nur nicht-kommerziell!)
+    "vits-piper-de_DE-thorsten_emotional-medium"  # Stimme 2 – Thorsten fröhlich (amused=sid 0), CC0
 )
 mkdir -p "$ASSETS_DIR/piper"
 for PIPER_MODEL in "${PIPER_MODELS[@]}"; do

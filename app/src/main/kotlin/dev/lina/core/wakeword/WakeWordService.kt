@@ -110,9 +110,16 @@ class WakeWordService : Service() {
             if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
                 android.content.pm.PackageManager.PERMISSION_GRANTED
             ) return
-            context.startForegroundService(
-                Intent(context, WakeWordService::class.java)
-            )
+            try {
+                context.startForegroundService(
+                    Intent(context, WakeWordService::class.java)
+                )
+            } catch (e: Exception) {
+                // FGS-Start aus dem Hintergrund verboten (App nicht sichtbar,
+                // z.B. Bildschirm aus) – nicht crashen; LauncherActivity
+                // startet uns bei onResume erneut
+                android.util.Log.w("WakeWordService", "Start abgelehnt (Hintergrund?)", e)
+            }
         }
     }
 }

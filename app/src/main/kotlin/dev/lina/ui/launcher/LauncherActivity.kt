@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import dev.lina.core.accessibility.LinaAccessibilityService
+import dev.lina.core.audio.Earcons
 import dev.lina.core.contacts.ContactMatchResult
 import dev.lina.core.contacts.ContactRepository
 import dev.lina.core.contacts.FuzzyContactMatcher
@@ -61,6 +62,7 @@ import dev.lina.feature.news.NewsSyncWorker
 import dev.lina.feature.sms.SmsReader
 import dev.lina.feature.sms.SmsSender
 import dev.lina.feature.onboarding.AccessibilityGuide
+import dev.lina.feature.onboarding.VoiceOnboarding
 import dev.lina.feature.onboarding.BatteryWhitelistGuide
 import dev.lina.feature.onboarding.PermissionsGuide
 import dev.lina.ui.components.LinaTheme
@@ -82,6 +84,8 @@ class LauncherActivity : ComponentActivity() {
     private var debugLog by mutableStateOf("")
     private var linaReady by mutableStateOf(false)
     private var sttEngine: SttEngine? = null
+    private var onboarding: VoiceOnboarding? = null
+    private var newsHintGesagt = false
     private var voicePipelineStarted = false
     private var voiceReady = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -248,7 +252,8 @@ class LauncherActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Falls der Service im Hintergrund abgelehnt/beendet wurde: neu starten
-        if (voiceReady) WakeWordService.start(this)
+        // (nicht während der Ersteinrichtung – die braucht das Mikrofon exklusiv)
+        if (voiceReady && onboarding == null) WakeWordService.start(this)
     }
 
     private fun hasMicPermission(): Boolean =
@@ -262,16 +267,24 @@ class LauncherActivity : ComponentActivity() {
         val onSttReady: () -> Unit = {
             runOnUiThread {
                 voiceReady = true
-                WakeWordService.start(this)
-                statusText = "Lina bereit – sag \"$WAKE_WORD\""
-                ttsEngine?.speak(
-                    "Ich höre jetzt auf das Weckwort $WAKE_WORD.",
-                    TtsPriority.NORMAL,
-                )
+                val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+                if (!prefs.getBoolean(PREF_ONBOARDING_DONE, false)) {
+                    // Allererster Start: gesprochene Ersteinrichtung statt Weckwort
+                    startOnboarding()
+                } else {
+                    WakeWordService.start(this)
+                    statusText = "Lina bereit – sag \"$WAKE_WORD\""
+                    ttsEngine?.speak(
+                        "Ich höre jetzt auf das Weckwort $WAKE_WORD.",
+                        TtsPriority.NORMAL,
+                    )
+                }
             }
         }
 
         val whisper = WhisperSttEngine(applicationContext)
+        // Bestätigungston sobald die Aufnahme steht und die ~2s-Transkription läuft
+        whisper.onSpeechCaptured = { Earcons.ack() }
         sttEngine = whisper
         whisper.initialize(
             onReady = onSttReady,
@@ -298,6 +311,8 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private fun onWakeWordDetected() {
+        // Während der Ersteinrichtung ist das Weckwort aus (Mikrofon-Konflikt)
+        if (onboarding != null) return
         // Echo-Unterdrückung: nicht auf die eigene Stimme reagieren
         if (piperEngine?.isSpeaking() == true) {
             android.util.Log.d("LinaLauncher", "Weckwort ignoriert (Lina spricht gerade)")
@@ -330,20 +345,31 @@ class LauncherActivity : ComponentActivity() {
                         handled = true
                         mainHandler.removeCallbacks(timeout)
                         debugInput = text
-                        processDebugInput()
-                        resumeWakeWordListening()
+                        // Wenn Claude übernimmt, steuert der Gesprächsmodus das
+                        // Zuhören selbst – KEIN Wake-Neustart planen (sonst Race:
+                        // startForegroundService + sofortiges stopService = Crash)
+                        val claudeUebernimmt = processDebugInput()
+                        if (!claudeUebernimmt) resumeWakeWordListening()
                     }
                 }
             }, 800)
         }
     }
 
+    private val wakeResumeRunnable = Runnable {
+        if (onboarding != null) return@Runnable
+        WakeWordService.start(this)
+        statusText = "Lina bereit – sag \"$WAKE_WORD\""
+    }
+
     private fun resumeWakeWordListening() {
         // Verzögert, damit Linas eigene Antwort nicht die Weckwort-Erkennung triggert
-        mainHandler.postDelayed({
-            WakeWordService.start(this)
-            statusText = "Lina bereit – sag \"$WAKE_WORD\""
-        }, 2_000)
+        mainHandler.removeCallbacks(wakeResumeRunnable)
+        mainHandler.postDelayed(wakeResumeRunnable, 2_000)
+    }
+
+    private fun cancelWakeResume() {
+        mainHandler.removeCallbacks(wakeResumeRunnable)
     }
 
     private fun initializeLina(tts: TtsEngine) {
@@ -362,32 +388,93 @@ class LauncherActivity : ComponentActivity() {
 
         NewsSyncWorker.schedule(this)
 
-        if (BuildConfig.CLAUDE_API_KEY.isNotBlank()) {
-            val names = try {
-                repo.loadAll().map { it.displayName }
-            } catch (e: Exception) {
-                emptyList()
-            }
-            claude = ClaudeConversation(BuildConfig.CLAUDE_API_KEY, contactNames = names)
-        }
+        initClaude(repo)
 
         linaReady = true
         statusText = "Lina bereit"
         tts.speak("Lina ist bereit.", TtsPriority.HIGH)
     }
 
-    private fun processDebugInput() {
+    private fun initClaude(repo: ContactRepository) {
+        if (BuildConfig.CLAUDE_API_KEY.isBlank()) return
+        val names = try {
+            repo.loadAll().map { it.displayName }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        claude = ClaudeConversation(
+            BuildConfig.CLAUDE_API_KEY,
+            contactNames = names,
+            interests = prefs.getString(PREF_INTERESTS, "") ?: "",
+            region = prefs.getString(PREF_REGION, "") ?: "",
+        )
+    }
+
+    /**
+     * Gesprochene Ersteinrichtung (VoiceOnboarding): Weckwort- und Befehls-
+     * Aufnahmen + Fragenkatalog. Antworten personalisieren die Claude-Persona.
+     */
+    private fun startOnboarding() {
+        val tts = ttsEngine ?: return
+        cancelWakeResume()
+        stopService(Intent(this, WakeWordService::class.java))
+        statusText = "Ersteinrichtung läuft…"
+        val flow = VoiceOnboarding(
+            tts = tts,
+            stt = sttEngine as? WhisperSttEngine,
+            isTtsSpeaking = { piperEngine?.isBusySpeaking() == true },
+            baseDir = getExternalFilesDir("onboarding") ?: filesDir,
+        )
+        onboarding = flow
+        flow.start { interests, name ->
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(PREF_ONBOARDING_DONE, true)
+                .putString(PREF_INTERESTS, interests)
+                .putString(PREF_USER_NAME, name)
+                .apply()
+            onboarding = null
+            // Claude mit den frischen Interessen neu aufsetzen
+            initClaude(ContactRepository(this))
+            statusText = "Lina bereit – sag \"$WAKE_WORD\""
+            resumeWakeWordListening()
+        }
+    }
+
+    /** @return true, wenn Claude die Eingabe asynchron übernimmt (Gesprächsmodus
+     *  steuert dann selbst das Zuhören und den Weckwort-Neustart). */
+    private fun processDebugInput(): Boolean {
         val input = debugInput.trim()
-        if (input.isEmpty()) return
+        if (input.isEmpty()) return false
 
         if (handleVoiceCommand(input)) {
             debugInput = ""
-            return
+            return false
         }
         if (input.lowercase().startsWith("aufnahme")) {
             startDebugRecording()
             debugInput = ""
-            return
+            return false
+        }
+        when (input.lowercase().trim(' ', '.', '!')) {
+            "einrichtung", "einrichtung starten" -> {
+                startOnboarding()
+                debugInput = ""
+                return true // Onboarding steuert das Mikrofon selbst
+            }
+            "einrichtung zurücksetzen" -> {
+                // Auch Anrede/Interessen löschen – sonst spricht Lina den neuen
+                // Nutzer mit den Daten des vorherigen an
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(PREF_ONBOARDING_DONE, false)
+                    .remove(PREF_INTERESTS)
+                    .remove(PREF_USER_NAME)
+                    .apply()
+                claude?.reset()
+                ttsEngine?.speak("Einrichtung zurückgesetzt. Beim nächsten Start geht es los.")
+                debugInput = ""
+                return false
+            }
         }
 
         val resolved = intentResolver.resolve(input)
@@ -395,7 +482,7 @@ class LauncherActivity : ComponentActivity() {
             // Ebene 2: kein lokaler Befehl erkannt – freie Konversation über Claude
             askClaude(input)
             debugInput = ""
-            return
+            return true
         }
         val response = handleIntent(resolved ?: ResolvedIntent.Unknown(input))
         android.util.Log.d("LinaLauncher", "Eingabe=\"$input\" Intent=${formatIntent(resolved)} Antwort=\"$response\"")
@@ -405,7 +492,143 @@ class LauncherActivity : ComponentActivity() {
             "Lina: $response\n\n$debugLog"
 
         debugInput = ""
+        if (istNewsIntent(resolved)) {
+            // Reader spricht selbst; danach Folgefenster statt Weckwort-Zwang
+            if (resolved is ResolvedIntent.ReadNews && !newsHintGesagt) {
+                newsHintGesagt = true
+                ttsEngine?.speak("Nach jeder Meldung kannst du direkt sagen: mehr, nächste, oder stopp.")
+            }
+            openFollowUpWindow(newsMode = true)
+            return true
+        }
         ttsEngine?.speak(response)
+        return false
+    }
+
+    private fun istNewsIntent(intent: ResolvedIntent?): Boolean =
+        intent is ResolvedIntent.ReadNews ||
+            intent is ResolvedIntent.NextNews ||
+            intent is ResolvedIntent.NewsDetail
+
+    /** Gesprächsmodus: Nach einer freien Claude-Antwort direkt weiter zuhören. */
+    private fun continueConversation() = openFollowUpWindow(newsMode = false)
+
+    /**
+     * Folgefenster: wartet bis Lina ausgesprochen hat, spielt den Signalton und
+     * hört direkt zu – ohne neues Weckwort. Schweigen (~5s) beendet das Fenster.
+     * Im [newsMode] reichen kurze Worte ("mehr", "nächste", "stopp"), und nach
+     * jeder Meldung öffnet sich das Fenster erneut.
+     */
+    private fun openFollowUpWindow(newsMode: Boolean) {
+        val stt = sttEngine ?: return
+        if (onboarding != null) return
+        cancelWakeResume()
+        stopService(Intent(this, WakeWordService::class.java))
+        // Warten bis TTS wirklich fertig ist. Im News-Modus länger stabil still
+        // (RSS-Fetch kann eine Sprechpause erzeugen, bevor die Meldungen kommen).
+        val quietNeeded = if (newsMode) 6 else 1
+        var quietChecks = 0
+        mainHandler.postDelayed(object : Runnable {
+            override fun run() {
+                if (onboarding != null) return
+                if (piperEngine?.isBusySpeaking() == true) {
+                    quietChecks = 0
+                    mainHandler.postDelayed(this, 150)
+                    return
+                }
+                if (++quietChecks < quietNeeded) {
+                    mainHandler.postDelayed(this, 200)
+                    return
+                }
+                statusText = if (newsMode) "Nachrichten – ich höre…" else "Gespräch – ich höre…"
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleFollowUpResult(text, newsMode)
+                        }
+                    }
+                }, 350)
+            }
+        }, 200)
+    }
+
+    private fun handleFollowUpResult(text: String, newsMode: Boolean) {
+        if (text.isBlank()) {
+            resumeWakeWordListening()
+            return
+        }
+        if (newsMode) {
+            val cmd = mapNewsFollowUp(text)
+            if (cmd != null) {
+                android.util.Log.d("LinaLauncher", "News-Folge: \"$text\" → ${formatIntent(cmd)}")
+                val response = handleIntent(cmd)
+                if (cmd is ResolvedIntent.Stop) {
+                    ttsEngine?.speak(response)
+                    resumeWakeWordListening()
+                } else {
+                    // Meldung/Artikel wird vorgelesen – danach wieder zuhören
+                    openFollowUpWindow(newsMode = true)
+                }
+                return
+            }
+            // Kein News-Schlüsselwort und kein klarer Befehl → vermutlich
+            // Raumgespräch: Fenster STILL schließen, nicht an Claude schicken
+            val direct = intentResolver.resolve(text)
+            if (direct == null) {
+                android.util.Log.d("LinaLauncher", "News-Folge ignoriert (nicht an Lina): \"$text\"")
+                resumeWakeWordListening()
+            } else {
+                debugInput = text
+                val uebernommen = processDebugInput()
+                if (!uebernommen) resumeWakeWordListening()
+            }
+            return
+        }
+        // Gesprächsfenster: alles über Claude – die Regex-Ebene ist für
+        // Raumgespräche zu triggerfreudig ("ich ruf dich später an" → Anruf!).
+        // Claude kennt den Dialog und kann Befehle (Do) wie Raumgespräche (End)
+        // unterscheiden. Nur "Stopp" bleibt lokal – muss sofort wirken.
+        val resolved = intentResolver.resolve(text)
+        if (resolved is ResolvedIntent.Stop) {
+            ttsEngine?.speak(handleIntent(resolved))
+            resumeWakeWordListening()
+            return
+        }
+        if (claude != null) {
+            askClaude(text) // Folgefrage oder Befehl – Claude entscheidet
+        } else {
+            debugInput = text
+            val uebernommen = processDebugInput()
+            if (!uebernommen) resumeWakeWordListening()
+        }
+    }
+
+    /** Kurzbefehle im Nachrichten-Folgefenster. */
+    private fun mapNewsFollowUp(text: String): ResolvedIntent? {
+        val t = text.lowercase()
+        return when {
+            listOf("stopp", "stop", "reicht", "nein", "das war", "aufhören", "genug")
+                .any { t.contains(it) } -> ResolvedIntent.Stop
+            listOf("nächste", "naechste", "überspringen", "ueberspringen", "andere", "skip")
+                .any { t.contains(it) } -> ResolvedIntent.NextNews
+            listOf("mehr", "weiter", "artikel", "ganz", "vorlesen", "lies", "details")
+                .any { t.contains(it) } -> ResolvedIntent.NewsDetail
+            else -> null
+        }
     }
 
     /**
@@ -415,6 +638,7 @@ class LauncherActivity : ComponentActivity() {
     private fun askClaude(input: String) {
         val conversation = claude ?: return
         statusText = "Lina denkt nach…"
+        Earcons.thinking()
         Thread {
             val reply = conversation.ask(input)
             runOnUiThread {
@@ -422,13 +646,24 @@ class LauncherActivity : ComponentActivity() {
                     is LinaReply.Say -> reply.text
                     is LinaReply.Do -> handleIntent(reply.intent)
                     is LinaReply.Error -> reply.text
+                    is LinaReply.End -> "" // Raumgespräch – still zurück zum Weckwort
                 }
-                statusText = "Lina bereit – sag \"$WAKE_WORD\""
                 android.util.Log.d("LinaLauncher", "Eingabe=\"$input\" Intent=Claude(${reply::class.simpleName}) Antwort=\"$response\"")
                 debugLog = "Eingabe: \"$input\"\n" +
                     "Intent: Claude (${reply::class.simpleName})\n" +
                     "Lina: $response\n\n$debugLog"
-                if (response.isNotBlank()) ttsEngine?.speak(response)
+                val newsDo = reply is LinaReply.Do && istNewsIntent(reply.intent)
+                if (response.isNotBlank() && !newsDo) ttsEngine?.speak(response, TtsPriority.HIGH)
+                when {
+                    // Gesprächsmodus: direkt weiter zuhören, kein neues Weckwort nötig
+                    reply is LinaReply.Say -> continueConversation()
+                    // Claude hat Nachrichten erkannt → Nachrichten-Folgefenster
+                    newsDo -> openFollowUpWindow(newsMode = true)
+                    else -> {
+                        statusText = "Lina bereit – sag \"$WAKE_WORD\""
+                        resumeWakeWordListening()
+                    }
+                }
             }
         }.start()
     }
@@ -694,5 +929,10 @@ class LauncherActivity : ComponentActivity() {
         private const val WAKE_WORD = "Hey Lina"
         // Whisper ist nicht-streamend: bis zu 10s Aufnahme + Transkriptionszeit
         private const val STT_TIMEOUT_MS = 30_000L
+        private const val PREFS = "lina"
+        private const val PREF_ONBOARDING_DONE = "onboarding_done"
+        private const val PREF_INTERESTS = "user_interests"
+        private const val PREF_USER_NAME = "user_name"
+        private const val PREF_REGION = "user_region"
     }
 }

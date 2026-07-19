@@ -5,12 +5,19 @@ class LocalCommandResolver : IntentResolver {
     override fun resolve(input: String): ResolvedIntent? {
         val normalized = input.trim().lowercase()
 
-        return resolveCall(normalized)
+        return resolveTime(normalized)
+            ?: resolveCall(normalized)
             ?: resolveSms(normalized)
             ?: resolveCallControl(normalized)
             ?: resolveNews(normalized)
             ?: resolveAudiobook(normalized)
             ?: resolveStop(normalized)
+    }
+
+    private fun resolveTime(input: String): ResolvedIntent? = when {
+        input.matches(Regex(""".*(?:wie spät|wie viel uhr|uhrzeit|wie spaet).*""")) ->
+            ResolvedIntent.Time
+        else -> null
     }
 
     private fun resolveCall(input: String): ResolvedIntent? {

@@ -17,6 +17,18 @@
 
 ---
 
+## [2026-07-19] Onboarding-Politur + Uhrzeit-Intent + pause_turn-Härtung
+
+**Was:** (1) Onboarding: Region als sechste Frage (füllt `user_region` für Wetter/Regionalnachrichten – ersetzt den manuellen Pref-Eingriff); Whisper-Stille-Erkennung während der Fragephase 1200→1800 ms (`WhisperSttEngine.endSilenceMs`, ältere Nutzer machen Denkpausen – drei von fünf Antworten waren beim Feldtest abgeschnitten); Pause nach Ansagen 500→800 ms (Ansage-Tail nicht mehr in der Aufnahme); Debug-Aufnahme-Ansage generisch + Startton (dient jetzt auch Zukunftsbefehl-Aufnahmen). (2) Neuer Offline-Intent `Time`: „Wie spät ist es?" → lokale Uhrzeit-Ansage, ohne Cloud. (3) `pause_turn` bei Websuche-Läufen wird erkannt und ehrlich beantwortet („Die Suche dauert gerade zu lange…") statt leerer Antwort; kein voller Resume (Java-SDK-Blockrekonstruktion unverhältnismäßig).
+
+**Warum:** Befunde aus Feldtest-Besuch #1; Uhrzeit stand auf der Zukunftsbefehl-Liste des Testnutzers.
+
+**Dateien:** VoiceOnboarding.kt, WhisperSttEngine.kt, LauncherActivity.kt, ResolvedIntent.kt, LocalCommandResolver.kt, ClaudeConversation.kt
+
+**Offen:** Onboarding-Durchlauf mit den neuen Fenstern am Gerät testen (vor Besuch #2); Uhrzeit-Ansage auf dem Gerät verifiziert.
+
+---
+
 ## [2026-07-19] Websuche: Wetter + Regional-/Themen-Nachrichten über Claude
 
 **Was:** Server-Tool `web_search_20260209` (max. 3 Suchen/Anfrage) in `ClaudeConversation` aktiviert. Neuer Persona-Parameter `region` (Pref `user_region`, wird lokal auf dem Gerät gesetzt): Wetter- und Regionalfragen ohne Ortsangabe beziehen sich darauf. Prompt: Aktuelles über Websuche beantworten, Nachrichten als 2–3 vorlesbare Meldungen ohne URLs; `nachrichten_vorlesen`-Tool nur noch für die Standard-Schlagzeilen. Resolver entschärft: qualifizierte Nachrichtenfragen („… aus X", „… zur Politik") gehen an Ebene 2 statt an den RSS-Reader; Hörbuchsuche-Muster „gibt es …" braucht jetzt Hörbuch-Bezug (fraß vorher beliebige Fragen). Debug-Logging der Antwortblöcke. Auf dem Gerät verifiziert: Wetterbericht (Temperatur, Regen, Windwarnung) und Regionalnachrichten für die Testregion sauber.

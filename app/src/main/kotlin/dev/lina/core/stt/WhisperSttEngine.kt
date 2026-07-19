@@ -30,6 +30,13 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
      */
     var onSpeechCaptured: (() -> Unit)? = null
 
+    /**
+     * Stille-Dauer nach Sprachbeginn, die die Aufnahme beendet. Standard 1200ms;
+     * das Onboarding erhöht für die Fragephase (ältere Nutzer machen längere
+     * Denkpausen mitten in der Antwort).
+     */
+    @Volatile var endSilenceMs: Int = DEFAULT_END_SILENCE_MS
+
     fun initialize(onReady: () -> Unit, onError: (Exception) -> Unit) {
         Thread({
             try {
@@ -151,7 +158,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
                     silenceMs = 0
                 } else if (speechStarted) {
                     silenceMs += read * 1000 / SAMPLE_RATE
-                    if (silenceMs >= END_SILENCE_MS) break
+                    if (silenceMs >= endSilenceMs) break
                 } else if (totalMs >= NO_SPEECH_TIMEOUT_MS) {
                     // Nutzer hat gar nicht gesprochen
                     return FloatArray(0)
@@ -187,7 +194,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val FRAME_SAMPLES = 1600 // 100ms
         private const val SPEECH_AMP_THRESHOLD = 1000
-        private const val END_SILENCE_MS = 1200
+        private const val DEFAULT_END_SILENCE_MS = 1200
         private const val NO_SPEECH_TIMEOUT_MS = 5000
         private const val MAX_RECORD_MS = 10000
     }

@@ -9,6 +9,7 @@ import com.anthropic.errors.RateLimitException
 import com.anthropic.models.messages.CacheControlEphemeral
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
+import com.anthropic.models.messages.StopReason
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigDisabled
 import com.anthropic.models.messages.Tool
@@ -129,6 +130,19 @@ class ClaudeConversation(
                 .mapNotNull { it.text().orElse(null)?.text() }
                 .joinToString(" ")
                 .trim()
+            // pause_turn: Server-Tool-Lauf (Websuche) wurde unterbrochen. Voller
+            // Resume bräuchte manuelle Block-Rekonstruktion (Java-SDK) – stattdessen
+            // ehrlich abbrechen; Teiltext gibt es bei pause_turn praktisch nie.
+            val paused = response.stopReason()
+                .map { it == StopReason.PAUSE_TURN }
+                .orElse(false)
+            if (paused && text.isEmpty()) {
+                Log.w(TAG, "pause_turn ohne Text – Suche abgebrochen")
+                history.removeLast()
+                return LinaReply.Error(
+                    "Die Suche dauert gerade zu lange. Frag mich gleich noch einmal."
+                )
+            }
             if (text.isEmpty()) {
                 history.removeLast()
                 return LinaReply.Error("Darauf habe ich gerade keine Antwort.")

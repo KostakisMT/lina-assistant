@@ -19,6 +19,7 @@ sealed class ResolvedIntent {
     data object AcceptCall : ResolvedIntent()
     data object RejectCall : ResolvedIntent()
     data object HangUp : ResolvedIntent()
+    data object Time : ResolvedIntent()
     data object Stop : ResolvedIntent()
     data class Unknown(val rawInput: String) : ResolvedIntent()
 }

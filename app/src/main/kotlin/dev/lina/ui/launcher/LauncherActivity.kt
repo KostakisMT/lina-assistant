@@ -427,11 +427,12 @@ class LauncherActivity : ComponentActivity() {
             baseDir = getExternalFilesDir("onboarding") ?: filesDir,
         )
         onboarding = flow
-        flow.start { interests, name ->
+        flow.start { interests, name, region ->
             getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putBoolean(PREF_ONBOARDING_DONE, true)
                 .putString(PREF_INTERESTS, interests)
                 .putString(PREF_USER_NAME, name)
+                .putString(PREF_REGION, region)
                 .apply()
             onboarding = null
             // Claude mit den frischen Interessen neu aufsetzen
@@ -676,10 +677,12 @@ class LauncherActivity : ComponentActivity() {
         stopService(Intent(this, WakeWordService::class.java))
         statusText = "Aufnahme läuft…"
         ttsEngine?.speak(
-            "Aufnahme startet. Sag jetzt mehrmals Hey Lina, mit kurzen Pausen.",
+            "Aufnahme startet und läuft dreißig Sekunden. Sprich nach dem Ton, " +
+                "mit kurzen Pausen zwischen den Sätzen.",
             TtsPriority.INTERRUPT,
         )
         mainHandler.postDelayed({
+            Earcons.go()
             Thread({
                 val sr = 16000
                 val bufSize = maxOf(
@@ -882,6 +885,12 @@ class LauncherActivity : ComponentActivity() {
             audiobookManager?.startSleepTimer(intent.minutes)
             "Schlaf-Timer: ${intent.minutes} Minuten."
         }
+        is ResolvedIntent.Time -> {
+            val now = java.util.Calendar.getInstance()
+            val h = now.get(java.util.Calendar.HOUR_OF_DAY)
+            val m = now.get(java.util.Calendar.MINUTE)
+            if (m == 0) "Es ist $h Uhr." else "Es ist $h Uhr $m."
+        }
         is ResolvedIntent.Stop -> {
             ttsEngine?.stop()
             newsReader?.stop()
@@ -911,6 +920,7 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.AcceptCall -> "AcceptCall"
         is ResolvedIntent.RejectCall -> "RejectCall"
         is ResolvedIntent.HangUp -> "HangUp"
+        is ResolvedIntent.Time -> "Time"
         is ResolvedIntent.Stop -> "Stop"
         is ResolvedIntent.Unknown -> "Unknown"
     }

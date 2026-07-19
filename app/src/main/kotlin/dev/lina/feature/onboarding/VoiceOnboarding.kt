@@ -36,9 +36,10 @@ class VoiceOnboarding(
 
     /**
      * Startet den Ablauf. [onFinished] liefert die gesammelten Interessen
-     * (für die Claude-Persona) und die gewünschte Anrede – beides kann leer sein.
+     * (für die Claude-Persona), die gewünschte Anrede und die Wohnregion –
+     * alles kann leer sein.
      */
-    fun start(onFinished: (interests: String, name: String) -> Unit) {
+    fun start(onFinished: (interests: String, name: String, region: String) -> Unit) {
         speakThen(
             "Hallo! Ich bin Lina, deine Sprachassistentin. Bevor es losgeht, " +
                 "lernen wir uns kurz kennen. Das dauert etwa fünf Minuten. " +
@@ -50,12 +51,13 @@ class VoiceOnboarding(
 
     fun cancel() {
         cancelled = true
+        stt?.endSilenceMs = DEFAULT_END_SILENCE_RESTORE_MS
         stt?.stopListening()
     }
 
     // ── Phase 1: Weckwort ────────────────────────────────────────────────
 
-    private fun wakeRound(round: Int, onFinished: (String, String) -> Unit) {
+    private fun wakeRound(round: Int, onFinished: (String, String, String) -> Unit) {
         if (cancelled) return
         if (round > WAKE_ROUNDS) {
             speakThen("Sehr gut, das reicht. Jetzt üben wir ein paar Befehle.") {
@@ -76,7 +78,7 @@ class VoiceOnboarding(
 
     // ── Phase 2: Befehle ─────────────────────────────────────────────────
 
-    private fun commandRound(index: Int, onFinished: (String, String) -> Unit) {
+    private fun commandRound(index: Int, onFinished: (String, String, String) -> Unit) {
         if (cancelled) return
         if (index >= COMMANDS.size) {
             speakThen(
@@ -94,8 +96,9 @@ class VoiceOnboarding(
 
     // ── Phase 3: Fragenkatalog ───────────────────────────────────────────
 
-    private fun question(index: Int, onFinished: (String, String) -> Unit) {
+    private fun question(index: Int, onFinished: (String, String, String) -> Unit) {
         if (cancelled) return
+        if (index == 0) stt?.endSilenceMs = ANSWER_END_SILENCE_MS
         if (index >= QUESTIONS.size || stt == null) {
             finish(onFinished)
             return
@@ -131,9 +134,12 @@ class VoiceOnboarding(
 
     // ── Abschluss ────────────────────────────────────────────────────────
 
-    private fun finish(onFinished: (String, String) -> Unit) {
+    private fun finish(onFinished: (String, String, String) -> Unit) {
+        stt?.endSilenceMs = DEFAULT_END_SILENCE_RESTORE_MS
         File(dir, "answers.json").writeText(answers.toString(2))
         val name = answers.optString("anrede").trim()
+        val region = answers.optString("region")
+            .trim(' ', '.', '!', ',')
         val interests = listOf("nachrichten_interessen", "buecher")
             .map { answers.optString(it).trim() }
             .filter { it.isNotEmpty() }
@@ -143,7 +149,7 @@ class VoiceOnboarding(
             "Danke$greeting! Die Einrichtung ist fertig. " +
                 "Ab jetzt sage einfach: Hey Lina – und dann, was du möchtest. " +
                 "Zum Beispiel: Hey Lina, was gibt es Neues?"
-        ) { onFinished(interests, name) }
+        ) { onFinished(interests, name, region) }
         Log.d(TAG, "Onboarding fertig: ${dir.absolutePath}, Interessen=\"$interests\"")
     }
 
@@ -182,7 +188,11 @@ class VoiceOnboarding(
         private const val WAKE_CLIP_MS = 3000
         private const val CMD_CLIP_MS = 4000
         private const val ANSWER_TIMEOUT_MS = 15_000L
-        private const val PAUSE_AFTER_TTS_MS = 500L
+        private const val PAUSE_AFTER_TTS_MS = 800L
+        // Ältere Nutzer machen Denkpausen mitten in der Antwort – großzügiger
+        // als die Standard-Stille-Erkennung (1200ms), sonst wird abgeschnitten
+        private const val ANSWER_END_SILENCE_MS = 1800
+        private const val DEFAULT_END_SILENCE_RESTORE_MS = 1200
         private const val GO_TONE_LEAD_MS = 400L
 
         private val COMMANDS = listOf(
@@ -201,6 +211,8 @@ class VoiceOnboarding(
             "buecher" to "Welche Bücher, Autoren oder Themen hörst oder liest du gern?",
             "wichtigste_person" to
                 "Wen möchtest du am häufigsten anrufen? Und wie nennst du diese Person meistens?",
+            "region" to
+                "In welcher Stadt oder Region wohnst du? Das brauche ich für Wetter und Nachrichten aus deiner Nähe.",
             "wunsch" to "Und zum Schluss: Was soll ich für dich besonders gut können?",
         )
     }

@@ -28,6 +28,10 @@ device along the way.
 - 💬 **SMS** – "Write to Ulla: I'll be there at three" / "Read my messages"
 - 📰 **News** – RSS feeds on request; summary first, full article on demand
 - 🎧 **Audiobooks** – local library + Librivox streaming, sleep timer with fade-out
+- 📄 **Reading mail aloud** – put a letter, bill or magazine page in a fixed
+  frame in front of the tablet, say "read me the mail": Lina takes a photo and
+  reads what matters (sender and subject first, skipping address blocks,
+  letterheads and small print) – full text on request
 - 🗣️ **Free conversation** – via the Claude API (optional, needs an API key;
   without a key all core commands keep working offline)
 
@@ -40,6 +44,7 @@ device along the way.
 | Speech synthesis | Piper TTS `de_DE-dii-high` via sherpa-onnx (fallback: Android TTS) | ✅ |
 | Command parsing | Regex + phonetic fuzzy matching, on-device (layer 1) | ✅ |
 | Free conversation | Claude API (layer 2, optional) | ❌ |
+| Document reading | CameraX (rear camera) + Claude vision | ❌ |
 
 All core components (STT, TTS, wake word, intent) are swappable behind
 interfaces. Target platform: Android 13+, developed on a Lenovo tablet.
@@ -92,6 +97,10 @@ Getragen von einem gemeinnützigen Verein – kein kommerzielles Produkt.
 - 💬 **SMS** – „Schreib Ulla: Ich komme um drei" / „Lies meine Nachrichten"
 - 📰 **Nachrichten** – RSS-Feeds auf Abruf, erst Zusammenfassung, auf Wunsch der ganze Artikel
 - 🎧 **Hörbücher** – lokale Bibliothek + Librivox-Streaming, Schlaf-Timer mit Fade-Out
+- 📄 **Post vorlesen** – Brief, Rechnung oder Zeitungsseite in den festen Rahmen
+  vor dem Tablet legen, „lies mir die Post vor" sagen: Lina fotografiert und
+  liest das Wesentliche vor (erst Absender und Anliegen, ohne Anschriftenfelder,
+  Briefköpfe und Kleingedrucktes) – auf Nachfrage der ganze Text
 - 🗣️ **Freie Konversation** – über die Claude API (optional, braucht API-Key;
   ohne Key laufen alle Kernbefehle weiter offline)
 

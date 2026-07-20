@@ -280,8 +280,11 @@ app/src/main/kotlin/dev/lina/
 │   ├── audiobook/
 │   │   ├── AudiobookPlayer.kt       # ExoPlayer Wrapper
 │   │   └── PlaybackStateStore.kt    # Fortschritt persistent
+│   ├── document/
+│   │   └── DocumentCamera.kt        # CameraX Rückkamera, eigener Lifecycle
 │   └── onboarding/
 │       ├── PermissionsGuide.kt
+│       ├── VoiceOnboarding.kt       # Gesprochene Ersteinrichtung
 │       └── BatteryWhitelistGuide.kt
 └── ui/
     ├── launcher/
@@ -331,6 +334,20 @@ app/src/main/kotlin/dev/lina/
 | "Pause" / "Weiter" | Wiedergabe steuern |
 | "30 Sekunden zurück" | Zurückspulen |
 | "Was höre ich gerade?" | Titel und Kapitel ansagen |
+
+### Dokument-Vorlesen (Priorität 5, ADR-018)
+Dokument liegt im festen Rahmen vor dem Tablet (Rückkamera).
+
+| Befehl | Aktion |
+|---|---|
+| "Lies mir die Post vor" | Foto → Vision → Relevantes vorlesen |
+| "Was steht da?" | Dito |
+| "Ja" / "alles" (nach der Nachfrage) | Vollständigen Text vorlesen |
+| "Nochmal" | Neues Foto (z.B. nach Umblättern) |
+| "Testfoto" (Debug) | Foto speichern, um den Rahmen auszurichten |
+
+> Das Bild verlässt das Gerät (Cloud-Vision) und wird **nicht** gespeichert –
+> nur transient im RAM. Einwilligung siehe WARTUNG.md.
 
 ---
 
@@ -393,6 +410,7 @@ und der nebenbei das Gerät bedient und im Alltag unterstützt.
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
 <uses-permission android:name="android.permission.WAKE_LOCK"/>
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+<uses-permission android:name="android.permission.CAMERA"/>
 <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"/>
 ```
 

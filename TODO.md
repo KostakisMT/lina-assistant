@@ -193,6 +193,19 @@
 
 ---
 
+## 📷 Dokument-Vorlesen (Meilenstein 3)
+
+- [x] CameraX-Rückkamera-Aufnahme, headless mit eigenem Lifecycle (2026-07-20)
+- [x] Vision-Auswertung über Claude, relevanzgefiltert + "alles vorlesen" (2026-07-20)
+- [x] Intent + Folgefenster (ja/alles, wiederhole, nochmal) (2026-07-20)
+- [x] Debug-Befehl "testfoto" zum Ausrichten des Rahmens (2026-07-20)
+- [ ] Rahmen beim Testnutzer aufkleben und mit "testfoto" ausrichten
+- [ ] Mit echter Post testen (mehrseitig, Umschlag, Behördenbrief)
+- [ ] Latenz prüfen (~14s) – ggf. kleineres Bild oder Streaming
+- [ ] Offline-Alternative (On-Device-OCR) evaluieren – Backlog
+
+---
+
 ## 🔵 Phase 2 – Geplant (nicht jetzt)
 
 - [x] STT: Whisper über sherpa-onnx integriert (base int8, de) – 2026-07-02

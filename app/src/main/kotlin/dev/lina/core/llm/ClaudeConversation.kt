@@ -6,7 +6,10 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.errors.AnthropicServiceException
 import com.anthropic.errors.RateLimitException
+import com.anthropic.models.messages.Base64ImageSource
 import com.anthropic.models.messages.CacheControlEphemeral
+import com.anthropic.models.messages.ContentBlockParam
+import com.anthropic.models.messages.ImageBlockParam
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.StopReason
@@ -173,6 +176,78 @@ class ClaudeConversation(
 
     fun reset() = history.clear()
 
+    /**
+     * Liest ein fotografiertes Dokument vor (Vision, einmalig und zustandslos –
+     * rührt die Gesprächs-History nicht an, damit das große Bild nicht jede
+     * Folgeanfrage aufbläht).
+     *
+     * [verbatim] = false: nur das Relevante (bei Briefen erst Absender + Thema,
+     * dann Inhalt; Anschriften/Fußzeilen/Werbung weglassen).
+     * [verbatim] = true: der vollständige Text.
+     *
+     * Blockierend – vom Hintergrund-Thread aufrufen.
+     */
+    fun readDocument(jpegBytes: ByteArray, verbatim: Boolean = false): LinaReply {
+        return try {
+            val base64 = java.util.Base64.getEncoder().encodeToString(jpegBytes)
+            val image = ContentBlockParam.ofImage(
+                ImageBlockParam.builder()
+                    .source(
+                        Base64ImageSource.builder()
+                            .data(base64)
+                            .mediaType(Base64ImageSource.MediaType.IMAGE_JPEG)
+                            .build()
+                    )
+                    .build()
+            )
+            val instruction = ContentBlockParam.ofText(
+                TextBlockParam.builder()
+                    .text(if (verbatim) DOC_PROMPT_VERBATIM else DOC_PROMPT_RELEVANT)
+                    .build()
+            )
+            val params = MessageCreateParams.builder()
+                .model(MODEL)
+                .maxTokens(DOC_MAX_TOKENS)
+                .thinking(ThinkingConfigDisabled.builder().build())
+                .systemOfTextBlockParams(
+                    listOf(TextBlockParam.builder().text(DOC_SYSTEM_PROMPT).build())
+                )
+                .addMessage(
+                    MessageParam.builder()
+                        .role(MessageParam.Role.USER)
+                        .contentOfBlockParams(listOf(image, instruction))
+                        .build()
+                )
+                .build()
+
+            val response = client.messages().create(params)
+            val text = response.content()
+                .mapNotNull { it.text().orElse(null)?.text() }
+                .joinToString(" ")
+                .trim()
+            Log.d(TAG, "readDocument(verbatim=$verbatim): ${text.length} Zeichen")
+            if (text.isEmpty()) {
+                LinaReply.Error("Ich konnte auf dem Bild nichts erkennen.")
+            } else {
+                LinaReply.Say(text)
+            }
+        } catch (e: RateLimitException) {
+            Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Rate-Limit)", e)
+            LinaReply.Error("Gerade ist viel los bei mir. Versuch es gleich noch einmal.")
+        } catch (e: AnthropicServiceException) {
+            Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Dienst)", e)
+            LinaReply.Error(
+                "Mein Sprachdienst meldet ein Problem. Bitte sag deinem Betreuer Bescheid."
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Verbindung)", e)
+            LinaReply.Error(
+                "Ich kann das Dokument gerade nicht auswerten. " +
+                    "Wahrscheinlich fehlt die Internetverbindung."
+            )
+        }
+    }
+
     private fun buildParams(): MessageCreateParams {
         val builder = MessageCreateParams.builder()
             .model(MODEL)
@@ -209,6 +284,7 @@ class ClaudeConversation(
             "sms_vorlesen" -> ResolvedIntent.ReadSms
             "nachrichten_vorlesen" -> ResolvedIntent.ReadNews
             "hoerbuch_abspielen" -> ResolvedIntent.PlayAudiobook
+            "dokument_vorlesen" -> ResolvedIntent.ReadDocument
             "stopp" -> ResolvedIntent.Stop
             else -> null
         }
@@ -231,6 +307,46 @@ class ClaudeConversation(
         private const val TAG = "ClaudeConversation"
         private const val MODEL = "claude-sonnet-5"
         private const val MAX_HISTORY = 20
+        // Dokumente sind länger als Chat-Antworten
+        private const val DOC_MAX_TOKENS = 1024L
+
+        private val DOC_SYSTEM_PROMPT = """
+            Du bist Lina und liest einem blinden Menschen vor, was auf einem Foto
+            zu sehen ist – meist Post, ein Brief, eine Zeitungs- oder Magazinseite,
+            die vor dem Tablet liegt. Alles, was du schreibst, wird laut vorgelesen.
+
+            Regeln:
+            - Reiner Sprechtext auf Deutsch. Keine Listen, keine Aufzählungszeichen,
+              keine Sonderzeichen, kein Markdown, keine Emojis.
+            - Sprich Zahlen, Daten und Beträge aus, wie man sie sagt
+              (zum Beispiel "zweiundzwanzigster Mai" statt "22.05.").
+            - Nenne niemals Bildkoordinaten oder Layout-Details ("oben rechts steht").
+            - Ist das Bild leer, unscharf, zu dunkel oder kein Dokument: sag das
+              freundlich in einem Satz und schlage vor, das Blatt neu zu legen.
+        """.trimIndent()
+
+        private val DOC_PROMPT_RELEVANT = """
+            Lies mir vor, was hier wichtig ist.
+
+            Bei einem Brief: Sag zuerst in einem Satz, von wem er ist und worum es
+            geht. Dann das Wesentliche – Anliegen, Beträge, Fristen, was ich tun
+            muss. Lass weg: Anschriftenfelder, Absenderadressen, Briefkopf,
+            Betreffzeilen-Wiederholungen, Fußzeilen, Bankverbindungen,
+            Registernummern, Kleingedrucktes und Werbung.
+
+            Bei einer Zeitungs- oder Magazinseite: Sag kurz, was für eine Seite das
+            ist, dann die Überschrift und den Kern des Artikels. Lass Anzeigen,
+            Bildunterschriften und Randnotizen weg.
+
+            Halte dich kurz und klar – so, wie man jemandem am Tisch vorliest.
+        """.trimIndent()
+
+        private val DOC_PROMPT_VERBATIM = """
+            Lies mir jetzt den vollständigen Text vor, den du auf dem Bild erkennst –
+            von oben nach unten, ohne etwas wegzulassen und ohne eigene
+            Zusammenfassung. Auch Anschriften, Fußzeilen und Kleingedrucktes.
+            Gib den Text als fließenden Sprechtext wieder.
+        """.trimIndent()
 
         private val BASE_PROMPT = """
             Du bist Lina, die Sprachassistentin eines blinden Menschen in Deutschland.
@@ -279,6 +395,14 @@ class ClaudeConversation(
                 emptyMap(), emptyList(),
             ),
             tool("hoerbuch_abspielen", "Spielt das aktuelle Hörbuch ab.", emptyMap(), emptyList()),
+            tool(
+                "dokument_vorlesen",
+                "Fotografiert das Dokument, das vor dem Tablet im Rahmen liegt " +
+                    "(Post, Brief, Zeitung, Magazinseite), und liest es vor. " +
+                    "Nutze dies bei Wünschen wie \"lies mir die Post vor\", " +
+                    "\"was steht auf dem Blatt\" oder \"lies das vor\".",
+                emptyMap(), emptyList(),
+            ),
             tool(
                 "stopp",
                 "Stoppt Vorlesen oder Wiedergabe.",

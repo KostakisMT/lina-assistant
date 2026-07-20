@@ -31,3 +31,6 @@ foerderantrag/
 
 # Vom Tablet gezogene Daten (Aufnahmen etc.) – lokal
 tablet-data/
+
+# Debug-Fotos vom Gerät (Dokument-Ausrichtung) – lokal
+docphotos/

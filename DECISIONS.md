@@ -175,3 +175,19 @@
 - API-Key liegt in `local.properties` (nicht im Git); pro Gerät zu hinterlegen
 - Datenschutz: freie Konversation verlässt das Gerät; muss im Onboarding/der Doku transparent gemacht werden
 - `LlmIntentResolver` (lokales Modell) bleibt als möglicher späterer Offline-Pfad im Backlog
+
+---
+
+## ADR-018: Dokument-Vorlesen per Rückkamera + Cloud-Vision
+**Datum:** 2026-07-20 | **Status:** Akzeptiert
+
+**Kontext:** Post, Zeitungen und Formulare selbstständig lesen zu können ist einer der größten Alltagswünsche blinder Menschen (Förder-Meilenstein 3). Kamerabedienung ist für Blinde normalerweise das Hauptproblem: Ausrichten, Abstand, Schärfe. Der Testnutzer stellt das Tablet stationär auf einen fixierten Ständer und markiert mit Kreppband einen festen Rahmen auf dem Tisch – Dokumente werden immer an dieselbe Stelle gelegt. Damit entfällt das Ausrichtungsproblem vollständig. Optionen für die Texterkennung: (a) On-Device-OCR (z.B. ML Kit/Tesseract) – offline, aber liefert nur rohen Text ohne Struktur, Layout-Chaos bei Briefen, keine Relevanzfilterung; (b) Cloud-Vision über die bereits angebundene Claude API – versteht Layout, Absender, Anliegen und kann Belangloses weglassen.
+
+**Entscheidung:** Rückkamera (höhere Auflösung als die Frontkamera; auf dem Testgerät auch bei schwachem Licht scharf) + `claude-sonnet-5` Vision. Die Auswertung ist ein **einmaliger, zustandsloser Aufruf** – das Bild landet nicht im Dialoggedächtnis. Standard ist die relevanzgefilterte Ausgabe (bei Briefen: erst Absender und Anliegen, dann Inhalt; Anschriften, Briefköpfe, Fußzeilen, Kleingedrucktes und Werbung werden weggelassen), auf Nachfrage der vollständige Text.
+
+**Konsequenzen:**
+- Dokumentfotos verlassen das Gerät – bei Post besonders sensibel. Muss in der Einwilligung ausdrücklich benannt werden (WARTUNG.md).
+- Das Bild wird **nicht persistiert**: nur transient im RAM während des Vorlesens und des Folgefensters, danach verworfen. Ausnahme: der Debug-Befehl "testfoto" speichert bewusst eine Datei, damit die Rahmen-Ausrichtung einmalig per adb geprüft werden kann.
+- Ohne Internet gibt es kein Dokument-Vorlesen (alle Offline-Kernbefehle laufen weiter). On-Device-OCR bleibt als möglicher Offline-Pfad im Backlog.
+- CameraX bekommt einen **eigenen LifecycleOwner** statt dem der Activity: Das Tablet steht stationär mit meist ausgeschaltetem Bildschirm; eine gestoppte Activity würde die Kamera sofort abkoppeln ("Camera is closed").
+- Kosten: ein Vision-Aufruf pro Dokument (Bild auf 2000px lange Kante herunterskaliert, JPEG-Q85 ≈ 500 kB).

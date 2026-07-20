@@ -8,10 +8,30 @@ class LocalCommandResolver : IntentResolver {
         return resolveTime(normalized)
             ?: resolveCall(normalized)
             ?: resolveSms(normalized)
+            ?: resolveDocument(normalized)
             ?: resolveCallControl(normalized)
             ?: resolveNews(normalized)
             ?: resolveAudiobook(normalized)
             ?: resolveStop(normalized)
+    }
+
+    /**
+     * Dokument-Vorlesen per Kamera. Steht NACH resolveSms, damit
+     * "lies meine Nachrichten" weiterhin die SMS-Funktion trifft.
+     */
+    private fun resolveDocument(input: String): ResolvedIntent? = when {
+        input.matches(
+            Regex(
+                """.*(?:post|brief|briefe|zeitung|magazin|dokument|zettel|""" +
+                    """schreiben|rechnung|seite)\b.*"""
+            )
+        ) && input.matches(Regex(""".*(?:lies|lese|vorlesen|liest|was steht).*""")) ->
+            ResolvedIntent.ReadDocument
+        input.matches(Regex(""".*was steht (?:da|hier|drauf|auf dem blatt).*""")) ->
+            ResolvedIntent.ReadDocument
+        input.matches(Regex(""".*lies (?:mir )?(?:das|es) (?:mal )?vor.*""")) ->
+            ResolvedIntent.ReadDocument
+        else -> null
     }
 
     private fun resolveTime(input: String): ResolvedIntent? = when {

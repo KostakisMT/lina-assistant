@@ -17,6 +17,20 @@
 
 ---
 
+## [2026-07-20] Dokument-Vorlesen per Kamera + Vision (Meilenstein 3)
+
+**Was:** Lina fotografiert auf Zuruf ein Dokument (Post, Brief, Zeitung, Magazinseite), das im festen Kreppband-Rahmen vor dem stationären Tablet liegt, und liest vor, was wichtig ist. Neue Bausteine: `feature/document/DocumentCamera.kt` (CameraX, Rückkamera, headless ohne Preview, eigener LifecycleOwner – siehe ADR-018 –, Bild auf 2000px/JPEG-Q85 herunterskaliert, EXIF-Rotation korrigiert); `ClaudeConversation.readDocument(bytes, verbatim)` (zustandsloser Vision-Aufruf mit Image+Text-Block, eigener Dokument-System-Prompt, `maxTokens` 1024, keine Tools/History); Intent `ReadDocument` (lokale Regex „lies mir die Post vor", „was steht da" u.a. – nach der SMS-Erkennung eingeordnet, damit „lies meine Nachrichten" weiter SMS trifft) plus Claude-Tool `dokument_vorlesen` für STT-Verhörer; Orchestrierung `readDocumentAloud()` + Dokument-Folgefenster („ja/alles" → ganzer Text, „wiederhole", „nochmal" → neues Foto, sonst stiller Rückzug). CAMERA-Permission + `uses-feature`, CameraX-Deps, CAMERA im Onboarding-Berechtigungssatz. Debug-Befehl „testfoto" speichert ein Bild zum einmaligen Ausrichten des Rahmens.
+
+**Warum:** Größter Alltagswunsch (Post selbstständig lesen) und Förder-Meilenstein 3. Der fixierte Rahmen löst das Ausrichtungsproblem, das Kameranutzung für Blinde sonst unbrauchbar macht.
+
+**Dateien:** feature/document/DocumentCamera.kt (neu), ClaudeConversation.kt, ResolvedIntent.kt, LocalCommandResolver.kt, LauncherActivity.kt, PermissionsGuide.kt, AndroidManifest.xml, app/build.gradle.kts
+
+**Verifiziert:** Auf dem Gerät end-to-end – Testfoto scharf und formatfüllend (auch bei schwachem Licht), „lies mir die Post vor" → Foto nach ~3s, Vision-Auswertung ~10s, Ansage beginnt korrekt mit Art und Absender des Dokuments.
+
+**Offen:** Gesamtdauer ~14s (Earcons überbrücken; ggf. Bild kleiner oder Antwort streamen). „Alles vorlesen"-Pfad und Mehrseiten-Ablauf mit echtem Nutzer testen. On-Device-OCR als Offline-Alternative im Backlog.
+
+---
+
 ## [2026-07-19] Weckwort v3: Nachtraining mit Testnutzer-Stimme
 
 **Was:** Die fünf Weckwort-Aufnahmen aus der Ersteinrichtung des Testnutzers ins Training aufgenommen (`user_positive`, 40-fach übergewichtet), seine fünf Befehls-Aufnahmen als Hard Negatives. Bisherige Entwickler-Clips bleiben drin (beide Stimmen sollen wecken). Pipeline unverändert (`training/`), Validierung: Recall 0,886–0,93 bei Schwelle 0,3 über beide Stimmen, Fehlalarmrate 0,27 %/Fenster. Modell auf dem Tablet deployed.

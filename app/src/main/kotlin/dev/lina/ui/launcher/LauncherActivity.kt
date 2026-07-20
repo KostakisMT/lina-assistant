@@ -61,6 +61,7 @@ import dev.lina.feature.news.NewsReader
 import dev.lina.feature.news.NewsSyncWorker
 import dev.lina.feature.sms.SmsReader
 import dev.lina.feature.sms.SmsSender
+import dev.lina.feature.document.DocumentCamera
 import dev.lina.feature.onboarding.AccessibilityGuide
 import dev.lina.feature.onboarding.VoiceOnboarding
 import dev.lina.feature.onboarding.BatteryWhitelistGuide
@@ -72,6 +73,9 @@ class LauncherActivity : ComponentActivity() {
     private var ttsEngine: TtsEngine? = null
     private var piperEngine: PiperTtsEngine? = null
     private var claude: ClaudeConversation? = null
+    private var documentCamera: DocumentCamera? = null
+    /** Nur während des Dokument-Folgefensters im RAM – wird danach verworfen. */
+    private var lastDocumentImage: ByteArray? = null
     private val intentResolver = LocalCommandResolver()
     private var contactMatcher: FuzzyContactMatcher? = null
     private var callHandler: CallHandler? = null
@@ -463,6 +467,11 @@ class LauncherActivity : ComponentActivity() {
                 debugInput = ""
                 return true // Onboarding steuert das Mikrofon selbst
             }
+            "testfoto" -> {
+                captureTestPhoto()
+                debugInput = ""
+                return true
+            }
             "einrichtung zurücksetzen" -> {
                 // Auch Anrede/Interessen löschen – sonst spricht Lina den neuen
                 // Nutzer mit den Daten des vorherigen an
@@ -500,6 +509,10 @@ class LauncherActivity : ComponentActivity() {
                 ttsEngine?.speak("Nach jeder Meldung kannst du direkt sagen: mehr, nächste, oder stopp.")
             }
             openFollowUpWindow(newsMode = true)
+            return true
+        }
+        if (resolved is ResolvedIntent.ReadDocument) {
+            // Kamera + Vision laufen asynchron und übernehmen Ansagen/Folgefenster
             return true
         }
         ttsEngine?.speak(response)
@@ -629,6 +642,225 @@ class LauncherActivity : ComponentActivity() {
             listOf("mehr", "weiter", "artikel", "ganz", "vorlesen", "lies", "details")
                 .any { t.contains(it) } -> ResolvedIntent.NewsDetail
             else -> null
+        }
+    }
+
+    /**
+     * Debug: Foto aufnehmen und speichern, damit per adb pull geprüft werden kann,
+     * ob der Kreppband-Rahmen formatfüllend im Bild der Rückkamera liegt.
+     * Wird nur für die Einrichtung gebraucht – reguläres Vorlesen speichert nichts.
+     */
+    private fun captureTestPhoto() {
+        if (checkSelfPermission(Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            ttsEngine?.speak("Die Kamera ist noch nicht freigegeben.", TtsPriority.HIGH)
+            PermissionsGuide.requestMissing(this)
+            resumeWakeWordListening()
+            return
+        }
+        cancelWakeResume()
+        stopService(Intent(this, WakeWordService::class.java))
+        ttsEngine?.speak("Ich mache ein Testfoto.", TtsPriority.INTERRUPT)
+        val camera = documentCamera ?: DocumentCamera(this).also { documentCamera = it }
+        mainHandler.postDelayed({
+            camera.capture { bytes ->
+                if (bytes == null) {
+                    ttsEngine?.speak("Das Testfoto hat nicht geklappt.", TtsPriority.HIGH)
+                } else {
+                    val dir = java.io.File(getExternalFilesDir(null), "docphotos")
+                        .apply { mkdirs() }
+                    val file = java.io.File(dir, "test_${System.currentTimeMillis()}.jpg")
+                    file.writeBytes(bytes)
+                    android.util.Log.d("LinaLauncher", "Testfoto: ${file.absolutePath} (${bytes.size / 1024} kB)")
+                    debugLog = "Testfoto: ${file.name}\n\n$debugLog"
+                    ttsEngine?.speak("Testfoto gespeichert.", TtsPriority.HIGH)
+                }
+                resumeWakeWordListening()
+            }
+        }, 1_500)
+    }
+
+    /**
+     * Dokument-Vorlesen: fotografiert den Rahmen hinter dem Tablet (Rückkamera)
+     * und lässt Claude vorlesen, was darauf wichtig ist.
+     */
+    private fun readDocumentAloud(verbatimOf: ByteArray? = null) {
+        val conversation = claude
+        if (conversation == null) {
+            ttsEngine?.speak(
+                "Zum Vorlesen von Dokumenten brauche ich eine Internetverbindung " +
+                    "und den Zugang zu meinem Sprachdienst.",
+                TtsPriority.HIGH,
+            )
+            resumeWakeWordListening()
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            ttsEngine?.speak(
+                "Ich darf die Kamera noch nicht benutzen. " +
+                    "Bitte lass deinen Betreuer die Kamera-Berechtigung freigeben.",
+                TtsPriority.HIGH,
+            )
+            PermissionsGuide.requestMissing(this)
+            resumeWakeWordListening()
+            return
+        }
+
+        cancelWakeResume()
+        stopService(Intent(this, WakeWordService::class.java))
+
+        // "Alles vorlesen" nutzt das bereits vorhandene Bild – kein neues Foto
+        if (verbatimOf != null) {
+            statusText = "Lese den ganzen Text…"
+            Earcons.thinking()
+            Thread({
+                val reply = conversation.readDocument(verbatimOf, verbatim = true)
+                runOnUiThread { speakDocumentReply(reply, verbatimOf, offerFullText = false) }
+            }, "doc-verbatim").start()
+            return
+        }
+
+        statusText = "Ich fotografiere das Dokument…"
+        ttsEngine?.speak("Einen Moment, ich schaue mir das an.", TtsPriority.INTERRUPT)
+        val camera = documentCamera ?: DocumentCamera(this).also { documentCamera = it }
+
+        // Kurz warten, damit die Ansage durch ist (ruhiger Moment für die Aufnahme)
+        mainHandler.postDelayed({
+            camera.capture { bytes ->
+                if (bytes == null) {
+                    android.util.Log.w("LinaLauncher", "Dokument-Foto fehlgeschlagen")
+                    ttsEngine?.speak(
+                        "Ich konnte leider kein Foto machen. Versuch es bitte noch einmal.",
+                        TtsPriority.HIGH,
+                    )
+                    resumeWakeWordListening()
+                    return@capture
+                }
+                android.util.Log.d("LinaLauncher", "Dokument-Foto: ${bytes.size / 1024} kB")
+                statusText = "Ich lese das Dokument…"
+                Earcons.thinking()
+                Thread({
+                    val reply = conversation.readDocument(bytes)
+                    runOnUiThread { speakDocumentReply(reply, bytes, offerFullText = true) }
+                }, "doc-read").start()
+            }
+        }, 1_500)
+    }
+
+    /** Ergebnis der Dokument-Auswertung vorlesen und Folgefenster öffnen. */
+    private fun speakDocumentReply(
+        reply: LinaReply,
+        bytes: ByteArray,
+        offerFullText: Boolean,
+    ) {
+        val text = when (reply) {
+            is LinaReply.Say -> reply.text
+            is LinaReply.Error -> reply.text
+            else -> ""
+        }
+        android.util.Log.d("LinaLauncher", "Dokument gelesen: ${text.take(80)}…")
+        debugLog = "Dokument: ${text.take(200)}\n\n$debugLog"
+
+        val erfolg = reply is LinaReply.Say
+        val ansage = if (erfolg && offerFullText) {
+            "$text … Soll ich den ganzen Text vorlesen?"
+        } else {
+            text
+        }
+        if (ansage.isNotBlank()) ttsEngine?.speak(ansage, TtsPriority.HIGH)
+
+        if (erfolg) {
+            lastDocumentImage = bytes
+            openDocFollowUp(text)
+        } else {
+            lastDocumentImage = null
+            resumeWakeWordListening()
+        }
+    }
+
+    /**
+     * Folgefenster nach dem Vorlesen: "ja/alles" → ganzer Text, "wiederhole" →
+     * nochmal dasselbe, "nochmal/neu" → neues Foto. Alles andere schließt still
+     * (Raumgespräch-Schutz).
+     */
+    private fun openDocFollowUp(lastText: String) {
+        val stt = sttEngine ?: return
+        if (onboarding != null) return
+        cancelWakeResume()
+        stopService(Intent(this, WakeWordService::class.java))
+        mainHandler.postDelayed(object : Runnable {
+            override fun run() {
+                if (onboarding != null) return
+                if (piperEngine?.isBusySpeaking() == true) {
+                    mainHandler.postDelayed(this, 200)
+                    return
+                }
+                statusText = "Dokument – ich höre…"
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        lastDocumentImage = null
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleDocFollowUp(text, lastText)
+                        }
+                    }
+                }, 350)
+            }
+        }, 200)
+    }
+
+    private fun handleDocFollowUp(text: String, lastText: String) {
+        val t = text.lowercase()
+        val bild = lastDocumentImage
+        when {
+            text.isBlank() -> {
+                lastDocumentImage = null
+                resumeWakeWordListening()
+            }
+            listOf("ja", "alles", "ganze", "vollständig", "vollstaendig", "kompletten")
+                .any { t.contains(it) } && bild != null -> {
+                android.util.Log.d("LinaLauncher", "Dokument-Folge: ganzer Text")
+                readDocumentAloud(verbatimOf = bild)
+            }
+            listOf("wiederhol", "nochmal sagen", "noch mal sagen").any { t.contains(it) } -> {
+                ttsEngine?.speak(lastText, TtsPriority.HIGH)
+                openDocFollowUp(lastText)
+            }
+            listOf("nochmal", "noch mal", "neu", "nächste seite", "naechste seite", "umgeblättert")
+                .any { t.contains(it) } -> {
+                android.util.Log.d("LinaLauncher", "Dokument-Folge: neues Foto")
+                lastDocumentImage = null
+                readDocumentAloud()
+            }
+            else -> {
+                // Befehl oder Raumgespräch – nicht im Dokument-Kontext behandeln
+                lastDocumentImage = null
+                val resolved = intentResolver.resolve(text)
+                if (resolved != null) {
+                    debugInput = text
+                    val uebernommen = processDebugInput()
+                    if (!uebernommen) resumeWakeWordListening()
+                } else {
+                    android.util.Log.d("LinaLauncher", "Dokument-Folge ignoriert: \"$text\"")
+                    resumeWakeWordListening()
+                }
+            }
         }
     }
 
@@ -885,6 +1117,10 @@ class LauncherActivity : ComponentActivity() {
             audiobookManager?.startSleepTimer(intent.minutes)
             "Schlaf-Timer: ${intent.minutes} Minuten."
         }
+        is ResolvedIntent.ReadDocument -> {
+            readDocumentAloud()
+            "" // Ansagen macht readDocumentAloud selbst
+        }
         is ResolvedIntent.Time -> {
             val now = java.util.Calendar.getInstance()
             val h = now.get(java.util.Calendar.HOUR_OF_DAY)
@@ -920,6 +1156,7 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.AcceptCall -> "AcceptCall"
         is ResolvedIntent.RejectCall -> "RejectCall"
         is ResolvedIntent.HangUp -> "HangUp"
+        is ResolvedIntent.ReadDocument -> "ReadDocument"
         is ResolvedIntent.Time -> "Time"
         is ResolvedIntent.Stop -> "Stop"
         is ResolvedIntent.Unknown -> "Unknown"

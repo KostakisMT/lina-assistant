@@ -15,6 +15,12 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
    Gerät. Lina kündigt keine Cloud-Nutzung einzeln an – das muss vorab klar sein.
 3. **Aufnahmen:** Bei der Ersteinrichtung entstehen Sprachaufnahmen (Weckwort,
    Befehle) für das Training der Erkennung. Sie werden nur dafür verwendet.
+4. **Dokument-Vorlesen:** Sagt die Nutzer:in „lies mir die Post vor", macht Lina
+   ein Foto des Dokuments im Rahmen und schickt es zur Auswertung an denselben
+   Internetdienst. Das betrifft auch private Post. Das Bild wird **nicht
+   gespeichert** – es liegt nur während des Vorlesens im Arbeitsspeicher.
+   (Ausnahme: der Wartungsbefehl „testfoto" legt bewusst eine Datei ab, damit
+   der Rahmen einmalig ausgerichtet werden kann – danach löschen.)
 
 Am besten kurz und einfach erklären und die Zustimmung schriftlich oder als
 Sprachnotiz festhalten.

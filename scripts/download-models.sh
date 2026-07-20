@@ -3,6 +3,18 @@ set -euo pipefail
 
 # Downloads OpenWakeWord ONNX models into app assets
 # Run this after cloning the repo
+#
+# Optionen:
+#   --libs-only   Nur die sherpa-onnx-AAR laden (zwingend zum Kompilieren),
+#                 die großen Sprachmodelle (~400 MB) überspringen.
+#                 Für CI und für "compiliert es überhaupt?"-Checks.
+
+LIBS_ONLY=0
+if [ "${1:-}" = "--libs-only" ]; then
+    LIBS_ONLY=1
+    echo "Modus: nur AAR (Sprachmodelle werden übersprungen)"
+    echo ""
+fi
 
 DEST="$(dirname "$0")/../app/src/main/assets/openwakeword"
 BASE_URL="https://github.com/dscripka/openWakeWord/releases/download/v0.5.1"
@@ -52,6 +64,14 @@ else
     echo "↓ Downloading $AAR..."
     curl -sL "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VERSION}/$AAR" -o "$LIBS_DIR/$AAR"
     echo "✓ $AAR downloaded"
+fi
+
+if [ "$LIBS_ONLY" = "1" ]; then
+    echo ""
+    echo "Fertig (--libs-only): AAR in app/libs."
+    echo "Die App kompiliert damit, spricht und hört aber erst mit den"
+    echo "Sprachmodellen – dafür das Script ohne --libs-only laufen lassen."
+    exit 0
 fi
 
 # Piper TTS – gewählte Stimme (ADR-016). Für neue A/B-Tests weitere Modelle

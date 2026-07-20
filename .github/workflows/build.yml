@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: JDK 17 einrichten
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -29,7 +29,7 @@ jobs:
       # sonst schlägt schon die Konfiguration fehl. Die großen Sprachmodelle
       # (~400 MB) braucht der Compiler nicht – die bleiben draußen.
       - name: sherpa-onnx-AAR cachen
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: app/libs
           key: sherpa-aar-1.13.3
@@ -46,7 +46,7 @@ jobs:
 
       - name: Lint-Bericht sichern
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lint-bericht
           path: app/build/reports/lint-results-debug.html

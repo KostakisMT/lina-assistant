@@ -17,6 +17,20 @@
 
 ---
 
+## [2026-07-20] CI: GitHub-Actions auf aktuelle Major-Versionen
+
+**Was:** `actions/checkout` v4→v7, `actions/setup-java` v4→v5, `actions/cache` v4→v6, `actions/upload-artifact` v4→v7 in `.github/workflows/build.yml`. Nur die Versionsangaben – keine Parameter geändert.
+
+**Warum:** GitHub warnt bei jedem Lauf, dass diese Actions auf Node.js 20 zielen und bereits zwangsweise auf Node 24 laufen. Erfahrungsgemäß wird aus so einer Warnung irgendwann ein harter Fehler – dann steht die CI still, während gerade etwas anderes ansteht.
+
+**Dateien:** .github/workflows/build.yml
+
+**Verifiziert:** Der CI-Lauf des PRs ist der Test – lokal nicht nachstellbar. Breaking Changes der Major-Sprünge vorher geprüft: durchweg Node-24-Runtime und ESM-Migration, beides mit `ubuntu-latest` unkritisch (GitHub-hosted Runner, keine self-hosted). `checkout@v7` blockiert zusätzlich Fork-Checkouts bei `pull_request_target`/`workflow_run` – wir nutzen `pull_request`, also nicht betroffen. Alle verwendeten Parameter bleiben gültig.
+
+**Offen:** Nichts.
+
+---
+
 ## [2026-07-20] Erinnerungen & Wecker (offline) + IDEEN.md
 
 **Was:** Neues Feature `feature/reminder/` – gesprochene Erinnerungen, komplett offline: `Reminder` (Datenmodell + gesprochene Zeitangabe „morgen um 7 Uhr 30"), `ReminderStore` (SharedPreferences/JSON), `ReminderScheduler` (AlarmManager `setAlarmClock`, wirkt auch im Doze-Modus; Fallback `setAndAllowWhileIdle` ohne Exact-Recht), `ReminderReceiver` (Ansage per Broadcast an die Activity + Benachrichtigung als hörbarer Rückfall; tägliche Erinnerungen planen sich selbst neu), `GermanTimeParser` (deutsche Zeitangaben ohne Cloud: „in zwanzig Minuten", „morgen um halb acht", „Viertel nach sieben", „jeden Tag um acht", Zahlwörter, Abend-Marker), `ReminderManager` (Ansagen, Liste, Löschen). Intents `SetReminder`/`SetReminderAt`/`ListReminders`/`ClearReminders`; Claude-Tools `erinnerung_anlegen` (mit ISO-Zeitpunkt) und `erinnerungen_vorlesen` für verstümmelte Eingaben. BootReceiver setzt Alarme nach Neustart neu. Manifest: POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM. Dazu `IDEEN.md` im Repo: Feature-Backlog mit Nutzen/Aufwand und nutzbaren freien Bausteinen (Recherche-Ergebnis).

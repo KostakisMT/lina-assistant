@@ -1,0 +1,53 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Läuft ein neuer Commit auf denselben PR, wird der alte Lauf abgebrochen
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Debug-APK bauen
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # Die sherpa-onnx-AAR ist eine Datei-Dependency und muss vorliegen,
+      # sonst schlägt schon die Konfiguration fehl. Die großen Sprachmodelle
+      # (~400 MB) braucht der Compiler nicht – die bleiben draußen.
+      - name: sherpa-onnx-AAR cachen
+        uses: actions/cache@v4
+        with:
+          path: app/libs
+          key: sherpa-aar-1.13.3
+
+      - name: AAR laden (ohne Sprachmodelle)
+        run: ./scripts/download-models.sh --libs-only
+
+      - name: Bauen
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Android-Lint
+        run: ./gradlew lintDebug --no-daemon
+        continue-on-error: true
+
+      - name: Lint-Bericht sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-bericht
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore

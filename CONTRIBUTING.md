@@ -21,8 +21,22 @@ nicht-kommerzielles Projekt für blinde und sehbehinderte Menschen.
 ## Pull Requests
 
 - Kleine, fokussierte PRs mit klarer Beschreibung
-- `./gradlew assembleDebug` muss durchlaufen
+- `./gradlew assembleDebug` muss durchlaufen – bei jedem PR baut das auch
+  automatisch (GitHub Actions, siehe `.github/workflows/build.yml`)
+- Beim Öffnen eines PRs erscheint eine Checkliste – sie spiegelt die
+  Leitprinzipien (gesprochene Rückmeldung, ohne Sehen bedienbar, keine
+  personenbezogenen Daten)
 - Bei UI-Änderungen: gegen die UI-Richtlinien in CLAUDE.md prüfen
+
+### Nur kompilieren, ohne 400 MB Modelle
+
+Zum Bauen genügt die sherpa-onnx-AAR; die Sprachmodelle braucht erst die
+laufende App:
+
+```bash
+./scripts/download-models.sh --libs-only
+./gradlew assembleDebug
+```
 
 ## Fragen
 

@@ -17,6 +17,18 @@
 
 ---
 
+## [2026-07-20] CI-Build + PR-Template für Contributions
+
+**Was:** GitHub-Actions-Workflow `.github/workflows/build.yml`: baut bei jedem PR und Push auf main das Debug-APK (JDK 17, Gradle-Cache) und läuft zusätzlich Android-Lint (nicht blockierend, Bericht als Artefakt). Damit CI nicht ~400 MB Sprachmodelle laden muss, hat `scripts/download-models.sh` jetzt den Modus `--libs-only`: lädt nur die sherpa-onnx-AAR, die als Datei-Dependency zum Kompilieren zwingend nötig ist. Verifiziert, dass der Build ohne Piper-/Whisper-Assets durchläuft. Dazu `.github/pull_request_template.md` mit Checkliste, die die Leitprinzipien einfordert (gesprochene Rückmeldung, ohne Sehen bedienbar, Interfaces beachtet, Offline-Verhalten, CHANGELOG/ADR, keine personenbezogenen Daten). CONTRIBUTING.md um den schlanken Build-Weg ergänzt.
+
+**Warum:** Das Repo ist öffentlich und soll Beiträge bekommen – ohne CI bleibt ungeprüft, ob ein PR überhaupt baut. Die Checkliste hält die Prinzipien präsent, die bei einer Sprachassistenz für blinde Menschen leicht untergehen.
+
+**Dateien:** .github/workflows/build.yml (neu), .github/pull_request_template.md (neu), scripts/download-models.sh, CONTRIBUTING.md
+
+**Offen:** Keine Tests im Projekt – der Workflow prüft nur Kompilierbarkeit und Lint. Unit-Tests für Parser (GermanTimeParser, LocalCommandResolver, DAISY) wären ein lohnender nächster Schritt.
+
+---
+
 ## [2026-07-20] Dokument-Vorlesen per Kamera + Vision (Meilenstein 3)
 
 **Was:** Lina fotografiert auf Zuruf ein Dokument (Post, Brief, Zeitung, Magazinseite), das im festen Kreppband-Rahmen vor dem stationären Tablet liegt, und liest vor, was wichtig ist. Neue Bausteine: `feature/document/DocumentCamera.kt` (CameraX, Rückkamera, headless ohne Preview, eigener LifecycleOwner – siehe ADR-018 –, Bild auf 2000px/JPEG-Q85 herunterskaliert, EXIF-Rotation korrigiert); `ClaudeConversation.readDocument(bytes, verbatim)` (zustandsloser Vision-Aufruf mit Image+Text-Block, eigener Dokument-System-Prompt, `maxTokens` 1024, keine Tools/History); Intent `ReadDocument` (lokale Regex „lies mir die Post vor", „was steht da" u.a. – nach der SMS-Erkennung eingeordnet, damit „lies meine Nachrichten" weiter SMS trifft) plus Claude-Tool `dokument_vorlesen` für STT-Verhörer; Orchestrierung `readDocumentAloud()` + Dokument-Folgefenster („ja/alles" → ganzer Text, „wiederhole", „nochmal" → neues Foto, sonst stiller Rückzug). CAMERA-Permission + `uses-feature`, CameraX-Deps, CAMERA im Onboarding-Berechtigungssatz. Debug-Befehl „testfoto" speichert ein Bild zum einmaligen Ausrichten des Rahmens.

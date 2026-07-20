@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lina – VoiceFirst Assistant für blinde Menschen</title>
-  <meta name="description" content="Lina ist eine Open-Source-Sprachassistentin für Android, gebaut für blinde und sehbehinderte Menschen. Anrufe, SMS, Nachrichten und Hörbücher – komplett per Sprache, Kernfunktionen offline.">
+  <meta name="description" content="Lina ist eine Open-Source-Sprachassistentin für Android, gebaut für blinde und sehbehinderte Menschen. Anrufe, SMS, Erinnerungen, Post vorlesen, Nachrichten und Hörbücher (auch DAISY) – komplett per Sprache, Kernfunktionen offline.">
   <style>
     :root {
       --bg: #000000;
@@ -90,8 +90,10 @@
     <ul>
       <li><strong>Anrufe:</strong> Kontakte anrufen, eingehende Anrufe annehmen oder ablehnen – nur mit der Stimme.</li>
       <li><strong>Nachrichten schreiben und vorlesen:</strong> SMS senden, empfangene Nachrichten vorlesen lassen, direkt antworten.</li>
+      <li><strong>Erinnerungen und Wecker:</strong> „Erinnere mich morgen um zehn an den Arzt" – auch täglich wiederkehrend, für Medikamente und Termine. Läuft ohne Internet.</li>
+      <li><strong>Post und Briefe vorlesen:</strong> Das Dokument liegt in einem festen Rahmen vor dem Tablet, Lina fotografiert es auf Zuruf und sagt zuerst, worum es geht und von wem – auf Wunsch dann den ganzen Text.</li>
       <li><strong>Zeitung hören:</strong> Nachrichten aus vertrauten Quellen – erst die Zusammenfassung, auf Wunsch der ganze Artikel.</li>
-      <li><strong>Hörbücher:</strong> Eigene Bibliothek und kostenlose Librivox-Hörbücher, mit Schlaf-Timer.</li>
+      <li><strong>Hörbücher:</strong> Eigene Bibliothek, kostenlose LibriVox-Aufnahmen und <strong>DAISY</strong> – das Format der Blindenhörbüchereien. Mit Kapitelnavigation („Kapitel drei") und Schlaf-Timer.</li>
       <li><strong>Einfach reden:</strong> Optional beantwortet Lina freie Fragen und unterhält sich – wie eine gute Bekannte.</li>
     </ul>
 
@@ -99,6 +101,8 @@
     <p class="beispiel">„Hey Lina, ruf Boris an." – „Ich rufe Boris an."</p>
     <p class="beispiel">„Hey Lina, was gibt es Neues?" – „Drei Meldungen. Erstens: …"</p>
     <p class="beispiel">„Hey Lina, spiel mein Hörbuch weiter." – „Weiter geht's bei Kapitel vier."</p>
+    <p class="beispiel">„Hey Lina, lies mir die Post vor." – „Ein Brief von der Krankenkasse. Es geht um deinen Antrag vom März …"</p>
+    <p class="beispiel">„Hey Lina, erinnere mich jeden Tag um acht an die Tabletten." – „Jeden Tag um acht Uhr. Ist notiert."</p>
 
     <h2>Warum noch eine Assistentin?</h2>
     <p>
@@ -109,6 +113,16 @@
       an ihre Bedürfnisse anpassen.
     </p>
 
+    <h2>Hörbücher der Blindenbüchereien</h2>
+    <p>
+      Die Blindenhörbüchereien verleihen zehntausende Hörbücher <strong>kostenlos</strong>
+      an Menschen mit nachgewiesener Seheinschränkung – im Format DAISY. Nur gibt
+      es für Android praktisch keinen gepflegten quelloffenen Player mehr: Die
+      vorhandenen Projekte sind eingestellt oder laufen auf aktuellen
+      Android-Versionen nicht. Lina liest DAISY-Bücher direkt, mit Kapiteln und
+      gemerktem Fortschritt.
+    </p>
+
     <h2>Technik in einem Satz</h2>
     <p>
       Weckwort-Erkennung (OpenWakeWord), Spracherkennung (Whisper) und
@@ -117,12 +131,45 @@
       Apache-2.0-Lizenz.
     </p>
 
+    <h2>Was offline läuft – und was nicht</h2>
+    <p>
+      <strong>Ohne Internet:</strong> Weckwort, Spracherkennung und Sprachausgabe,
+      Anrufe, SMS, Erinnerungen und Wecker, Uhrzeit sowie Hörbücher aus dem
+      eigenen Speicher – DAISY eingeschlossen.
+    </p>
+    <p>
+      <strong>Mit Internet:</strong> Zeitung und Wetter, LibriVox-Streaming, freie
+      Gespräche und das Vorlesen von Post.
+    </p>
+    <p>
+      <strong>Was das Gerät verlässt:</strong> Bei freien Gesprächen geht der
+      gesprochene Text an die Claude-API, beim Vorlesen von Post zusätzlich das
+      Foto des Dokuments. Das Foto wird <strong>nicht gespeichert</strong>, sondern
+      nur währenddessen im Arbeitsspeicher gehalten. Wer keinen API-Schlüssel
+      hinterlegt, hat diese beiden Funktionen nicht – alles andere läuft weiter.
+      Post ist sensibel; das gehört offen gesagt, nicht ins Kleingedruckte.
+    </p>
+
+    <h2>Stand der Entwicklung</h2>
+    <p>
+      Lina wird gerade mit den ersten Testnutzer:innen im Alltag erprobt. Manches
+      ist am echten Gerät noch nicht bestätigt – zuletzt die DAISY-Unterstützung,
+      die bislang nur gegen Testdaten geprüft ist. Eine fertige Installationsdatei
+      gibt es noch nicht; wer mitbauen möchte, findet die Anleitung im Repository.
+      Was als Nächstes ansteht, steht offen in
+      <a href="https://github.com/KostakisMT/lina-assistant/blob/main/TODO.md">TODO.md</a>
+      und <a href="https://github.com/KostakisMT/lina-assistant/blob/main/IDEEN.md">IDEEN.md</a>.
+    </p>
+
     <h2>Mitmachen</h2>
     <p>
       Lina sucht Mitstreiter:innen – Entwickler:innen, Tester:innen und
-      besonders Menschen mit eigener Seheinschränkungs-Erfahrung.
+      besonders Menschen mit eigener Seheinschränkungs-Erfahrung. Welche dieser
+      Funktionen im Alltag wirklich zählen, wissen sie am besten.
       Der gesamte Code, die Dokumentation und die offenen Aufgaben liegen auf
-      <a href="https://github.com/KostakisMT/lina-assistant">GitHub</a>.
+      <a href="https://github.com/KostakisMT/lina-assistant">GitHub</a>; wie man
+      loslegt, steht in
+      <a href="https://github.com/KostakisMT/lina-assistant/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.
     </p>
   </main>
 

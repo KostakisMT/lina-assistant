@@ -10,14 +10,21 @@ data class Audiobook(
     val author: String,
     val uri: String,
     val isLocal: Boolean,
-)
+    /** Leer = Einzeldatei ohne Kapitelstruktur. */
+    val chapters: List<Chapter> = emptyList(),
+    /** Nur bei LibriVox gesetzt – erlaubt das Nachladen der Kapitel. */
+    val rssUrl: String = "",
+) {
+    val hasChapters: Boolean get() = chapters.size > 1
+}
 
 class AudiobookLibrary(private val context: Context) {
 
     private val librivox = LibrivoxRepository()
+    private val daisy = DaisyRepository()
 
     fun listAvailable(): List<Audiobook> {
-        return curatedBooks() + scanLocalFiles()
+        return curatedBooks() + daisyBooks() + scanLocalFiles()
     }
 
     fun findByQuery(query: String): Audiobook? {
@@ -42,10 +49,46 @@ class AudiobookLibrary(private val context: Context) {
         }
     }
 
-    fun resolveLibrivoxStreamUrl(book: LibrivoxBook, callback: (String?) -> Unit) {
-        val chapters = librivox.fetchChapters(book.rssUrl)
-        callback(chapters.firstOrNull()?.url)
+    /**
+     * Holt die vollständige Kapitelliste eines LibriVox-Buchs.
+     *
+     * Früher wurde hier nur `chapters.first().url` zurückgegeben – das Buch
+     * war deshalb nach dem ersten Abschnitt zu Ende, ohne Hinweis an den
+     * Nutzer. Ein LibriVox-Roman besteht aus dutzenden MP3s.
+     */
+    fun resolveLibrivoxChapters(book: LibrivoxBook, callback: (List<Chapter>) -> Unit) {
+        callback(fetchChaptersFromRss(book.rssUrl))
     }
+
+    /** Blockierend – nur aus einem IO-Kontext aufrufen. */
+    fun fetchChaptersFromRss(rssUrl: String): List<Chapter> =
+        librivox.fetchChapters(rssUrl).mapIndexed { i, ch ->
+            Chapter(
+                title = ch.title.ifBlank { "Kapitel ${i + 1}" },
+                uri = ch.url,
+                durationSecs = ch.durationSecs,
+            )
+        }
+
+    /** DAISY-Bücher der Blindenhörbüchereien (Ordner mit ncc.html). */
+    private fun daisyBooks(): List<Audiobook> {
+        return daisy.scan(audioDirs()).map { book ->
+            Audiobook(
+                id = "daisy_${book.directory.name}",
+                title = book.title,
+                author = book.author,
+                uri = book.chapters.first().uri,
+                isLocal = true,
+                chapters = book.chapters,
+            )
+        }
+    }
+
+    private fun audioDirs(): List<File> = listOfNotNull(
+        context.getExternalFilesDir(null)?.let { File(it, "Audiobooks") },
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)?.let { File(it, "Audiobooks") },
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_AUDIOBOOKS),
+    )
 
     private fun curatedBooks(): List<Audiobook> {
         return CURATED_TITLES.mapNotNull { (id, title, author) ->
@@ -59,11 +102,7 @@ class AudiobookLibrary(private val context: Context) {
     }
 
     private fun scanLocalFiles(): List<Audiobook> {
-        val dirs = listOfNotNull(
-            context.getExternalFilesDir(null)?.let { File(it, "Audiobooks") },
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)?.let { File(it, "Audiobooks") },
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_AUDIOBOOKS),
-        )
+        val dirs = audioDirs()
 
         val curatedIds = CURATED_TITLES.map { it.first }.toSet()
         val found = mutableListOf<Audiobook>()

@@ -1138,6 +1138,22 @@ class LauncherActivity : ComponentActivity() {
             audiobookManager?.startSleepTimer(intent.minutes)
             "Schlaf-Timer: ${intent.minutes} Minuten."
         }
+        is ResolvedIntent.NextChapter -> {
+            audiobookManager?.nextChapter()
+            "Nächstes Kapitel…"
+        }
+        is ResolvedIntent.PreviousChapter -> {
+            audiobookManager?.previousChapter()
+            "Vorheriges Kapitel…"
+        }
+        is ResolvedIntent.GoToChapter -> {
+            audiobookManager?.goToChapter(intent.number)
+            "Kapitel ${intent.number}…"
+        }
+        is ResolvedIntent.ListChapters -> {
+            audiobookManager?.listChapters()
+            "Kapitel werden aufgelistet…"
+        }
         is ResolvedIntent.ReadDocument -> {
             readDocumentAloud()
             "" // Ansagen macht readDocumentAloud selbst
@@ -1206,6 +1222,10 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.ListAudiobooks -> "ListAudiobooks"
         is ResolvedIntent.SearchAudiobook -> "SearchAudiobook(${intent.query})"
         is ResolvedIntent.SleepTimer -> "SleepTimer(${intent.minutes}min)"
+        is ResolvedIntent.NextChapter -> "NextChapter"
+        is ResolvedIntent.PreviousChapter -> "PreviousChapter"
+        is ResolvedIntent.GoToChapter -> "GoToChapter(${intent.number})"
+        is ResolvedIntent.ListChapters -> "ListChapters"
         is ResolvedIntent.AcceptCall -> "AcceptCall"
         is ResolvedIntent.RejectCall -> "RejectCall"
         is ResolvedIntent.HangUp -> "HangUp"

@@ -278,8 +278,11 @@ app/src/main/kotlin/dev/lina/
 │   │   ├── NewsSyncWorker.kt        # WorkManager
 │   │   └── NewsReader.kt            # TTS-Steuerung
 │   ├── audiobook/
-│   │   ├── AudiobookPlayer.kt       # ExoPlayer Wrapper
-│   │   └── PlaybackStateStore.kt    # Fortschritt persistent
+│   │   ├── AudiobookPlayer.kt       # ExoPlayer Wrapper (Kapitel-Playlist)
+│   │   ├── Chapter.kt               # Kapitel-Modell (opt. Zeitbereich)
+│   │   ├── DaisyParser.kt           # DAISY 2.02: ncc.html + SMIL
+│   │   ├── DaisyRepository.kt       # Buchordner erkennen und auflösen
+│   │   └── PlaybackStateStore.kt    # Fortschritt persistent (inkl. Kapitel)
 │   ├── document/
 │   │   └── DocumentCamera.kt        # CameraX Rückkamera, eigener Lifecycle
 │   └── onboarding/
@@ -334,6 +337,14 @@ app/src/main/kotlin/dev/lina/
 | "Pause" / "Weiter" | Wiedergabe steuern |
 | "30 Sekunden zurück" | Zurückspulen |
 | "Was höre ich gerade?" | Titel und Kapitel ansagen |
+| "Nächstes Kapitel" / "Ein Kapitel zurück" | Kapitel wechseln |
+| "Kapitel drei" | Zu Kapitel springen (Zahl oder Zahlwort) |
+| "Welche Kapitel gibt es?" | Kapitel auflisten (max. 10, dann Hinweis) |
+
+**Formate:** lokale MP3/M4B, LibriVox-Streaming und **DAISY 2.02** – das Format
+der Blindenhörbüchereien (Buchordner mit `ncc.html`, ADR-019). Kapitel sind
+durchgängiges Konzept: der Player spielt immer eine Playlist, nie eine
+Einzeldatei.
 
 ### Dokument-Vorlesen (Priorität 5, ADR-018)
 Dokument liegt im festen Rahmen vor dem Tablet (Rückkamera).
@@ -425,6 +436,12 @@ und der nebenbei das Gerät bedient und im Alltag unterstützt.
 ---
 
 ## Docs-Regeln für Claude Code
+
+**Tests:** Reine JVM-Tests liegen in `app/src/test/` und laufen mit
+`./gradlew testDebugUnitTest` – die CI führt sie bei jedem PR aus. Parser und
+Intent-Erkennung gehören dorthin: Sie entscheiden, was Lina tut, und die
+Muster-Reihenfolge im `LocalCommandResolver` ist regressionsanfällig. Alles,
+was `Context` braucht, bleibt vorerst ungetestet (kein Robolectric im Projekt).
 
 **Nach JEDER abgeschlossenen Task:**
 1. `docs/CHANGELOG.md` → Was wurde gebaut/geändert?

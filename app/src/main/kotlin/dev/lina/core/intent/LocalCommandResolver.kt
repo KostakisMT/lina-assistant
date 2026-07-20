@@ -1,5 +1,7 @@
 package dev.lina.core.intent
 
+import dev.lina.core.text.GermanNumbers
+
 class LocalCommandResolver : IntentResolver {
 
     override fun resolve(input: String): ResolvedIntent? {
@@ -60,11 +62,10 @@ class LocalCommandResolver : IntentResolver {
 
     private fun resolveCall(input: String): ResolvedIntent? {
         val patterns = listOf(
-            Regex("""(?:ruf|rufe)\s+(.+?)\s+an"""),
-            Regex("""(?:anrufen|anruf)\s+(.+)"""),
-            Regex("""ruf\s+(?:mal\s+)?(.+?)\s+an"""),
+            // Füllwörter dürfen nicht im Namen landen ("ruf mal Boris an")
+            Regex("""(?:ruf|rufe)\s+(?:${FUELLWOERTER}\s+)*(.+?)\s+an"""),
+            Regex("""(?:anrufen|anruf)\s+(?:${FUELLWOERTER}\s+)*(.+)"""),
             Regex("""kannst du (?:bitte )?(.+?) anrufen"""),
-            Regex("""bitte (?:ruf|rufe)\s+(.+?)\s+an"""),
         )
         for (pattern in patterns) {
             pattern.find(input)?.let { match ->
@@ -117,12 +118,17 @@ class LocalCommandResolver : IntentResolver {
             ResolvedIntent.ReadNews
         input.matches(Regex(""".*(?:mehr dazu|ausführlich|ganzer artikel|vollständig|detail).*""")) ->
             ResolvedIntent.NewsDetail
-        input.matches(Regex(""".*(?:nächste|weiter|nächste meldung|skip).*""")) ->
+        // "nächstes Kapitel" gehört zum Hörbuch, nicht zu den Meldungen
+        input.matches(Regex(""".*(?:nächste|weiter|nächste meldung|skip).*""")) &&
+            !input.contains("kapitel") ->
             ResolvedIntent.NextNews
         else -> null
     }
 
     private fun resolveAudiobook(input: String): ResolvedIntent? = when {
+        // Kapitelbefehle zuerst: "weiter" und "zurück" unten würden sonst
+        // "ein Kapitel weiter" als Fortsetzen bzw. Zurückspulen abfangen.
+        input.contains("kapitel") -> resolveChapter(input)
         input.matches(Regex(""".*(?:spiel|starte?).*(?:hörbuch|buch|vorlesen).*""")) ->
             ResolvedIntent.PlayAudiobook
         input.matches(Regex(""".*(?:pause|anhalten|halt an).*""")) ->
@@ -139,6 +145,33 @@ class LocalCommandResolver : IntentResolver {
         input.matches(Regex(""".*(?:welche hörbücher|meine hörbücher|hörbuch(?:liste|er)|bibliothek).*""")) ->
             ResolvedIntent.ListAudiobooks
         else -> resolveSleepTimer(input) ?: resolveAudiobookSearch(input)
+    }
+
+    /**
+     * Kapitelnavigation in DAISY- und LibriVox-Büchern. Wird nur betreten,
+     * wenn "kapitel" im Satz steht.
+     */
+    private fun resolveChapter(input: String): ResolvedIntent? = when {
+        input.matches(Regex(""".*(?:welche|wie viele|liste|übersicht|alle)\s*.*kapitel.*""")) ||
+            input.matches(Regex(""".*kapitel(?:liste|übersicht).*""")) ->
+            ResolvedIntent.ListChapters
+
+        input.matches(Regex(""".*(?:nächste|nächstes|weiter|vorwärts|überspring\w*).*kapitel.*""")) ||
+            input.matches(Regex(""".*kapitel\s+(?:weiter|vor|vorwärts).*""")) ->
+            ResolvedIntent.NextChapter
+
+        input.matches(Regex(""".*(?:vorherige?s|vorige?s|letztes|davor).*kapitel.*""")) ||
+            input.matches(Regex(""".*kapitel\s+zurück.*""")) ->
+            ResolvedIntent.PreviousChapter
+
+        else -> {
+            // "Kapitel 7", "spring zu Kapitel drei"
+            Regex("""kapitel\s+(\d+|${GermanNumbers.ALTERNATION})\b""").find(input)
+                ?.let { match ->
+                    GermanNumbers.parse(match.groupValues[1])
+                        ?.let { ResolvedIntent.GoToChapter(it.toInt()) }
+                }
+        }
     }
 
     private fun resolveSleepTimer(input: String): ResolvedIntent? {
@@ -181,5 +214,10 @@ class LocalCommandResolver : IntentResolver {
         input.matches(Regex(""".*(?:stopp|stop|sei still|ruhe|halt|aufhören|still).*""")) ->
             ResolvedIntent.Stop
         else -> null
+    }
+
+    private companion object {
+        /** Höflichkeits- und Füllwörter, die vor einem Kontaktnamen stehen können. */
+        const val FUELLWOERTER = "mal|bitte|doch|kurz|schnell|jetzt"
     }
 }

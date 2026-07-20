@@ -15,6 +15,11 @@ sealed class ResolvedIntent {
     data object AudiobookInfo : ResolvedIntent()
     data object ListAudiobooks : ResolvedIntent()
     data class SearchAudiobook(val query: String) : ResolvedIntent()
+    data object NextChapter : ResolvedIntent()
+    data object PreviousChapter : ResolvedIntent()
+    /** 1-basiert, wie gesprochen ("Kapitel drei"). */
+    data class GoToChapter(val number: Int) : ResolvedIntent()
+    data object ListChapters : ResolvedIntent()
     data class SleepTimer(val minutes: Int) : ResolvedIntent()
     data object AcceptCall : ResolvedIntent()
     data object RejectCall : ResolvedIntent()

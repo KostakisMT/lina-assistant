@@ -6,6 +6,7 @@ class LocalCommandResolver : IntentResolver {
         val normalized = input.trim().lowercase()
 
         return resolveTime(normalized)
+            ?: resolveReminder(normalized)
             ?: resolveCall(normalized)
             ?: resolveSms(normalized)
             ?: resolveDocument(normalized)
@@ -31,6 +32,23 @@ class LocalCommandResolver : IntentResolver {
             ResolvedIntent.ReadDocument
         input.matches(Regex(""".*lies (?:mir )?(?:das|es) (?:mal )?vor.*""")) ->
             ResolvedIntent.ReadDocument
+        else -> null
+    }
+
+    /**
+     * Erinnerungen. Steht vor resolveCall, weil "erinnere mich ... an Boris"
+     * sonst als Anruf-Muster missverstanden werden könnte.
+     */
+    private fun resolveReminder(input: String): ResolvedIntent? = when {
+        input.matches(Regex(""".*(?:lösche|loesche|entferne).*(?:erinnerung|termine?).*""")) ->
+            ResolvedIntent.ClearReminders
+        input.matches(
+            Regex(""".*(?:welche|meine|alle)\s+(?:erinnerungen|termine).*""")
+        ) || input.matches(Regex(""".*woran.*erinner.*""")) ->
+            ResolvedIntent.ListReminders
+        input.matches(Regex("""^(?:bitte\s+)?erinner\w*\s+mich\b.*""")) ||
+            input.matches(Regex(""".*(?:stell|setz)\w*\s+(?:mir\s+)?(?:einen?\s+)?(?:wecker|erinnerung|timer)\b.*""")) ->
+            ResolvedIntent.SetReminder(input)
         else -> null
     }
 

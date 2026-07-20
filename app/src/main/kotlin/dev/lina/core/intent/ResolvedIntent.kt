@@ -20,6 +20,15 @@ sealed class ResolvedIntent {
     data object RejectCall : ResolvedIntent()
     data object HangUp : ResolvedIntent()
     data object ReadDocument : ResolvedIntent()
+    data class SetReminder(val rawInput: String) : ResolvedIntent()
+    /** Von Claude aufgelöste Erinnerung (ISO-Zeitpunkt statt Rohtext). */
+    data class SetReminderAt(
+        val text: String,
+        val isoZeit: String,
+        val daily: Boolean,
+    ) : ResolvedIntent()
+    data object ListReminders : ResolvedIntent()
+    data object ClearReminders : ResolvedIntent()
     data object Time : ResolvedIntent()
     data object Stop : ResolvedIntent()
     data class Unknown(val rawInput: String) : ResolvedIntent()

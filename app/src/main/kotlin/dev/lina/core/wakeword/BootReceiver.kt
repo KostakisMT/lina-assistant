@@ -9,6 +9,8 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             WakeWordService.start(context)
+            // Alarme überleben den Neustart nicht – neu setzen
+            dev.lina.feature.reminder.ReminderScheduler.rescheduleAll(context)
         }
     }
 }

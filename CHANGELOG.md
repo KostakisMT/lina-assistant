@@ -17,6 +17,20 @@
 
 ---
 
+## [2026-07-20] Erinnerungen & Wecker (offline) + IDEEN.md
+
+**Was:** Neues Feature `feature/reminder/` – gesprochene Erinnerungen, komplett offline: `Reminder` (Datenmodell + gesprochene Zeitangabe „morgen um 7 Uhr 30"), `ReminderStore` (SharedPreferences/JSON), `ReminderScheduler` (AlarmManager `setAlarmClock`, wirkt auch im Doze-Modus; Fallback `setAndAllowWhileIdle` ohne Exact-Recht), `ReminderReceiver` (Ansage per Broadcast an die Activity + Benachrichtigung als hörbarer Rückfall; tägliche Erinnerungen planen sich selbst neu), `GermanTimeParser` (deutsche Zeitangaben ohne Cloud: „in zwanzig Minuten", „morgen um halb acht", „Viertel nach sieben", „jeden Tag um acht", Zahlwörter, Abend-Marker), `ReminderManager` (Ansagen, Liste, Löschen). Intents `SetReminder`/`SetReminderAt`/`ListReminders`/`ClearReminders`; Claude-Tools `erinnerung_anlegen` (mit ISO-Zeitpunkt) und `erinnerungen_vorlesen` für verstümmelte Eingaben. BootReceiver setzt Alarme nach Neustart neu. Manifest: POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM. Dazu `IDEEN.md` im Repo: Feature-Backlog mit Nutzen/Aufwand und nutzbaren freien Bausteinen (Recherche-Ergebnis).
+
+**Warum:** Nutzerwunsch; bei älteren Nutzer:innen erfahrungsgemäß eines der meistgenutzten Features (Termine, Medikamente). Offline-Umsetzung wahrt das Leitprinzip „Offline where possible".
+
+**Dateien:** feature/reminder/*.kt (5 neu), ResolvedIntent.kt, LocalCommandResolver.kt, ClaudeConversation.kt, LauncherActivity.kt, BootReceiver.kt, AndroidManifest.xml, IDEEN.md (neu)
+
+**Verifiziert:** Auf dem Gerät – „in zwei Minuten" → korrekt geplant und **pünktlich ausgelöst** (Ansage durch Lina); „morgen um halb acht" → 7:30; „jeden Tag um acht" → täglich.
+
+**Offen:** Neustart-Rescheduling am Gerät prüfen. Einzelne Erinnerung per Sprache löschen (aktuell nur alle). Exact-Alarm-Recht auf dem Zielgerät kontrollieren.
+
+---
+
 ## [2026-07-20] CI-Build + PR-Template für Contributions
 
 **Was:** GitHub-Actions-Workflow `.github/workflows/build.yml`: baut bei jedem PR und Push auf main das Debug-APK (JDK 17, Gradle-Cache) und läuft zusätzlich Android-Lint (nicht blockierend, Bericht als Artefakt). Damit CI nicht ~400 MB Sprachmodelle laden muss, hat `scripts/download-models.sh` jetzt den Modus `--libs-only`: lädt nur die sherpa-onnx-AAR, die als Datei-Dependency zum Kompilieren zwingend nötig ist. Verifiziert, dass der Build ohne Piper-/Whisper-Assets durchläuft. Dazu `.github/pull_request_template.md` mit Checkliste, die die Leitprinzipien einfordert (gesprochene Rückmeldung, ohne Sehen bedienbar, Interfaces beachtet, Offline-Verhalten, CHANGELOG/ADR, keine personenbezogenen Daten). CONTRIBUTING.md um den schlanken Build-Weg ergänzt.
@@ -26,6 +40,7 @@
 **Dateien:** .github/workflows/build.yml (neu), .github/pull_request_template.md (neu), scripts/download-models.sh, CONTRIBUTING.md
 
 **Offen:** Keine Tests im Projekt – der Workflow prüft nur Kompilierbarkeit und Lint. Unit-Tests für Parser (GermanTimeParser, LocalCommandResolver, DAISY) wären ein lohnender nächster Schritt.
+
 
 ---
 

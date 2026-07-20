@@ -111,6 +111,25 @@
 - [x] Librivox-Integration (Suche + Streaming, kein Login)
 - [x] Schlaf-Timer mit Lautstärke-Fade-Out (30s)
 - [x] Sprachbefehle: "Spiel Hörbuch ab", "Pause", "Weiter", "30 Sekunden zurück", "Was höre ich?", "Welche Hörbücher habe ich?", "Suche Brecht", "Stopp in 30 Minuten"
+- [x] Kapitel-Infrastruktur: Playlist statt Einzeldatei, Kapitelansage, Fortschritt je Kapitel (2026-07-20)
+- [x] **Bugfix:** LibriVox endete nach dem ersten Abschnitt (nur `chapters.first()` wurde gespielt) – 2026-07-20
+- [x] DAISY 2.02 lesen: `ncc.html` + SMIL + Zeitbereiche (2026-07-20, ADR-019)
+- [x] Kapitel-Sprachbefehle: "nächstes Kapitel", "ein Kapitel zurück", "Kapitel drei", "welche Kapitel gibt es" (2026-07-20)
+- [ ] Echtes DAISY-Buch der Hörbücherei am Tablet durchspielen (Struktur variiert je Produktionsstelle)
+- [ ] LibriVox-Mehrkapitel-Wiedergabe am Tablet gegenprüfen (Streaming über Kapitelgrenze)
+- [ ] Onboarding: Wie kommen DAISY-Bücher aufs Tablet? (CD-Import / Ausleihe der Hörbücherei)
+
+---
+
+## ✅ Qualitätssicherung – Tests
+
+- [x] Test-Sourceset + JUnit im Build, CI läuft `testDebugUnitTest` (2026-07-20)
+- [x] `GermanTimeParserTest` – Zeitangaben, Wiederholungen, Sachtext (2026-07-20)
+- [x] `LocalCommandResolverTest` – Intents und ihre Abgrenzungen untereinander (2026-07-20)
+- [x] `DaisyParserTest` – ncc.html, SMIL, Clock-Values, Sanitizing (2026-07-20)
+- [ ] `FuzzyContactMatcher` testen (Arundhati, Eßfeld – spracherkennungs-kritisch)
+- [ ] `RssFeedRepository` gegen gespeicherte Feed-Beispiele testen
+- [ ] Mehrdeutigkeit "weiter" (Meldung vs. Hörbuch) kontextabhängig auflösen
 
 ---
 

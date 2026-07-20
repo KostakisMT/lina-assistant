@@ -31,6 +31,40 @@
 
 ---
 
+## [2026-07-20] DAISY-Hörbücher + Kapitel-Infrastruktur (repariert LibriVox)
+
+**Was:** Kapitel als eigenes Konzept im Hörbuch-Feature. Neu: `Chapter` (Titel, URI, optionaler Zeitbereich), `DaisyParser` (DAISY 2.02: `ncc.html` mit Metadaten und Überschriften in Dokumentreihenfolge, SMIL mit `clip-begin`/`clip-end` in allen gängigen Schreibweisen, XHTML-Sanitizing für DOCTYPE und benannte Entities), `DaisyRepository` (erkennt Buchordner an `ncc.html`, löst Kapitel → Audiodatei + Zeitbereich auf, tolerant gegenüber Groß-/Kleinschreibung wie auf gebrannten CDs). `AudiobookPlayer` spielt jetzt eine Kapitel-Playlist statt einer Einzeldatei (`MediaItem.ClippingConfiguration`, wenn sich mehrere DAISY-Kapitel eine MP3 teilen) und meldet Kapitelwechsel. `AudiobookManager` sagt Kapitel an, `PlaybackState` merkt sich Kapitelindex und LibriVox-Feed. Neue Intents `NextChapter`/`PreviousChapter`/`GoToChapter`/`ListChapters` samt Sprachbefehlen („nächstes Kapitel", „ein Kapitel zurück", „Kapitel drei", „welche Kapitel gibt es"). Zahlwörter liegen jetzt gemeinsam in `core/text/GermanNumbers.kt`.
+
+**Warum:** DAISY ist das Format der Blindenhörbüchereien (Norddeutsche Hörbücherei ~50.000 Titel, WBH Münster) und laut IDEEN.md die Lücke mit dem höchsten Nutzen – aktive quelloffene Android-Player gibt es praktisch nicht. Ein Hörbuch ohne Kapitelnavigation ist für einen blinden Nutzer außerdem kaum bedienbar: ohne Sprung bleibt nur Spulen.
+
+**Behobene Fehler:**
+- **LibriVox brach nach dem ersten Abschnitt ab:** `resolveLibrivoxStreamUrl` gab nur `chapters.first().url` zurück, der Player kannte nur eine Datei. Ein Roman mit 30 MP3s endete kommentarlos nach Kapitel 1. Jetzt wird die volle Kapitelliste gespielt; nach einem Neustart wird sie über den gespeicherten RSS-Feed neu geholt.
+- **„ruf mal Boris an" ergab den Kontakt „mal boris"** – Füllwörter landeten im Namen (von den neuen Tests gefunden).
+- **`sachtext` nahm die Zeitangabe mit:** „erinnere mich an den Arzt um zehn" wurde zu „an den Arzt um zehn". Spezifisches Muster läuft jetzt vor dem allgemeinen.
+- **„nächstes Kapitel" landete bei den Nachrichten** (`NextNews` greift auf „nächste"). Kapitelbefehle werden vorrangig behandelt.
+
+**Dateien:** feature/audiobook/{Chapter,DaisyParser,DaisyRepository}.kt (neu), AudiobookPlayer.kt, AudiobookLibrary.kt, AudiobookManager.kt, PlaybackStateStore.kt, core/text/GermanNumbers.kt (neu), ResolvedIntent.kt, LocalCommandResolver.kt, GermanTimeParser.kt, LauncherActivity.kt
+
+**Verifiziert:** `assembleDebug` und `testDebugUnitTest` grün (58 Tests). DAISY-Parsing über Testfixtures abgedeckt.
+
+**Offen:** Noch nicht mit einem echten DAISY-Buch der Hörbücherei am Gerät getestet – Struktur variiert je Produktionsstelle. LibriVox-Mehrkapitel-Wiedergabe am Tablet gegenprüfen. Mitgliedschaft/Ausleihe der Hörbücherei ist nicht Teil dieser Änderung (Bücher müssen manuell in den Audiobooks-Ordner). DAISY 3 / EPUB3-Audio nicht unterstützt.
+
+---
+
+## [2026-07-20] Unit-Tests für Parser + Intent-Erkennung, CI prüft sie
+
+**Was:** Test-Sourceset `app/src/test/` mit JUnit 4. `GermanTimeParserTest` (relative Zeiten, „halb acht", „Viertel vor/nach", Abend-Marker, vergangene Uhrzeit → morgen, tägliche Erinnerungen, Sachtext-Extraktion, Nicht-Treffer), `LocalCommandResolverTest` (Anrufe, SMS, Dokument, Nachrichten, Hörbuch, Kapitel, Erinnerungen, Stopp – Schwerpunkt auf den **Abgrenzungen** zwischen Mustern, die sich Wörter teilen: „lies meine Nachrichten" vs. Dokument, „nächstes Kapitel" vs. Meldung, „ein Kapitel zurück" vs. Zurückspulen), `DaisyParserTest` (ncc/SMIL/Clock-Values/Sanitizing). CI-Workflow läuft `testDebugUnitTest` und sichert den Bericht als Artefakt.
+
+**Warum:** Die Intent-Erkennung ist eine Kette von Regex-Mustern, in der die Reihenfolge entscheidet – solche Regressionen fallen ohne Test erst beim blinden Nutzer auf, der dann eine falsche Aktion ausgelöst bekommt. Der offene Punkt aus dem CI-Eintrag ist damit erledigt.
+
+**Dateien:** app/src/test/kotlin/... (3 neu), app/build.gradle.kts, .github/workflows/build.yml
+
+**Verifiziert:** 58 Tests, alle grün. Drei echte Fehler gefunden (siehe DAISY-Eintrag).
+
+**Offen:** Keine Tests für `AudiobookManager`/`ReminderScheduler` – die brauchen Robolectric oder Instrumentierung. Der Befehl „weiter" ist zwischen `NextNews` und `ResumeAudiobook` mehrdeutig und wird derzeit als Meldungs-Weiterschaltung aufgelöst; bewusst nicht per Test festgeschrieben, weil das kontextabhängig entschieden werden sollte.
+
+---
+
 ## [2026-07-20] Erinnerungen & Wecker (offline) + IDEEN.md
 
 **Was:** Neues Feature `feature/reminder/` – gesprochene Erinnerungen, komplett offline: `Reminder` (Datenmodell + gesprochene Zeitangabe „morgen um 7 Uhr 30"), `ReminderStore` (SharedPreferences/JSON), `ReminderScheduler` (AlarmManager `setAlarmClock`, wirkt auch im Doze-Modus; Fallback `setAndAllowWhileIdle` ohne Exact-Recht), `ReminderReceiver` (Ansage per Broadcast an die Activity + Benachrichtigung als hörbarer Rückfall; tägliche Erinnerungen planen sich selbst neu), `GermanTimeParser` (deutsche Zeitangaben ohne Cloud: „in zwanzig Minuten", „morgen um halb acht", „Viertel nach sieben", „jeden Tag um acht", Zahlwörter, Abend-Marker), `ReminderManager` (Ansagen, Liste, Löschen). Intents `SetReminder`/`SetReminderAt`/`ListReminders`/`ClearReminders`; Claude-Tools `erinnerung_anlegen` (mit ISO-Zeitpunkt) und `erinnerungen_vorlesen` für verstümmelte Eingaben. BootReceiver setzt Alarme nach Neustart neu. Manifest: POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM. Dazu `IDEEN.md` im Repo: Feature-Backlog mit Nutzen/Aufwand und nutzbaren freien Bausteinen (Recherche-Ergebnis).

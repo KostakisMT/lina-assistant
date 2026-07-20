@@ -1,5 +1,6 @@
 package dev.lina.feature.reminder
 
+import dev.lina.core.text.GermanNumbers
 import java.util.Calendar
 
 /**
@@ -103,34 +104,25 @@ object GermanTimeParser {
      * → "an den Arzt". Fällt auf einen neutralen Text zurück.
      */
     private fun sachtext(s: String): String {
-        Regex("""\b(an\s+.+|dass\s+.+|zu\s+.+)$""").find(s)?.let { m ->
-            val t = m.groupValues[1].trim().trim('.', '!', '?')
-            if (t.length > 2) return t
-        }
-        // "erinnere mich an X um Y" – Sachteil steht vor der Zeitangabe
+        // "erinnere mich an X um Y" zuerst – der Sachteil steht hier VOR der
+        // Zeitangabe. Das allgemeine Muster unten würde die Zeit mitnehmen
+        // ("an den Arzt um zehn").
         Regex("""erinner\w*\s+mich\s+(?:bitte\s+)?an\s+(.+?)(?:\s+(?:um|in|morgen|heute|jeden)\b.*)?$""")
             .find(s)?.let { m ->
                 val t = m.groupValues[1].trim().trim('.', '!', '?')
                 if (t.length > 2) return "an $t"
             }
+        // Sonst: Sachteil am Satzende ("... morgen um zehn an den Arzt")
+        Regex("""\b(an\s+.+|dass\s+.+|zu\s+.+)$""").find(s)?.let { m ->
+            val t = m.groupValues[1].trim().trim('.', '!', '?')
+            if (t.length > 2) return t
+        }
         return "deine Erinnerung"
     }
 
-    private fun zahl(w: String): Long? {
-        w.toLongOrNull()?.let { return it }
-        return ZAHLWORTE[w.trim()]
-    }
+    private fun zahl(w: String): Long? = GermanNumbers.parse(w)
 
-    private val ZAHLWORTE = mapOf(
-        "eins" to 1L, "eine" to 1L, "einer" to 1L, "ein" to 1L, "zwei" to 2L,
-        "drei" to 3L, "vier" to 4L, "fünf" to 5L, "sechs" to 6L, "sieben" to 7L,
-        "acht" to 8L, "neun" to 9L, "zehn" to 10L, "elf" to 11L, "zwölf" to 12L,
-        "dreizehn" to 13L, "vierzehn" to 14L, "fünfzehn" to 15L, "sechzehn" to 16L,
-        "siebzehn" to 17L, "achtzehn" to 18L, "neunzehn" to 19L, "zwanzig" to 20L,
-        "dreißig" to 30L, "vierzig" to 40L, "fünfzig" to 50L, "sechzig" to 60L,
-    )
-
-    private val ZAHLWORT_ALTERNATIVEN = ZAHLWORTE.keys.joinToString("|")
+    private val ZAHLWORT_ALTERNATIVEN = GermanNumbers.ALTERNATION
 
     private val DAILY_MARKERS = listOf(
         "jeden tag", "täglich", "taeglich", "jeden morgen", "jeden abend", "immer um",

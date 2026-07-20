@@ -191,3 +191,22 @@
 - Ohne Internet gibt es kein Dokument-Vorlesen (alle Offline-Kernbefehle laufen weiter). On-Device-OCR bleibt als möglicher Offline-Pfad im Backlog.
 - CameraX bekommt einen **eigenen LifecycleOwner** statt dem der Activity: Das Tablet steht stationär mit meist ausgeschaltetem Bildschirm; eine gestoppte Activity würde die Kamera sofort abkoppeln ("Camera is closed").
 - Kosten: ein Vision-Aufruf pro Dokument (Bild auf 2000px lange Kante herunterskaliert, JPEG-Q85 ≈ 500 kB).
+
+---
+
+## ADR-019: DAISY 2.02 selbst parsen, Kapitel als Kernkonzept
+**Datum:** 2026-07-20 | **Status:** Akzeptiert
+
+**Kontext:** Die Blindenhörbüchereien (Norddeutsche Hörbücherei ~50.000 Titel, WBH Münster) verleihen kostenlos an nachweislich sehbehinderte Menschen – im Format DAISY 2.02. Aktive quelloffene DAISY-Player für Android existieren praktisch nicht; die vorhandenen Projekte sind eingestellt oder laufen nicht auf aktuellen Android-Versionen. Damit ist der größte frei verfügbare Hörbuchbestand für den Nutzer bisher unerreichbar. Optionen: (a) fremde DAISY-Bibliothek einbinden – keine gepflegte für Android verfügbar; (b) DAISY 2.02 selbst lesen – der Standard ist offen und schlank: `ncc.html` (XHTML mit Metadaten und Kapiteln als Überschriften) plus SMIL-Dateien, die Kapitel auf Audiodatei und Zeitbereich abbilden.
+
+Unabhängig davon fehlte dem Hörbuch-Feature das Konzept „Kapitel" ganz: `AudiobookPlayer` kannte nur eine einzelne Datei. Das war auch der Grund, warum LibriVox-Bücher nach dem ersten Abschnitt kommentarlos endeten.
+
+**Entscheidung:** DAISY 2.02 wird selbst geparst (`DaisyParser`, `DaisyRepository`), und Kapitel werden als eigenes Modell (`Chapter`) im gesamten Hörbuch-Feature verankert – der Player spielt grundsätzlich eine Kapitel-Playlist. Bewusst nur JDK-XML (`DocumentBuilder`) statt Androids `XmlPullParser`, damit der Parser in reinen JVM-Unit-Tests ohne Gerät läuft. DAISY 3 / EPUB3-Audio bleibt vorerst außen vor.
+
+**Konsequenzen:**
+- Ein Format-Parser mehr in eigener Verantwortung. Fremde Produktionsstellen weichen in Schreibweisen ab, deshalb: `clip-begin` **und** `clipBegin`, Clock-Values in allen SMIL-Varianten, Dateinamen ohne Rücksicht auf Groß-/Kleinschreibung (gebrannte CDs), DOCTYPE und benannte Entities werden vor dem Parsen entschärft. Alles über Testfixtures abgedeckt.
+- Externe Entities sind abgeschaltet: Das Tablet ist zeitweise offline (die DTD wäre nicht ladbar), und ein Buch aus fremder Quelle darf keinen Netzabruf auslösen (XXE).
+- Mehrere DAISY-Kapitel teilen sich oft eine MP3. Der Player nutzt dafür `MediaItem.ClippingConfiguration` – die Kapitelgrenze ist damit Sache von ExoPlayer, nicht eigener Zeitlogik.
+- Kapitelwechsel werden **angesagt**. Ohne Bild ist ein Kapitelsprung sonst nicht wahrnehmbar; das gilt auch beim automatischen Weiterlaufen.
+- Für gestreamte Bücher wird die Kapitelliste nicht persistiert, sondern der RSS-Feed – nach einem Neustart wird sie neu geholt. Sonst wäre der LibriVox-Fehler über den Neustart hinweg zurück.
+- Die Mitgliedschaft bei einer Hörbücherei setzt einen Sehbehinderungsnachweis voraus und wird von Lina nicht abgebildet: Bücher landen manuell im Audiobooks-Ordner. Ein Ausleih-Onboarding bleibt offen.

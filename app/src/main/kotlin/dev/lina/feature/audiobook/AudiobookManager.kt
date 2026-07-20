@@ -22,28 +22,142 @@ class AudiobookManager(
 
     private var currentBook: Audiobook? = null
 
-    fun play() {
-        val savedState = stateStore.load()
-        if (savedState != null) {
-            val book = library.findByQuery(savedState.title)
-                ?: Audiobook(savedState.bookId, savedState.title, savedState.author, savedState.uri, true)
-            playBook(book, savedState.positionMs)
-            return
-        }
-
-        listBooks()
-    }
-
-    fun playBook(book: Audiobook, startPositionMs: Long = 0L) {
-        currentBook = book
-        ttsEngine.speak("${book.title} von ${book.author}.", TtsPriority.HIGH)
-
+    init {
         player.setOnPositionUpdate { positionMs, durationMs ->
             saveProgress(positionMs, durationMs)
         }
-        player.play(book.uri, startPositionMs)
+        // Beim automatischen Weiterlaufen ansagen, wo wir sind – ohne Bild
+        // ist der Kapitelwechsel sonst nicht wahrnehmbar.
+        player.setOnChapterChanged { index ->
+            val chapter = currentBook?.chapters?.getOrNull(index) ?: return@setOnChapterChanged
+            ttsEngine.speak(chapter.title, TtsPriority.NORMAL)
+            saveProgress(0L, player.durationMs)
+        }
+    }
 
+    fun play() {
+        val savedState = stateStore.load() ?: run { listBooks(); return }
+
+        val local = library.findByQuery(savedState.title)
+        if (local != null) {
+            playBook(local, savedState.positionMs, savedState.chapterIndex)
+            return
+        }
+
+        // Gestreamtes Buch: Kapitelliste ist nicht gespeichert, also neu holen
+        if (savedState.rssUrl.isNotBlank()) {
+            ttsEngine.speak("Ich setze ${savedState.title} fort.", TtsPriority.HIGH)
+            CoroutineScope(Dispatchers.IO).launch {
+                val chapters = library.fetchChaptersFromRss(savedState.rssUrl)
+                CoroutineScope(Dispatchers.Main).launch {
+                    val book = Audiobook(
+                        id = savedState.bookId,
+                        title = savedState.title,
+                        author = savedState.author,
+                        uri = chapters.firstOrNull()?.uri ?: savedState.uri,
+                        isLocal = false,
+                        chapters = chapters,
+                        rssUrl = savedState.rssUrl,
+                    )
+                    playBook(book, savedState.positionMs, savedState.chapterIndex)
+                }
+            }
+            return
+        }
+
+        playBook(
+            Audiobook(savedState.bookId, savedState.title, savedState.author, savedState.uri, true),
+            savedState.positionMs,
+        )
+    }
+
+    fun playBook(book: Audiobook, startPositionMs: Long = 0L, startChapter: Int = 0) {
+        currentBook = book
+
+        if (book.chapters.isNotEmpty()) {
+            val index = startChapter.coerceIn(0, book.chapters.lastIndex)
+            val chapter = book.chapters[index]
+            val intro = if (book.hasChapters) {
+                "${book.title} von ${book.author}. ${book.chapters.size} Kapitel. ${chapter.title}."
+            } else {
+                "${book.title} von ${book.author}."
+            }
+            ttsEngine.speak(intro, TtsPriority.HIGH)
+            player.playChapters(book.chapters, index, startPositionMs)
+            saveProgress(startPositionMs, 0L)
+            return
+        }
+
+        ttsEngine.speak("${book.title} von ${book.author}.", TtsPriority.HIGH)
+        player.play(book.uri, startPositionMs)
         saveProgress(startPositionMs, 0L)
+    }
+
+    // ------------------------------------------------------------- Kapitel
+
+    fun nextChapter() {
+        if (!requireChapters()) return
+        if (player.nextChapter()) {
+            saveProgress(0L, player.durationMs)
+        } else {
+            ttsEngine.speak("Das war das letzte Kapitel.", TtsPriority.HIGH)
+        }
+    }
+
+    fun previousChapter() {
+        if (!requireChapters()) return
+        if (player.previousChapter()) {
+            saveProgress(0L, player.durationMs)
+        } else {
+            ttsEngine.speak("Du bist im ersten Kapitel.", TtsPriority.HIGH)
+        }
+    }
+
+    /** @param number 1-basiert, wie gesprochen ("Kapitel drei"). */
+    fun goToChapter(number: Int) {
+        if (!requireChapters()) return
+        val book = currentBook ?: return
+        if (number < 1 || number > book.chapters.size) {
+            ttsEngine.speak(
+                "Das Buch hat ${book.chapters.size} Kapitel.",
+                TtsPriority.HIGH,
+            )
+            return
+        }
+        if (player.seekToChapter(number - 1)) {
+            saveProgress(0L, player.durationMs)
+        }
+    }
+
+    fun listChapters() {
+        if (!requireChapters()) return
+        val chapters = currentBook?.chapters ?: return
+        ttsEngine.speak("${chapters.size} Kapitel.", TtsPriority.HIGH)
+        // Lange Bücher nicht komplett vorlesen – das dauert sonst Minuten
+        chapters.take(MAX_SPOKEN_CHAPTERS).forEachIndexed { i, chapter ->
+            ttsEngine.speak("${i + 1}. ${chapter.title}.", TtsPriority.NORMAL)
+        }
+        if (chapters.size > MAX_SPOKEN_CHAPTERS) {
+            ttsEngine.speak(
+                "Und ${chapters.size - MAX_SPOKEN_CHAPTERS} weitere. " +
+                    "Sag zum Beispiel: Kapitel zwanzig.",
+                TtsPriority.NORMAL,
+            )
+        }
+    }
+
+    /** Sagt an, wenn kein Buch mit Kapiteln läuft. */
+    private fun requireChapters(): Boolean {
+        val book = currentBook
+        if (book == null) {
+            ttsEngine.speak("Kein Hörbuch ausgewählt.", TtsPriority.NORMAL)
+            return false
+        }
+        if (book.chapters.isEmpty()) {
+            ttsEngine.speak("Dieses Hörbuch hat keine Kapitel.", TtsPriority.NORMAL)
+            return false
+        }
+        return true
     }
 
     fun pause() {
@@ -83,8 +197,12 @@ class AudiobookManager(
         val posMinutes = (player.currentPositionMs / 60_000).toInt()
         val durMinutes = (player.durationMs / 60_000).toInt()
         val status = if (player.isPlaying) "läuft" else "pausiert"
+        val kapitel = if (book.hasChapters) {
+            val nr = player.currentChapterIndex + 1
+            " Kapitel $nr von ${book.chapters.size}: ${player.currentChapter?.title.orEmpty()}."
+        } else ""
         ttsEngine.speak(
-            "${book.title} von ${book.author}. $status. Minute $posMinutes von $durMinutes.",
+            "${book.title} von ${book.author}. $status.$kapitel Minute $posMinutes von $durMinutes.",
             TtsPriority.NORMAL,
         )
     }
@@ -138,30 +256,33 @@ class AudiobookManager(
                     // Erstes Ergebnis automatisch vorbereiten
                     val first = results.first()
                     CoroutineScope(Dispatchers.IO).launch {
-                        library.resolveLibrivoxStreamUrl(first) { streamUrl ->
-                            if (streamUrl != null) {
-                                val audiobook = Audiobook(
-                                    id = "librivox_${first.id}",
-                                    title = first.title,
-                                    author = first.author,
-                                    uri = streamUrl,
-                                    isLocal = false,
+                        library.resolveLibrivoxChapters(first) { chapters ->
+                            if (chapters.isEmpty()) return@resolveLibrivoxChapters
+                            val audiobook = Audiobook(
+                                id = "librivox_${first.id}",
+                                title = first.title,
+                                author = first.author,
+                                uri = chapters.first().uri,
+                                isLocal = false,
+                                chapters = chapters,
+                                rssUrl = first.rssUrl,
+                            )
+                            CoroutineScope(Dispatchers.Main).launch {
+                                ttsEngine.speak(
+                                    "Sag 'Spiel Hörbuch ab' um ${first.title} zu starten.",
+                                    TtsPriority.NORMAL,
                                 )
-                                CoroutineScope(Dispatchers.Main).launch {
-                                    ttsEngine.speak(
-                                        "Sag 'Spiel Hörbuch ab' um ${first.title} zu starten.",
-                                        TtsPriority.NORMAL,
-                                    )
-                                    currentBook = audiobook
-                                    stateStore.save(PlaybackState(
-                                        bookId = audiobook.id,
-                                        title = audiobook.title,
-                                        author = audiobook.author,
-                                        uri = audiobook.uri,
-                                        positionMs = 0L,
-                                        durationMs = first.totalDurationSecs * 1000L,
-                                    ))
-                                }
+                                currentBook = audiobook
+                                stateStore.save(PlaybackState(
+                                    bookId = audiobook.id,
+                                    title = audiobook.title,
+                                    author = audiobook.author,
+                                    uri = audiobook.uri,
+                                    positionMs = 0L,
+                                    durationMs = first.totalDurationSecs * 1000L,
+                                    chapterTitle = chapters.first().title,
+                                    rssUrl = first.rssUrl,
+                                ))
                             }
                         }
                     }
@@ -187,12 +308,12 @@ class AudiobookManager(
     }
 
     private fun saveCurrentProgress() {
-        val book = currentBook ?: return
         saveProgress(player.currentPositionMs, player.durationMs)
     }
 
     private fun saveProgress(positionMs: Long, durationMs: Long) {
         val book = currentBook ?: return
+        val index = if (book.chapters.isEmpty()) 0 else player.currentChapterIndex
         stateStore.save(PlaybackState(
             bookId = book.id,
             title = book.title,
@@ -200,6 +321,14 @@ class AudiobookManager(
             uri = book.uri,
             positionMs = positionMs,
             durationMs = durationMs,
+            chapterIndex = index,
+            chapterTitle = book.chapters.getOrNull(index)?.title.orEmpty(),
+            rssUrl = book.rssUrl,
         ))
+    }
+
+    private companion object {
+        /** Mehr Kapitel am Stück vorzulesen überfordert beim Zuhören. */
+        const val MAX_SPOKEN_CHAPTERS = 10
     }
 }

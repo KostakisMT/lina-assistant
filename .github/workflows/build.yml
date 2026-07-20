@@ -40,6 +40,18 @@ jobs:
       - name: Bauen
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
+      # Reine JVM-Tests (Parser, Intent-Erkennung) – kein Emulator nötig
+      - name: Unit-Tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Testbericht sichern
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-bericht
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+
       - name: Android-Lint
         run: ./gradlew lintDebug --no-daemon
         continue-on-error: true

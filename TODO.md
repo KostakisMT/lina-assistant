@@ -193,6 +193,19 @@
 
 ---
 
+## ⏰ Erinnerungen & Wecker
+
+- [x] AlarmManager-Infrastruktur, offline, Doze-fest (2026-07-20)
+- [x] Deutsches Zeitparsing lokal (relativ, Uhrzeit, halb/viertel, täglich) (2026-07-20)
+- [x] Ansage per TTS + Benachrichtigung als Rückfall (2026-07-20)
+- [x] Claude-Tools als Fallback für verstümmelte Eingaben (2026-07-20)
+- [x] Rescheduling nach Neustart (BootReceiver) (2026-07-20)
+- [ ] Neustart-Rescheduling am Gerät verifizieren
+- [ ] Einzelne Erinnerung per Sprache löschen ("lösche die Erinnerung an den Arzt")
+- [ ] Exact-Alarm-Recht auf dem Zielgerät prüfen
+
+---
+
 ## 📷 Dokument-Vorlesen (Meilenstein 3)
 
 - [x] CameraX-Rückkamera-Aufnahme, headless mit eigenem Lifecycle (2026-07-20)

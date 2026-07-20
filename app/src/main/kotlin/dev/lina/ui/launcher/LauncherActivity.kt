@@ -62,6 +62,8 @@ import dev.lina.feature.news.NewsSyncWorker
 import dev.lina.feature.sms.SmsReader
 import dev.lina.feature.sms.SmsSender
 import dev.lina.feature.document.DocumentCamera
+import dev.lina.feature.reminder.ReminderManager
+import dev.lina.feature.reminder.ReminderReceiver
 import dev.lina.feature.onboarding.AccessibilityGuide
 import dev.lina.feature.onboarding.VoiceOnboarding
 import dev.lina.feature.onboarding.BatteryWhitelistGuide
@@ -83,6 +85,7 @@ class LauncherActivity : ComponentActivity() {
     private var smsSender: SmsSender? = null
     private var newsReader: NewsReader? = null
     private var audiobookManager: AudiobookManager? = null
+    private var reminderManager: ReminderManager? = null
     private var statusText by mutableStateOf("Lina startet…")
     private var debugInput by mutableStateOf("")
     private var debugLog by mutableStateOf("")
@@ -107,6 +110,18 @@ class LauncherActivity : ComponentActivity() {
             val text = intent?.getStringExtra("text") ?: return
             debugInput = text
             runOnUiThread { processDebugInput() }
+        }
+    }
+
+    /** Eine Erinnerung ist fällig – Lina sagt sie an. */
+    private val reminderReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ReminderReceiver.ACTION_REMINDER_DUE) return
+            val text = intent.getStringExtra(ReminderReceiver.EXTRA_TEXT) ?: return
+            runOnUiThread {
+                reminderManager?.announce(text)
+                debugLog = "Erinnerung fällig: $text\n\n$debugLog"
+            }
         }
     }
 
@@ -217,6 +232,11 @@ class LauncherActivity : ComponentActivity() {
                 addAction(LinaAccessibilityService.EVENT_INCOMING_CALL)
                 addAction(LinaAccessibilityService.EVENT_INCOMING_SMS)
             },
+            RECEIVER_NOT_EXPORTED,
+        )
+        registerReceiver(
+            reminderReceiver,
+            IntentFilter(ReminderReceiver.ACTION_REMINDER_DUE),
             RECEIVER_NOT_EXPORTED,
         )
 
@@ -389,6 +409,7 @@ class LauncherActivity : ComponentActivity() {
         smsSender = SmsSender(tts, matcher, reader)
         newsReader = NewsReader(this, tts)
         audiobookManager = AudiobookManager(this, tts)
+        reminderManager = ReminderManager(this, tts)
 
         NewsSyncWorker.schedule(this)
 
@@ -1121,6 +1142,38 @@ class LauncherActivity : ComponentActivity() {
             readDocumentAloud()
             "" // Ansagen macht readDocumentAloud selbst
         }
+        is ResolvedIntent.SetReminder -> {
+            reminderManager?.createFromSpeech(intent.rawInput)
+            "" // ReminderManager sagt selbst an
+        }
+        is ResolvedIntent.SetReminderAt -> {
+            val millis = try {
+                java.time.LocalDateTime.parse(intent.isoZeit)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant().toEpochMilli()
+            } catch (e: Exception) {
+                android.util.Log.w("LinaLauncher", "Ungültiger Zeitpunkt: ${intent.isoZeit}", e)
+                null
+            }
+            if (millis != null) {
+                reminderManager?.create(intent.text, millis, intent.daily)
+            } else {
+                ttsEngine?.speak(
+                    "Ich habe den Zeitpunkt nicht verstanden. Sag zum Beispiel: " +
+                        "Erinnere mich morgen um zehn an den Arzt.",
+                    TtsPriority.HIGH,
+                )
+            }
+            ""
+        }
+        is ResolvedIntent.ListReminders -> {
+            reminderManager?.list()
+            ""
+        }
+        is ResolvedIntent.ClearReminders -> {
+            reminderManager?.clearAll()
+            ""
+        }
         is ResolvedIntent.Time -> {
             val now = java.util.Calendar.getInstance()
             val h = now.get(java.util.Calendar.HOUR_OF_DAY)
@@ -1157,6 +1210,10 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.RejectCall -> "RejectCall"
         is ResolvedIntent.HangUp -> "HangUp"
         is ResolvedIntent.ReadDocument -> "ReadDocument"
+        is ResolvedIntent.SetReminder -> "SetReminder"
+        is ResolvedIntent.SetReminderAt -> "SetReminderAt(${intent.isoZeit})"
+        is ResolvedIntent.ListReminders -> "ListReminders"
+        is ResolvedIntent.ClearReminders -> "ClearReminders"
         is ResolvedIntent.Time -> "Time"
         is ResolvedIntent.Stop -> "Stop"
         is ResolvedIntent.Unknown -> "Unknown"
@@ -1166,6 +1223,7 @@ class LauncherActivity : ComponentActivity() {
         try { unregisterReceiver(debugReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(accessibilityReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(wakeWordReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(reminderReceiver) } catch (_: Exception) {}
         sttEngine?.destroy()
         audiobookManager?.release()
         ttsEngine?.shutdown()

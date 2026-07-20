@@ -285,6 +285,18 @@ class ClaudeConversation(
             "nachrichten_vorlesen" -> ResolvedIntent.ReadNews
             "hoerbuch_abspielen" -> ResolvedIntent.PlayAudiobook
             "dokument_vorlesen" -> ResolvedIntent.ReadDocument
+            "erinnerung_anlegen" -> {
+                // Claude liefert die aufgelöste Zeit; der lokale Parser bleibt
+                // erste Wahl, das Tool ist für verstümmelte Eingaben da
+                val text = arg("text") ?: return null
+                val zeit = arg("zeitpunkt") ?: return null
+                ResolvedIntent.SetReminderAt(
+                    text = text,
+                    isoZeit = zeit,
+                    daily = arg("taeglich")?.toBoolean() ?: false,
+                )
+            }
+            "erinnerungen_vorlesen" -> ResolvedIntent.ListReminders
             "stopp" -> ResolvedIntent.Stop
             else -> null
         }
@@ -395,6 +407,25 @@ class ClaudeConversation(
                 emptyMap(), emptyList(),
             ),
             tool("hoerbuch_abspielen", "Spielt das aktuelle Hörbuch ab.", emptyMap(), emptyList()),
+            tool(
+                "erinnerung_anlegen",
+                "Legt eine Erinnerung an. Nutze dies bei Wünschen wie \"erinnere " +
+                    "mich morgen um zehn an den Arzt\". Rechne die Zeitangabe in " +
+                    "einen konkreten Zeitpunkt um.",
+                mapOf(
+                    "text" to "Woran erinnert werden soll, z.B. \"an den Arzt\"",
+                    "zeitpunkt" to "Zeitpunkt als ISO 8601 in lokaler Zeit, " +
+                        "z.B. 2026-07-21T10:00",
+                    "taeglich" to "\"true\", wenn sich die Erinnerung täglich " +
+                        "wiederholen soll, sonst \"false\"",
+                ),
+                listOf("text", "zeitpunkt"),
+            ),
+            tool(
+                "erinnerungen_vorlesen",
+                "Liest die anstehenden Erinnerungen vor.",
+                emptyMap(), emptyList(),
+            ),
             tool(
                 "dokument_vorlesen",
                 "Fotografiert das Dokument, das vor dem Tablet im Rahmen liegt " +

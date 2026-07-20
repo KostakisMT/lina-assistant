@@ -17,6 +17,20 @@
 
 ---
 
+## [2026-07-20] Projektseite auf aktuellen Funktionsstand
+
+**Was:** `docs/index.html` (GitHub Pages) nachgezogen – die Seite hing drei Meilensteine zurück. Neu in „Was Lina kann": Erinnerungen und Wecker, Post/Briefe vorlesen, DAISY-Hörbücher mit Kapitelnavigation. Dazu zwei neue Abschnitte: **„Was offline läuft – und was nicht"** (welche Funktion braucht Internet, was verlässt das Gerät, dass ohne API-Schlüssel alles andere weiterläuft) und **„Stand der Entwicklung"** (Feldtest-Phase, DAISY am Gerät noch unbestätigt, kein fertiges APK). Eigener Abschnitt zu den Blindenhörbüchereien als Alleinstellungsmerkmal. Zwei Sprachbeispiele ergänzt, Link auf CONTRIBUTING.md.
+
+**Warum:** Die Seite wirbt um Mitwirkende und beschreibt den Träger – sie darf weder hinter dem Stand zurückbleiben noch mehr versprechen, als der Code hält. Dass Dokumentfotos an eine Cloud gehen, gehört bei einer Zielgruppe, die Post vorlesen lässt, sichtbar auf die Seite und nicht ins Kleingedruckte.
+
+**Dateien:** docs/index.html
+
+**Verifiziert:** Lokal gerendert geprüft – mobil (375px) kein horizontales Scrollen, Hochkontrast-Theme und Touch-Target-Größen unverändert, Überschriftenstruktur h1 + 8×h2, `lang="de"`. Kein Release vorhanden, deshalb bewusst kein Download-Versprechen.
+
+**Offen:** Keine englische Fassung. Sprachbeispiele sind erfunden (keine echten Kontakte).
+
+---
+
 ## [2026-07-20] CI: GitHub-Actions auf aktuelle Major-Versionen
 
 **Was:** `actions/checkout` v4→v7, `actions/setup-java` v4→v5, `actions/cache` v4→v6, `actions/upload-artifact` v4→v7 in `.github/workflows/build.yml`. Nur die Versionsangaben – keine Parameter geändert.

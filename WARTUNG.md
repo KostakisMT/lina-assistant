@@ -21,6 +21,12 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
    gespeichert** – es liegt nur während des Vorlesens im Arbeitsspeicher.
    (Ausnahme: der Wartungsbefehl „testfoto" legt bewusst eine Datei ab, damit
    der Rahmen einmalig ausgerichtet werden kann – danach löschen.)
+5. **Weg über den Vereinsserver:** Sobald das Gerät per Pairing-Code eingerichtet
+   ist (ADR-020), laufen Konversation und Dokument-Vorlesen nicht mehr direkt zum
+   KI-Dienst, sondern über einen Server des Vereins. Der Verein sieht dabei
+   technisch die Anfragen und führt einen Nutzungszähler pro Gerät – nötig, weil
+   der Verein die Kosten trägt. Inhalte werden dort nicht gespeichert. Der Verein
+   ist damit datenschutzrechtlich verantwortlich, der KI-Dienst Auftragsverarbeiter.
 
 Am besten kurz und einfach erklären und die Zustimmung schriftlich oder als
 Sprachnotiz festhalten.

@@ -17,6 +17,21 @@
 
 ---
 
+## [2026-07-21] Claude-Zugang, Kostenmodell und Modell-Routing entschieden
+
+**Was:** Drei Architekturentscheidungen dokumentiert, kein Code geändert.
+**ADR-020:** Vereins-Proxy statt einkompiliertem API-Key – die App authentifiziert sich mit einem widerrufbaren Gerätetoken, vergeben über einen gesprochenen Pairing-Code.
+**ADR-021:** Freikontingent pro Gerät aus Spenden/Förderung, 1:1-Kostenweitergabe ohne Marge erst darüber. Zahlungsdaten nie in der App.
+**ADR-022:** Gestuftes Modell-Routing (Haiku für kurze Turns, Sonnet 5 nur für echte Gespräche, lokale Ebene 2 reaktivieren, Websuche restriktiver).
+
+**Warum:** ADR-017 ließ offen, wie ein ausgeliefertes Gerät an Claude-Zugang kommt. Ein Key in einer verteilten APK ist kompromittiert; der naheliegende Ausweg „Nutzer meldet sich mit eigenem Claude-Konto an" ist von Anthropic seit Februar 2026 untersagt; und „Bring your own key" scheitert an der Zielgruppe – ein 108-Zeichen-Key ist weder diktierbar noch buchstabierbar. Dazu kam die Skalierungsrechnung: bei 3–12 €/Nutzer/Monat sind 100 Nutzer spendenfinanzierbar, 10.000 nicht.
+
+**Dateien:** DECISIONS.md (ADR-020 bis ADR-022), TODO.md (neuer Abschnitt „Verteilung", LlmIntentResolver-Status korrigiert), WARTUNG.md (Einwilligung Punkt 5: Weg über den Vereinsserver), CHANGELOG.md
+
+**Offen:** Die Kostenschätzung 3–12 € ist ungemessen und enthält die Websuche nicht – `WebSearchTool20260209` wird pro Suche abgerechnet, nicht über Tokens, und ist möglicherweise der größte Einzelposten. Erster Schritt ist deshalb eine Messung, keine Optimierung. Kontingentgrenze erst nach dem Feldtest festlegen. Steuerliche Prüfung (Zweckbetrieb §68 Nr. 4 AO, Umsatzsteuer) steht aus; der Proxy selbst existiert noch nicht.
+
+---
+
 ## [2026-07-20] Projektseite auf aktuellen Funktionsstand
 
 **Was:** `docs/index.html` (GitHub Pages) nachgezogen – die Seite hing drei Meilensteine zurück. Neu in „Was Lina kann": Erinnerungen und Wecker, Post/Briefe vorlesen, DAISY-Hörbücher mit Kapitelnavigation. Dazu zwei neue Abschnitte: **„Was offline läuft – und was nicht"** (welche Funktion braucht Internet, was verlässt das Gerät, dass ohne API-Schlüssel alles andere weiterläuft) und **„Stand der Entwicklung"** (Feldtest-Phase, DAISY am Gerät noch unbestätigt, kein fertiges APK). Eigener Abschnitt zu den Blindenhörbüchereien als Alleinstellungsmerkmal. Zwei Sprachbeispiele ergänzt, Link auf CONTRIBUTING.md.

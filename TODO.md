@@ -170,6 +170,36 @@
 
 ---
 
+## 🟠 Verteilung: Zugang, Kosten, Finanzierung (ADR-020 bis ADR-022)
+
+> Voraussetzung dafür, dass Lina über den einzelnen Testnutzer hinauskommt.
+> Der einkompilierte `CLAUDE_API_KEY` ist für Verteilung ungeeignet.
+
+### Zuerst messen (blockiert alles andere)
+- [ ] Verbrauch eines realen Alltagstages messen, aufgeschlüsselt nach Tokens **und Websuchen** – ohne diese Zahlen sind Kontingentgrenze und Optimierungsreihenfolge geraten
+- [ ] Websuche-Anteil prüfen: wie oft greift `WebSearchTool20260209` wirklich, was kostet sie anteilig (wird pro Suche abgerechnet, nicht über Tokens)
+
+### Kostensenkung (ADR-022)
+- [ ] Modell-Routing Haiku 4.5 / Sonnet 5 mit Qualitätsvergleich an echten Turns
+- [ ] `LlmIntentResolver` mit On-Device-Modell reaktivieren (ersetzt den Backlog-Eintrag „ggf. obsolet")
+- [ ] `maxUses` der Websuche senken, Auslösung an Aktualitätsbezug binden
+- [ ] `MAX_HISTORY` senken, Wirkung auf Gesprächsqualität messen
+
+### Infrastruktur (ADR-020)
+- [ ] Proxy-Spezifikation: Endpunkte, Pairing, Verbrauchszählung pro Gerät, Rate-Limits – eigenes Repo
+- [ ] `CredentialStore`-Interface + `EncryptedSharedPreferences` statt `BuildConfig.CLAUDE_API_KEY`
+- [ ] Sprachdialog „Einrichtung" um Pairing-Code erweitern (`VoiceOnboarding`)
+- [ ] Buchstabieralphabet in `core/text/` für die phonetische Code-Ansage
+
+### Rechtlich & Finanzierung (ADR-021)
+- [ ] Steuerberater: Zweckbetrieb §68 Nr. 4 AO, Umsatzsteuer bei 1:1-Weitergabe
+- [ ] PSP-Auswahl; Zahlungseinrichtung barrierefrei über Vertrauensperson
+- [ ] AGB und Widerrufsbelehrung barrierefrei (kein reines PDF)
+- [ ] AVV mit Anthropic
+- [ ] Anfrage an Anthropic wegen Nonprofit-/Förder-API-Credits (Entwurf liegt vor)
+
+---
+
 ## 🟡 Plan bis zum Bewerbungsfenster (Stand 2026-07-18)
 
 ### Etappe 1 – Juli: Claude-Anbindung verifizieren & Release-fähig werden
@@ -248,7 +278,7 @@
 - [ ] STT-Robustheit bei Raumdistanz: Entrauschen vor Whisper prüfen (sherpa-onnx Speech-Enhancement/GTCRN – gleiche Runtime; Alternativen: RNNoise, Android NoiseSuppressor)
 - [x] LLM-Anbindung: Claude API für freie Konversation (`ClaudeConversation`, ADR-017) – 2026-07-16
 - [ ] Claude-Anbindung auf dem Tablet testen (echter API-Key in local.properties)
-- [ ] LlmIntentResolver implementieren (lokales Modell – Backlog, ggf. obsolet durch ADR-017)
+- [ ] LlmIntentResolver implementieren (lokales Modell – **nicht mehr obsolet**: durch ADR-022 zum Kostenhebel geworden, siehe Abschnitt „Verteilung")
 - [ ] Onleihe-Integration (Bibliothek per Ausweis)
 - [ ] Podcast-Streaming (gPodder-Backend)
 - [ ] Sprach-Einkauf: Wolt, Rewe Express, Picnic

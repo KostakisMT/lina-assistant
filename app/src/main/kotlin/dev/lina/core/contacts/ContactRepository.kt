@@ -9,9 +9,19 @@ data class Contact(
     val phoneNumber: String,
 )
 
-class ContactRepository(private val context: Context) {
+/**
+ * Woher die Kontakte kommen. Trennt [FuzzyContactMatcher] vom
+ * `ContactsContract`-Zugriff, damit die Match-Kaskade in reinen
+ * JVM-Tests gegen feste Kontaktlisten laufen kann – das Matching
+ * entscheidet, wen Lina anruft, und ein Fehler dort ist teuer.
+ */
+interface ContactSource {
+    fun loadAll(): List<Contact>
+}
 
-    fun loadAll(): List<Contact> {
+class ContactRepository(private val context: Context) : ContactSource {
+
+    override fun loadAll(): List<Contact> {
         val contacts = mutableListOf<Contact>()
         val cursor = context.contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,

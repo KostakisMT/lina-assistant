@@ -127,8 +127,9 @@
 - [x] `GermanTimeParserTest` – Zeitangaben, Wiederholungen, Sachtext (2026-07-20)
 - [x] `LocalCommandResolverTest` – Intents und ihre Abgrenzungen untereinander (2026-07-20)
 - [x] `DaisyParserTest` – ncc.html, SMIL, Clock-Values, Sanitizing (2026-07-20)
-- [ ] `FuzzyContactMatcher` testen (Arundhati, Eßfeld – spracherkennungs-kritisch)
-- [ ] `RssFeedRepository` gegen gespeicherte Feed-Beispiele testen
+- [x] `FuzzyContactMatcher` testen (Arundhati, Eßfeld – spracherkennungs-kritisch); dafür `ContactSource`-Interface eingezogen – 2026-07-21
+- [x] `GermanSpellingTest` – Buchstabiertafel für den Pairing-Code (2026-07-21)
+- [ ] `RssFeedRepository` gegen gespeicherte Feed-Beispiele testen – **braucht Vorarbeit:** nutzt `XmlPullParser` (Android-API, in JVM-Tests nicht vorhanden). Erst denselben Umbau wie bei `DaisyParser` (ADR-019: `DocumentBuilder` statt `XmlPullParser`) plus Trennung von Netzabruf und Parsing
 - [ ] Mehrdeutigkeit "weiter" (Meldung vs. Hörbuch) kontextabhängig auflösen
 
 ---
@@ -186,10 +187,11 @@
 - [ ] `MAX_HISTORY` senken, Wirkung auf Gesprächsqualität messen
 
 ### Infrastruktur (ADR-020)
-- [ ] Proxy-Spezifikation: Endpunkte, Pairing, Verbrauchszählung pro Gerät, Rate-Limits – eigenes Repo
+- [x] Proxy-Spezifikation: Endpunkte, Pairing, Verbrauchszählung, Rate-Limits → `PROXY-SPEC.md` (Entwurf) – 2026-07-21
+- [ ] Offene Fragen aus PROXY-SPEC.md entscheiden (Streaming, Hosting-Standort, Routing in Proxy oder App, Mehrgeräte-Konten, Vorab-Kopplung)
 - [ ] `CredentialStore`-Interface + `EncryptedSharedPreferences` statt `BuildConfig.CLAUDE_API_KEY`
-- [ ] Sprachdialog „Einrichtung" um Pairing-Code erweitern (`VoiceOnboarding`)
-- [ ] Buchstabieralphabet in `core/text/` für die phonetische Code-Ansage
+- [ ] Sprachdialog „Einrichtung" um Pairing-Code erweitern (`VoiceOnboarding`, nutzt `GermanSpelling`)
+- [x] Buchstabieralphabet in `core/text/` für die phonetische Code-Ansage (`GermanSpelling`) – 2026-07-21
 
 ### Rechtlich & Finanzierung (ADR-021)
 - [ ] Steuerberater: Zweckbetrieb §68 Nr. 4 AO, Umsatzsteuer bei 1:1-Weitergabe

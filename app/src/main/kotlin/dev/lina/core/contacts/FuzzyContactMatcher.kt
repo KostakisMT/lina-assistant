@@ -7,7 +7,7 @@ sealed class ContactMatchResult {
 }
 
 class FuzzyContactMatcher(
-    private val contactRepository: ContactRepository,
+    private val contactRepository: ContactSource,
 ) {
 
     fun findBestMatch(query: String): Contact? {

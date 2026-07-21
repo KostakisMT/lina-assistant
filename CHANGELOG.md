@@ -17,6 +17,23 @@
 
 ---
 
+## [2026-07-21] Kontakt-Matching getestet, Buchstabiertafel, Proxy-Entwurf
+
+**Was:** Drei Aufgaben, die ohne Tablet machbar waren.
+1. `FuzzyContactMatcher` mit 22 JVM-Tests abgesichert. Dafür ein `ContactSource`-Interface eingezogen (`ContactRepository` implementiert es) – vorher war die Klasse an `Context` gekoppelt und in reinen JVM-Tests nicht instanziierbar. Aufruferseite unverändert.
+2. `GermanSpelling` in `core/text/` – Buchstabiertafel für die gesprochene Ansage des Pairing-Codes, mit `CODE_ALPHABET` ohne verwechselbare Zeichen. 11 Tests.
+3. `PROXY-SPEC.md` – Spezifikationsentwurf zu ADR-020: Datenmodell, Endpunkte, Pairing mit Geräte-Geheimnis, Kontingente, Datenschutz, offene Fragen.
+
+**Warum:** Das Matching entscheidet, wen Lina anruft – der teuerste denkbare Fehler, weil der Nutzer nicht sieht, wen er am Apparat hat, und den Irrtum erst im Gespräch merkt. Die Buchstabiertafel ist Blocker für den Kopplungsdialog aus ADR-020. Bewusst die traditionelle Tafel (Anton, Berta, Cäsar) statt DIN 5009:2022 mit Städtenamen: Linas Nutzer:innen kennen die klassischen Namen, und beim Vorlesen zählt sofortiges Verstehen mehr als die aktuelle Normfassung.
+
+**Dateien:** `core/contacts/ContactRepository.kt` (+`ContactSource`), `core/contacts/FuzzyContactMatcher.kt` (Konstruktor nimmt Interface), `core/text/GermanSpelling.kt` (neu), `test/.../FuzzyContactMatcherTest.kt` (neu), `test/.../GermanSpellingTest.kt` (neu), `PROXY-SPEC.md` (neu), TODO.md
+
+**Offen:** Der Test für `RssFeedRepository` sieht nach einer schnellen Ergänzung aus, ist aber keine: Die Klasse nutzt `XmlPullParser` (Android-API, in JVM-Tests nicht vorhanden) und mischt Netzabruf mit Parsing – erst denselben Umbau wie bei `DaisyParser` (ADR-019). Steht jetzt mit dieser Einschränkung im TODO. Die offenen Fragen aus PROXY-SPEC.md sind unentschieden, allen voran Streaming (Zeit bis zum ersten Wort ist bei einer Sprachassistentin das, was als Geschwindigkeit erlebt wird).
+
+**Testlage:** 91 Tests, alle grün.
+
+---
+
 ## [2026-07-21] Claude-Zugang, Kostenmodell und Modell-Routing entschieden
 
 **Was:** Drei Architekturentscheidungen dokumentiert, kein Code geändert.

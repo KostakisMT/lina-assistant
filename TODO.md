@@ -193,6 +193,11 @@
 - [ ] Sprachdialog „Einrichtung" um Pairing-Code erweitern (`VoiceOnboarding`, nutzt `GermanSpelling`)
 - [x] Buchstabieralphabet in `core/text/` für die phonetische Code-Ansage (`GermanSpelling`) – 2026-07-21
 
+### Sicherheit (siehe SICHERHEIT.md, dort die vollständige Liste)
+- [ ] `EncryptedSharedPreferences` – Erinnerungen haben oft Gesundheitsbezug und liegen unverschlüsselt
+- [ ] Automatische Löschung für Einrichtungs-Sprachaufnahmen und `testfoto`-Bilder (bleiben heute unbegrenzt liegen)
+- [ ] Kontaktadresse für Sicherheitsmeldungen im Repository hinterlegen
+
 ### Rechtlich & Finanzierung (ADR-021)
 - [ ] Steuerberater: Zweckbetrieb §68 Nr. 4 AO, Umsatzsteuer bei 1:1-Weitergabe
 - [ ] PSP-Auswahl; Zahlungseinrichtung barrierefrei über Vertrauensperson

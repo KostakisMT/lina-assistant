@@ -13,6 +13,10 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
 2. **Cloud-Konversation:** Freie Fragen an Lina werden an einen Internetdienst
    (Claude API) geschickt. Kernbefehle (Anrufe, SMS, Hörbücher) bleiben auf dem
    Gerät. Lina kündigt keine Cloud-Nutzung einzeln an – das muss vorab klar sein.
+   **Mitgeschickt werden dabei auch die Vornamen und Nachnamen aus dem
+   Telefonbuch** sowie Interessen und Wohnregion: Lina braucht sie, um verhörte
+   Namen zuzuordnen ("Rumfe Boris an" → Boris Hartmann). Telefonnummern und
+   SMS-Inhalte werden **nicht** übertragen.
 3. **Aufnahmen:** Bei der Ersteinrichtung entstehen Sprachaufnahmen (Weckwort,
    Befehle) für das Training der Erkennung. Sie werden nur dafür verwendet.
 4. **Dokument-Vorlesen:** Sagt die Nutzer:in „lies mir die Post vor", macht Lina

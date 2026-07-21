@@ -17,6 +17,22 @@
 
 ---
 
+## [2026-07-21] Sicherheitskonzept angelegt
+
+**Was:** `SICHERHEIT.md` – Schutzbedarf, tatsächliche Datenflüsse, technische und organisatorische Maßnahmen, Geräteverlust, Meldeweg, und ausdrücklich die Grenzen. Enthält eine offene Liste bekannter Lücken statt nur der Stärken. Einwilligung in WARTUNG.md präzisiert.
+
+**Warum:** Der Verein wird mit ADR-020 datenschutzrechtlich Verantwortlicher – eine Dokumentation der Maßnahmen ist nach Art. 32 DSGVO ohnehin Pflicht. Zusätzlich zahlt sie auf die Prototype-Fund-Schwerpunkte Datensicherheit und Software-Infrastruktur ein, wo die Passung laut interner Notizen das größte Bewerbungsrisiko ist.
+
+**Befund beim Schreiben:** Die Kontaktnamen aus dem Telefonbuch gehen bei **jedem** Konversationsturn an Anthropic – sie stecken im System-Prompt, damit `ClaudeConversation` verhörte Namen zuordnen kann ("Rumfe Boris an"). Die Einwilligung sprach bisher nur allgemein von "freien Fragen" und war damit unvollständig. Telefonnummern und SMS-Inhalte sind nicht betroffen. WARTUNG.md Punkt 2 benennt es jetzt ausdrücklich.
+
+**Weitere dokumentierte Lücken:** einkompilierter API-Schlüssel (ADR-020 adressiert ihn), unverschlüsselte `SharedPreferences` inklusive gesundheitsbezogener Erinnerungen, unbegrenzt liegenbleibende Einrichtungs-Sprachaufnahmen und `testfoto`-Bilder.
+
+**Dateien:** SICHERHEIT.md (neu), WARTUNG.md, TODO.md, CHANGELOG.md
+
+**Offen:** AVV mit Anthropic; Kontaktadresse für Sicherheitsmeldungen fehlt noch im Repository.
+
+---
+
 ## [2026-07-21] Kontakt-Matching getestet, Buchstabiertafel, Proxy-Entwurf
 
 **Was:** Drei Aufgaben, die ohne Tablet machbar waren.

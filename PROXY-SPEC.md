@@ -3,6 +3,12 @@
 > Spezifikationsentwurf zu [ADR-020](DECISIONS.md). Der Proxy existiert noch
 > nicht; dieses Dokument beschreibt, was er können muss, bevor Code entsteht.
 > Status: Entwurf, 2026-07-21.
+>
+> **Einordnung nach ADR-023 (2026-07-25):** Der Proxy ist Zukunftsinfrastruktur.
+> In der aktuellen Übergangsphase wird er *nicht* betrieben – die Cloud-Funktionen
+> laufen über einen eigenen API-Key des Entwicklers, der das Projekt privat trägt.
+> „Betreiber" unten meint diese verantwortliche Stelle; ein gemeinnütziger
+> Betreiber ist eine offene Zukunftsoption, wird aber nicht namentlich festgelegt.
 
 ## Zweck
 
@@ -203,7 +209,7 @@ weiter") – niemals mit einer nackten Fehlernummer.
   keine Dokumentfotos.
 - Gespeichert werden Zähler, Zeitstempel und Gerätezuordnung.
 - Zugriffslogs ohne Inhalte, kurze Aufbewahrung.
-- Der Verein wird DSGVO-Verantwortlicher, Anthropic Auftragsverarbeiter – der
+- Der Betreiber ist DSGVO-Verantwortlicher, Anthropic Auftragsverarbeiter – der
   AVV ist Voraussetzung für den Betrieb.
 - Die Einwilligung (WARTUNG.md, Punkt 5) benennt den Zwischenschritt bereits.
 
@@ -214,7 +220,7 @@ weiter") – niemals mit einer nackten Fehlernummer.
 - Fällt der Proxy aus, entfallen freie Konversation und Dokument-Vorlesen.
   Alle Offline-Kernbefehle laufen weiter (ADR-017). Lina muss das sagen können,
   ohne zu behaupten, sie sei kaputt.
-- Der Proxy wird betriebsnotwendige Vereinsinfrastruktur: Erreichbarkeit,
+- Der Proxy wird betriebsnotwendige Infrastruktur des Betreibers: Erreichbarkeit,
   Updates und Schlüsselrotation sind eine Dauerverpflichtung, keine
   einmalige Einrichtung.
 - Schlüsselrotation muss möglich sein, ohne dass Geräte neu gekoppelt werden.
@@ -232,9 +238,9 @@ weiter") – niemals mit einer nackten Fehlernummer.
 3. **Modellauswahl: Proxy oder App?** ADR-022 verlangt Routing. Im Proxy ist
    es zentral änderbar ohne App-Update; in der App kennt man den Kontext
    besser. Tendenz: Proxy, damit Kostensteuerung ohne Rollout möglich ist.
-4. **Mehrere Geräte je Konto** – für Haushalte mit zwei Tablets oder für den
-   Verein, der Testgeräte verwaltet. Das Datenmodell lässt es zu; die
+4. **Mehrere Geräte je Konto** – für Haushalte mit zwei Tablets oder für eine
+   Stelle, die Testgeräte verwaltet. Das Datenmodell lässt es zu; die
    Kontingentlogik muss es abbilden.
-5. **Offline-Kopplung.** Wenn beim Feldtest kein Helfer erreichbar ist: Darf
-   der Verein ein Gerät vorab koppeln und fertig ausliefern? Vermutlich ja –
+5. **Offline-Kopplung.** Wenn beim Feldtest kein Helfer erreichbar ist: Darf ein
+   Gerät vorab gekoppelt und fertig ausgeliefert werden? Vermutlich ja –
    dann ist der Pairing-Flow der Zweitweg, nicht der Hauptweg.

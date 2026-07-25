@@ -155,8 +155,13 @@
 ## ADR-016: TTS-Stimme de_DE-dii-high (OpenVoiceOS)
 **Datum:** 2026-07-04 | **Status:** Akzeptiert
 
+> **Aktualisierung (ADR-023, 2026-07-25):** Die NC-Begründung stützt sich nicht
+> mehr auf eine gemeinnützige Trägerschaft, sondern darauf, dass Lina ein rein
+> nicht-kommerzielles, quelloffenes Projekt ohne kommerziellen Vertrieb ist. Die
+> Stimme bleibt unverändert nutzbar.
+
 **Kontext:** Die Standard-Piper-Frauenstimmen (ramona/kerstin/eva_k) existieren nur in "low"-Qualität und wurden vom Entwickler als unzureichend bewertet. Hochwertige deutsche Piper-Stimmen: thorsten-medium/high (männlich, freie Lizenz) sowie die OpenVoiceOS-Stimmen dii-high/miro-high (CC BY-NC-SA 4.0). A/B-Test aller 6 Kandidaten auf dem Zielgerät per Laufzeit-Stimmwechsler.
-**Entscheidung:** `de_DE-dii-high` wird Linas Standard-Stimme. Die NC-Lizenz ist zulässig, weil das Projekt von einem gemeinnützigen Verein getragen wird und kein kommerzieller Vertrieb stattfindet.
+**Entscheidung:** `de_DE-dii-high` wird Linas Standard-Stimme. Die NC-Lizenz ist zulässig, weil Lina ein rein nicht-kommerzielles, quelloffenes Projekt ohne kommerziellen Vertrieb ist – NonCommercial bezieht sich auf die Art der Nutzung, nicht auf die Rechtsform des Trägers (siehe ADR-023).
 **Konsequenzen:**
 - CC BY-NC-SA 4.0 muss bei Weitergabe der App dokumentiert werden (Attribution: OpenVoiceOS/pipertts_de-DE_dii)
 - Falls je ein kommerzieller Zweig entsteht: Stimme ersetzen (Option: eigene Piper-Stimme trainieren, freier deutscher Frauen-Datensatz)
@@ -213,8 +218,14 @@ Unabhängig davon fehlte dem Hörbuch-Feature das Konzept „Kapitel" ganz: `Aud
 
 ---
 
-## ADR-020: Vereins-Proxy statt API-Key pro Gerät
+## ADR-020: Proxy statt API-Key pro Gerät
 **Datum:** 2026-07-21 | **Status:** Akzeptiert
+
+> **Aktualisierung (ADR-023, 2026-07-25):** Vorerst gibt es keine Träger-Organisation.
+> In der Übergangsphase läuft die App über einen eigenen API-Key des Entwicklers;
+> der Proxy und ein widerrufbares Gerätetoken bleiben das Ziel für die Verteilung.
+> Betreiber und Verantwortlicher ist die jeweils tragende Stelle – aktuell die
+> Privatperson, perspektivisch ggf. eine gemeinnützige Organisation.
 
 **Kontext:** ADR-017 ließ offen, wie ein ausgeliefertes Gerät an Claude-Zugang kommt – der Key liegt bis heute in `local.properties` und wird per `buildConfigField` einkompiliert. Das trägt für ein Testgerät, aber nicht für Verteilung: Ein Key in einer verteilten APK ist kompromittiert, sobald jemand sie auseinandernimmt.
 
@@ -222,25 +233,32 @@ Die naheliegende Alternative "der Nutzer meldet sich mit seinem eigenen Claude-K
 
 Bleibt "Bring your own key": Der Nutzer legt selbst ein Console-Konto an und hinterlegt seinen Key. Für die Zielgruppe ist das unmöglich. Ein Anthropic-Key ist `sk-ant-api03-` plus ~95 Zeichen Base64 – nicht diktierbar, nicht buchstabierbar, per Whisper nicht robust erfassbar. Die Registrierung selbst (Kreditkarte, Captcha, E-Mail-Bestätigung) ist für einen blinden Menschen ohnehin nicht selbstständig zu schaffen.
 
-**Entscheidung:** Der Verein betreibt einen Proxy und hält dort den Anthropic-Key. Die App spricht nicht mehr direkt mit Anthropic, sondern authentifiziert sich beim Proxy mit einem **widerrufbaren Gerätetoken**. Vergeben wird das Token über einen **gesprochenen Pairing-Code**: Lina nennt einen kurzen Code phonetisch ("Berta – Sieben – Anton – Drei"), eine Vertrauensperson gibt ihn auf der Vereins-Webseite ein, das Tablet pollt und erhält sein Token. Damit findet die sehende Arbeit außerhalb des Tablets statt und der Nutzer muss nichts sehen, tippen oder diktieren.
+**Entscheidung:** Der Betreiber betreibt einen Proxy und hält dort den Anthropic-Key. Die App spricht nicht mehr direkt mit Anthropic, sondern authentifiziert sich beim Proxy mit einem **widerrufbaren Gerätetoken**. Vergeben wird das Token über einen **gesprochenen Pairing-Code**: Lina nennt einen kurzen Code phonetisch ("Berta – Sieben – Anton – Drei"), eine Vertrauensperson gibt ihn auf der Betreiber-Webseite ein, das Tablet pollt und erhält sein Token. Damit findet die sehende Arbeit außerhalb des Tablets statt und der Nutzer muss nichts sehen, tippen oder diktieren.
 
 `BuildConfig.CLAUDE_API_KEY` bleibt als Entwicklerpfad erhalten.
 
 **Konsequenzen:**
 - Ohne erreichbaren Proxy entfällt die freie Konversation – alle Offline-Kernbefehle laufen weiter. Das Prinzip aus ADR-017 bleibt gewahrt, die Ausfallursache verschiebt sich nur von "kein Key" zu "kein Proxy".
-- Der Proxy ist ein Single Point of Failure und wird betriebsnotwendige Vereinsinfrastruktur. Betrieb, Monitoring und Erreichbarkeit sind ab dann eine dauerhafte Verpflichtung, keine Nebensache.
+- Der Proxy ist ein Single Point of Failure und wird betriebsnotwendige Betreiberinfrastruktur. Betrieb, Monitoring und Erreichbarkeit sind ab dann eine dauerhafte Verpflichtung, keine Nebensache.
 - Der Proxy **zählt den Verbrauch pro Gerät ab Tag eins**, auch solange alles kostenlos ist. Ohne diese Daten ist jede spätere Kontingent- oder Preisentscheidung geraten (siehe ADR-021).
 - Bei Verlust eines Tablets wird ein einzelnes Gerätetoken gesperrt, statt einen organisationsweiten Key rotieren zu müssen.
 - Das Gerätetoken gehört in `EncryptedSharedPreferences`. Das Projekt nutzt bisher durchgängig unverschlüsselte `SharedPreferences` (`PlaybackStateStore`, `ReminderStore`, Onboarding-Profil) – für ein Zugangstoken reicht das nicht.
-- Datenschutzrechtlich wird der Verein Verantwortlicher und Anthropic Auftragsverarbeiter; ein AVV wird nötig. Die Einwilligung (WARTUNG.md) muss den Zwischenschritt über den Vereinsserver benennen.
+- Datenschutzrechtlich wird der Betreiber Verantwortlicher und Anthropic Auftragsverarbeiter; ein AVV wird nötig. Die Einwilligung (WARTUNG.md) muss den Zwischenschritt über den vorgeschalteten Server benennen.
 - Ein Buchstabieralphabet für die phonetische Code-Ansage fehlt und gehört nach `core/text/` neben `GermanNumbers`.
 
 ---
 
 ## ADR-021: Freikontingent pro Gerät, Kostenweitergabe ohne Marge darüber
-**Datum:** 2026-07-21 | **Status:** Akzeptiert
+**Datum:** 2026-07-21 | **Status:** Teilweise überholt (ADR-023)
 
-**Kontext:** Mit dem Proxy (ADR-020) trägt der Verein die Claude-Kosten aller Nutzer. Bei geschätzt 3–12 € pro aktivem Nutzer und Monat skaliert das unangenehm: ~100 Nutzer sind 3.600–14.000 € im Jahr und aus Spenden und Förderung tragbar; 10.000 Nutzer wären 360.000–1,4 Mio. € im Jahr und für keinen Verein finanzierbar. Ein unbedingtes Versprechen "für immer kostenlos" müsste bei Erfolg gebrochen werden.
+> **Aktualisierung (ADR-023, 2026-07-25):** Die auf Gemeinnützigkeit, Zweckbetrieb
+> (§68 AO) und Spendenfinanzierung gestützte Begründung trägt nicht mehr, solange
+> kein gemeinnütziger Träger existiert. Das **Prinzip bleibt** – frei für die
+> normale Alltagsnutzung, keine Zahlungsdaten in der App. Die
+> **Finanzierungsmechanik ist offen**: die Kosten trägt vorerst der Entwickler,
+> ein tragfähiges Modell ist an einen künftigen gemeinnützigen Partner geknüpft.
+
+**Kontext:** Mit dem Proxy (ADR-020) trägt der Betreiber die Claude-Kosten aller Nutzer. Bei geschätzt 3–12 € pro aktivem Nutzer und Monat skaliert das unangenehm: ~100 Nutzer sind 3.600–14.000 € im Jahr und aus Spenden und Förderung tragbar; 10.000 Nutzer wären 360.000–1,4 Mio. € im Jahr und für keine tragende Stelle finanzierbar. Ein unbedingtes Versprechen "für immer kostenlos" müsste bei Erfolg gebrochen werden.
 
 Eine Gewinnmarge auf die Weitergabe wäre bei Anthropic zulässig – ein Produkt auf der API zu bauen und dafür Geld zu nehmen ist üblich, untersagt ist nur der Weiterverkauf des rohen API-Zugangs. Sie kollidiert aber mit zwei bestehenden Festlegungen: Sie begründet einen wirtschaftlichen Geschäftsbetrieb und gefährdet damit die Gemeinnützigkeit, und sie löst genau den Fall aus, den ADR-016 vorsieht – die Stimme `de_DE-dii-high` (CC BY-NC-SA 4.0) ist nur nutzbar, weil kein kommerzieller Vertrieb stattfindet.
 
@@ -250,11 +268,11 @@ Jedes Gerät bekommt ein **monatliches Freikontingent**, bemessen so, dass norma
 
 Die Höhe des Kontingents wird **erst nach dem Feldtest** aus echten Verbrauchsdaten des Proxys festgelegt. Jede vorher genannte Zahl wäre erfunden.
 
-Zahlungsdaten laufen ausschließlich über einen Payment-Provider auf einer Webseite des Vereins. **Die App erfasst, speichert und überträgt keine Zahlungsdaten – insbesondere nicht per Spracheingabe.** Der Proxy kennt nur eine Kunden-ID des Providers.
+Zahlungsdaten laufen ausschließlich über einen Payment-Provider auf einer Betreiber-Webseite. **Die App erfasst, speichert und überträgt keine Zahlungsdaten – insbesondere nicht per Spracheingabe.** Der Proxy kennt nur eine Kunden-ID des Providers.
 
 **Konsequenzen:**
 - ADR-016 bleibt gültig: kein kommerzieller Vertrieb, die Stimme muss nicht ersetzt werden.
-- Die Zugangszusage für die Zielgruppe bleibt belastbar, ohne dass der Verein ein unbegrenztes Kostenrisiko trägt.
+- Die Zugangszusage für die Zielgruppe bleibt belastbar, ohne dass der Betreiber ein unbegrenztes Kostenrisiko trägt.
 - **Vor der ersten Rechnung ist eine steuerliche Prüfung erforderlich.** Offen sind mindestens: Umsatzsteuer (auch ohne Marge liegt ein Leistungsaustausch vor; die Kleinunternehmerregelung wird bei Skalierung gesprengt; §4 Nr. 18 UStG prüfen) und die Einordnung als Zweckbetrieb nach §68 Nr. 4 AO – Einrichtungen der Blindenfürsorge sind dort ausdrücklich genannt und ein aussichtsreicher Kandidat.
 - Sobald Nutzer zahlen, greifen Fernabsatz- und Widerrufsrecht sowie die Preisangabenverordnung. AGB und Widerrufsbelehrung müssen für diese Zielgruppe **barrierefrei zugänglich** sein – ein PDF genügt nicht.
 - Nach außen wird nicht "für immer kostenlos" versprochen, sondern: für die normale Alltagsnutzung zahlt niemand.
@@ -289,3 +307,19 @@ Zielgröße: Faktor 3–5 gegenüber heute.
 - Qualitätsrisiko: Haiku kann bei Grenzfällen schwächer sein. Das ist zu **messen, nicht anzunehmen** – die Eskalationsschwelle ist ein empirischer Wert.
 - Vision und Dokument-Vorlesen bleiben bei Sonnet 5 (ADR-018). Dort zählt Genauigkeit mehr als der Preis, und die Aufrufe sind selten.
 - Erster Schritt ist keine Optimierung, sondern eine **Messung**: ein realer Alltagstag mit Aufschlüsselung nach Tokens und Websuchen. Ohne diese Zahlen ist jede Priorisierung geraten – auch die Reihenfolge oben.
+
+---
+
+## ADR-023: Projekt läuft als Privatperson weiter, ohne Träger-Organisation
+**Datum:** 2026-07-25 | **Status:** Akzeptiert
+
+**Kontext:** Bisher war als Träger eine gemeinnützige Organisation vorgesehen. Diese Trägerschaft war an mehreren Stellen tragend: als Begründung für die NC-Lizenz der Stimme (ADR-016), als DSGVO-Verantwortlicher und Betreiber des Proxys (ADR-020) und als Kostenträger des Freikontingents (ADR-021). Die Planung ändert sich: Es gibt vorerst keine solche Organisation. Der Entwickler führt Lina als **Privatperson** weiter, bewirbt sich beim **Prototype Fund** (der ohnehin nur an Privatpersonen auszahlt, nicht an Organisationen – die neue Struktur passt hier besser) und sucht parallel Gespräche über Testausweitung und Finanzierung.
+
+**Entscheidung:** Lina wird vorerst privat vom Entwickler getragen. Eine spätere gemeinnützige Trägerschaft bleibt eine offene Option, wird aber **nicht festgelegt und in der öffentlichen Doku nicht namentlich benannt** – weder mögliche Partner noch Fördergeber. Konkrete Kandidaten werden nur intern geführt. „Alles offen halten" ist bewusste Strategie, nicht Unfertigkeit.
+
+**Konsequenzen:**
+- **NC-Lizenz (ADR-016):** Die Stimme `de_DE-dii-high` (CC BY-NC-SA 4.0) bleibt nutzbar. „NonCommercial" bezieht sich auf die Art der Nutzung, nicht auf die Rechtsform des Nutzers – ein privates, kostenloses, quelloffenes Projekt ohne kommerziellen Vertrieb erfüllt die Bedingung ebenso wie ein gemeinnütziger Träger. Ein Stimmentausch bleibt nur für den Fall eines kommerziellen Zweigs nötig.
+- **Verantwortung & Betrieb (ADR-020):** Datenschutzrechtlich verantwortlich ist jetzt der Entwickler. In der Übergangsphase laufen die Cloud-Funktionen direkt zum KI-Dienst über einen **eigenen API-Key** (der `BuildConfig.CLAUDE_API_KEY`-Pfad existiert). Der Proxy mit Gerätetoken bleibt das Ziel für die Verteilung, wird aber jetzt nicht gebaut.
+- **Kostenmodell (ADR-021):** Die auf Gemeinnützigkeit gestützte Begründung entfällt. Das Prinzip – frei für die normale Alltagsnutzung, keine Zahlungsdaten in der App – bleibt. Die Finanzierung ist offen: die laufenden Kosten trägt vorerst der Entwickler; ein tragfähiges Modell (Fördermittel, Spenden) ist an einen künftigen gemeinnützigen Partner geknüpft.
+- **Fördermittel:** Der Prototype Fund passt zur Privatperson-Struktur. Fördertöpfe und Programme, die eine gemeinnützige Organisation voraussetzen (z.B. Aktion Mensch, steuerabzugsfähige Spenden), sind ohne einen solchen Partner nicht zugänglich und bleiben ein offener Strang.
+- Diese ADR **ändert ADR-016, ADR-020 und ADR-021**; deren ursprünglicher Text bleibt als Historie stehen, jeweils mit einer Aktualisierungsnotiz versehen.

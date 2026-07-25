@@ -12,10 +12,14 @@
 **Name:** Lina – VoiceFirst Assistant
 **Weckwort:** "Hey Lina"
 **Art:** Open-Source Android-App (GitHub)
-**Träger:** Gemeinnütziger Verein (Name vorerst nicht öffentlich, intern dokumentiert) – kein kommerzieller Vertrieb
+**Träger:** Vorerst privat vom Entwickler getragen – kein kommerzieller Vertrieb.
+Eine spätere gemeinnützige Trägerschaft ist offen; konkrete Kandidaten werden
+nicht öffentlich benannt (ADR-023).
 **Lizenz:** Apache 2.0 (Code). Modelle können abweichende Lizenzen haben –
-NC-Lizenzen (z.B. CC BY-NC-SA bei OVOS-Piper-Stimmen) sind durch die
-Gemeinnützigkeit nutzbar, aber pro Modell in DECISIONS.md zu dokumentieren.
+NC-Lizenzen (z.B. CC BY-NC-SA bei OVOS-Piper-Stimmen) sind nutzbar, weil Lina
+ein rein nicht-kommerzielles, quelloffenes Projekt ohne kommerziellen Vertrieb
+ist (NonCommercial bezieht sich auf die Art der Nutzung, nicht auf die
+Rechtsform); pro Modell in DECISIONS.md zu dokumentieren.
 **Ziel:** Blinden und sehbehinderten Menschen die selbstständige Teilhabe am Alltag ermöglichen – gesteuert per Sprache durch eine KI-Assistentin namens Lina.
 
 ---
@@ -136,7 +140,7 @@ interface IntentResolver {
 
 **Aktiv:** Piper TTS über **sherpa-onnx** – `PiperTtsEngine`
 - Stimme: `de_DE-dii-high` (OpenVoiceOS, 22kHz, hohe Qualität), Rate 0.9f
-  – Lizenz CC BY-NC-SA 4.0, nutzbar da Träger gemeinnützig (ADR-016)
+  – Lizenz CC BY-NC-SA 4.0, nutzbar da rein nicht-kommerzielles Projekt (ADR-016, ADR-023)
 - Synthese ~0.5–1s pro Satz auf dem Lenovo-Tablet, komplett offline
 - Stimmwechsel: Modell in `assets/piper/` + `AVAILABLE_VOICES` ergänzen;
   zur Laufzeit per Befehl "Stimme <n>" / "nächste Stimme" (Debug-Feature)

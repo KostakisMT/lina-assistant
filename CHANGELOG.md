@@ -17,11 +17,23 @@
 
 ---
 
+## [2026-07-25] Trägerschaft: Projekt läuft als Privatperson
+
+**Was:** Die Doku spiegelt jetzt, dass Lina vorerst **privat vom Entwickler** getragen wird – ohne Träger-Organisation. Neuer `ADR-023`, der ADR-016 (NC-Lizenz), ADR-020 (Proxy/Verantwortung) und ADR-021 (Kostenmodell) ändert; die drei tragen eine Aktualisierungsnotiz, ihr historischer Text bleibt. Alle Verweise auf einen gemeinnützigen Träger in CLAUDE.md, README.md, CONTRIBUTING.md, NOTICE.md, SICHERHEIT.md, WARTUNG.md, PROXY-SPEC.md und der Landingpage sind auf „nicht-kommerzielles, quelloffenes Projekt" bzw. „Entwickler als Verantwortlicher" umgestellt.
+
+**Warum:** Planänderung – das Projekt läuft als Privatperson weiter, mit Bewerbung beim Prototype Fund (der nur an Privatpersonen auszahlt) und offenen Gesprächen über Testausweitung und Finanzierung. Strategisch werden **keine konkreten Organisationen namentlich benannt**; alles bleibt offen, Kandidaten nur intern. Wichtige Klarstellung: die CC-BY-NC-SA-Stimme bleibt nutzbar – NonCommercial hängt an der Art der Nutzung, nicht an der Rechtsform.
+
+**Dateien:** DECISIONS.md (ADR-023 neu, ADR-016/020/021 annotiert), CLAUDE.md, README.md, CONTRIBUTING.md, NOTICE.md, SICHERHEIT.md, WARTUNG.md, PROXY-SPEC.md, docs/index.html, CHANGELOG.md
+
+**Offen:** Tragfähiges Finanzierungsmodell (an künftigen gemeinnützigen Partner geknüpft); AVV mit Anthropic; ob/wann der Proxy kommt.
+
+---
+
 ## [2026-07-21] Sicherheitskonzept angelegt
 
 **Was:** `SICHERHEIT.md` – Schutzbedarf, tatsächliche Datenflüsse, technische und organisatorische Maßnahmen, Geräteverlust, Meldeweg, und ausdrücklich die Grenzen. Enthält eine offene Liste bekannter Lücken statt nur der Stärken. Einwilligung in WARTUNG.md präzisiert.
 
-**Warum:** Der Verein wird mit ADR-020 datenschutzrechtlich Verantwortlicher – eine Dokumentation der Maßnahmen ist nach Art. 32 DSGVO ohnehin Pflicht. Zusätzlich zahlt sie auf die Prototype-Fund-Schwerpunkte Datensicherheit und Software-Infrastruktur ein, wo die Passung laut interner Notizen das größte Bewerbungsrisiko ist.
+**Warum:** Der Betreiber wird mit ADR-020 datenschutzrechtlich verantwortlich – eine Dokumentation der Maßnahmen ist nach Art. 32 DSGVO ohnehin Pflicht. Zusätzlich zahlt sie auf die Prototype-Fund-Schwerpunkte Datensicherheit und Software-Infrastruktur ein, wo die Passung laut interner Notizen das größte Bewerbungsrisiko ist.
 
 **Befund beim Schreiben:** Die Kontaktnamen aus dem Telefonbuch gehen bei **jedem** Konversationsturn an Anthropic – sie stecken im System-Prompt, damit `ClaudeConversation` verhörte Namen zuordnen kann ("Rumfe Boris an"). Die Einwilligung sprach bisher nur allgemein von "freien Fragen" und war damit unvollständig. Telefonnummern und SMS-Inhalte sind nicht betroffen. WARTUNG.md Punkt 2 benennt es jetzt ausdrücklich.
 
@@ -53,13 +65,13 @@
 ## [2026-07-21] Claude-Zugang, Kostenmodell und Modell-Routing entschieden
 
 **Was:** Drei Architekturentscheidungen dokumentiert, kein Code geändert.
-**ADR-020:** Vereins-Proxy statt einkompiliertem API-Key – die App authentifiziert sich mit einem widerrufbaren Gerätetoken, vergeben über einen gesprochenen Pairing-Code.
+**ADR-020:** Proxy statt einkompiliertem API-Key – die App authentifiziert sich mit einem widerrufbaren Gerätetoken, vergeben über einen gesprochenen Pairing-Code.
 **ADR-021:** Freikontingent pro Gerät aus Spenden/Förderung, 1:1-Kostenweitergabe ohne Marge erst darüber. Zahlungsdaten nie in der App.
 **ADR-022:** Gestuftes Modell-Routing (Haiku für kurze Turns, Sonnet 5 nur für echte Gespräche, lokale Ebene 2 reaktivieren, Websuche restriktiver).
 
 **Warum:** ADR-017 ließ offen, wie ein ausgeliefertes Gerät an Claude-Zugang kommt. Ein Key in einer verteilten APK ist kompromittiert; der naheliegende Ausweg „Nutzer meldet sich mit eigenem Claude-Konto an" ist von Anthropic seit Februar 2026 untersagt; und „Bring your own key" scheitert an der Zielgruppe – ein 108-Zeichen-Key ist weder diktierbar noch buchstabierbar. Dazu kam die Skalierungsrechnung: bei 3–12 €/Nutzer/Monat sind 100 Nutzer spendenfinanzierbar, 10.000 nicht.
 
-**Dateien:** DECISIONS.md (ADR-020 bis ADR-022), TODO.md (neuer Abschnitt „Verteilung", LlmIntentResolver-Status korrigiert), WARTUNG.md (Einwilligung Punkt 5: Weg über den Vereinsserver), CHANGELOG.md
+**Dateien:** DECISIONS.md (ADR-020 bis ADR-022), TODO.md (neuer Abschnitt „Verteilung", LlmIntentResolver-Status korrigiert), WARTUNG.md (Einwilligung Punkt 5: Weg über einen vorgeschalteten Server), CHANGELOG.md
 
 **Offen:** Die Kostenschätzung 3–12 € ist ungemessen und enthält die Websuche nicht – `WebSearchTool20260209` wird pro Suche abgerechnet, nicht über Tokens, und ist möglicherweise der größte Einzelposten. Erster Schritt ist deshalb eine Messung, keine Optimierung. Kontingentgrenze erst nach dem Feldtest festlegen. Steuerliche Prüfung (Zweckbetrieb §68 Nr. 4 AO, Umsatzsteuer) steht aus; der Proxy selbst existiert noch nicht.
 

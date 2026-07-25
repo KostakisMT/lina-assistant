@@ -187,6 +187,9 @@
 - [ ] `MAX_HISTORY` senken, Wirkung auf Gesprächsqualität messen
 
 ### Infrastruktur (ADR-020)
+> Zurückgestellt seit ADR-023 (2026-07-25): In der privaten Übergangsphase läuft
+> die App über den eigenen API-Key; der Proxy ist Zukunftsthema und mit ihm eine
+> mögliche gemeinnützige Trägerschaft. Tasks bleiben als Ziel für die Verteilung.
 - [x] Proxy-Spezifikation: Endpunkte, Pairing, Verbrauchszählung, Rate-Limits → `PROXY-SPEC.md` (Entwurf) – 2026-07-21
 - [ ] Offene Fragen aus PROXY-SPEC.md entscheiden (Streaming, Hosting-Standort, Routing in Proxy oder App, Mehrgeräte-Konten, Vorab-Kopplung)
 - [ ] `CredentialStore`-Interface + `EncryptedSharedPreferences` statt `BuildConfig.CLAUDE_API_KEY`

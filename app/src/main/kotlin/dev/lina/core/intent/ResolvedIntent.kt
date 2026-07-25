@@ -38,6 +38,9 @@ sealed class ResolvedIntent {
     ) : ResolvedIntent()
     data object ListReminders : ResolvedIntent()
     data object ClearReminders : ResolvedIntent()
+    /** Dimmt den Bildschirm und senkt die Lautstärke fürs Einschlafen. */
+    data object SleepMode : ResolvedIntent()
+    data object SleepModeOff : ResolvedIntent()
     data object Time : ResolvedIntent()
     data object Stop : ResolvedIntent()
     data class Unknown(val rawInput: String) : ResolvedIntent()

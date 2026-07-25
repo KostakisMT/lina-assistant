@@ -305,6 +305,15 @@
 
 ---
 
+## 🟢 Schlafmodus
+
+- [x] `ResolvedIntent.SleepMode`/`SleepModeOff` + `LocalCommandResolver.resolveSleepMode()` (2026-07-26)
+- [x] `LauncherActivity.enterSleepMode()`/`exitSleepMode()`: Fenster-Helligkeit dimmen (0.04) + Lautstärke 30% (2026-07-26)
+- [x] Unit-Tests für Erkennung ("schlafmodus", "gute nacht", "schlafmodus aus", "wach auf") + Abgrenzung zum bestehenden Hörbuch-Schlaf-Timer (2026-07-26)
+- [x] Am Gerät verifiziert: `dumpsys display` bestätigt Helligkeit 0.04 nach "schlafmodus", Lautstärke springt auf ≈30%, "wach auf" stellt automatische Helligkeit wieder her (2026-07-26)
+
+---
+
 ## 🔵 Phase 2 – Geplant (nicht jetzt)
 
 - [x] STT: Whisper über sherpa-onnx integriert (base int8, de) – 2026-07-02

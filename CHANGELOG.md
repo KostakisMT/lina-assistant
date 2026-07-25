@@ -5,6 +5,39 @@
 
 ---
 
+## [2026-07-26] Feature: Schlafmodus (Bildschirm dimmen + Lautstärke 30%)
+
+**Was:** Neuer Sprachbefehl "Schlafmodus" (auch "gute Nacht", "Schlafenszeit"):
+dimmt die Bildschirmhelligkeit auf einen schwachen Rest (0.04, reine
+Fenster-Helligkeit über `Window.attributes.screenBrightness` – keine
+Systemeinstellung, daher keine `WRITE_SETTINGS`-Berechtigung nötig, da Lina
+ohnehin dauerhaft als Home-App im Vordergrund läuft) und setzt die Lautstärke
+auf 30% (Hörbuch oder System, je nachdem was gerade läuft – dieselbe Weiche wie
+bei "lauter"/"leiser"/den Lautstärke-Sollwerten). Gegenstück "Schlafmodus aus"
+/ "wach auf" / "licht an" stellt die automatische Helligkeitssteuerung wieder
+her (`BRIGHTNESS_OVERRIDE_NONE`).
+
+**Warum:** Nutzerwunsch – abends per Sprachbefehl Bildschirm und Lautstärke
+gleichzeitig für die Nacht herunterfahren, ohne Tablet in die Hand nehmen zu
+müssen.
+
+**Dateien:**
+- `core/intent/ResolvedIntent.kt` – `SleepMode`/`SleepModeOff`
+- `core/intent/LocalCommandResolver.kt` – `resolveSleepMode()`, in die
+  Haupt-Erkennungskette eingehängt (vor `resolveAudiobook`, da sonst unabhängig
+  vom bestehenden Hörbuch-Schlaf-Timer)
+- `ui/launcher/LauncherActivity.kt` – `enterSleepMode()`/`exitSleepMode()`,
+  Dispatch + Debug-Log-Einträge
+
+**Verifiziert am Gerät:** `dumpsys display` zeigt `Display Brightness=0.04`
+nach "schlafmodus" (exakt der gesetzte Wert), `dumpsys audio` bestätigt den
+Lautstärke-Sprung auf Stufe 5/15 (≈30%, Rundung durch die grobe 15-stufige
+Skala des Geräts – dieselbe Rundung wie bei den bestehenden
+Lautstärke-Befehlen). "wach auf" setzt die Helligkeit zurück auf
+automatische Steuerung (Sensor-abhängig, am Gerät auf 0.727 beobachtet).
+
+---
+
 ## [2026-07-26] Feature: Ambiente-UI für Angehörige/Besucher (Statuskugel + Hörbuch-Player) + Querformat
 
 **Was:** Der bisherige Bildschirm war ein reiner Entwickler-Debugscreen

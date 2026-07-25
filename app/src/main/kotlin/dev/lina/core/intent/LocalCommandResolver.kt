@@ -13,6 +13,7 @@ class LocalCommandResolver : IntentResolver {
             ?: resolveSms(normalized)
             ?: resolveDocument(normalized)
             ?: resolveCallControl(normalized)
+            ?: resolveSleepMode(normalized)
             ?: resolveAudiobook(normalized)
             ?: resolveStop(normalized)
     }
@@ -106,6 +107,22 @@ class LocalCommandResolver : IntentResolver {
             ResolvedIntent.RejectCall
         input.matches(Regex(""".*(?:auflegen|beenden|schluss|tschüss).*""")) ->
             ResolvedIntent.HangUp
+        else -> null
+    }
+
+    /**
+     * Schlafmodus: dimmt den Bildschirm und senkt die Lautstärke – anders als
+     * der Hörbuch-Schlaf-Timer (`resolveSleepTimer`, braucht eine Minutenzahl)
+     * eine sofortige Umschaltung ohne Zeitangabe. "aus"/"beenden" zuerst
+     * geprüft, damit "Schlafmodus aus" nicht als Aktivierung durchgeht.
+     */
+    private fun resolveSleepMode(input: String): ResolvedIntent? = when {
+        input.matches(Regex(""".*schlafmodus\s+(?:aus|beenden|deaktivieren)\b.*""")) ||
+            input.matches(Regex(""".*\b(?:wach\s*auf|aufwachen|licht an)\b.*""")) ->
+            ResolvedIntent.SleepModeOff
+        input.matches(Regex(""".*\b(?:schlafmodus|schlafenszeit)\b.*""")) ||
+            input.matches(Regex(""".*\bgute\s+nacht\b.*""")) ->
+            ResolvedIntent.SleepMode
         else -> null
     }
 

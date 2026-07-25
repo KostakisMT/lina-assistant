@@ -149,6 +149,26 @@ class LocalCommandResolverTest {
         assertEquals(ResolvedIntent.SleepTimer(20), resolver.resolve("timer 20 min"))
     }
 
+    @Test
+    fun `Schlafmodus aktivieren`() {
+        assertEquals(ResolvedIntent.SleepMode, resolver.resolve("schlafmodus"))
+        assertEquals(ResolvedIntent.SleepMode, resolver.resolve("aktiviere den schlafmodus"))
+        assertEquals(ResolvedIntent.SleepMode, resolver.resolve("gute nacht"))
+        assertEquals(ResolvedIntent.SleepMode, resolver.resolve("schlafenszeit"))
+    }
+
+    @Test
+    fun `Schlafmodus beenden`() {
+        assertEquals(ResolvedIntent.SleepModeOff, resolver.resolve("schlafmodus aus"))
+        assertEquals(ResolvedIntent.SleepModeOff, resolver.resolve("wach auf"))
+        assertEquals(ResolvedIntent.SleepModeOff, resolver.resolve("licht an"))
+    }
+
+    @Test
+    fun `Schlafmodus verwechselt sich nicht mit dem Schlaf-Timer`() {
+        assertEquals(ResolvedIntent.SleepTimer(20), resolver.resolve("schlaf timer 20 min"))
+    }
+
     // ------------------------------------------------------------- Kapitel
 
     @Test

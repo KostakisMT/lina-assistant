@@ -427,3 +427,36 @@ Letterboxing auf den Screenshots.
 - Kein Rollback-Pfad für Hochformat vorgesehen – falls das Tablet doch einmal
   hochkant genutzt wird, dreht sich die App nicht mit (`sensorLandscape` erlaubt
   nur die beiden Querformat-Rotationen).
+
+---
+
+## ADR-028: Schlafmodus über Fenster-Helligkeit statt Systemeinstellung
+**Datum:** 2026-07-26 | **Status:** Akzeptiert
+
+**Kontext:** Nutzerwunsch nach einem Sprachbefehl, der abends Bildschirm und
+Lautstärke gemeinsam für die Nacht herunterfährt. Eine echte Änderung der
+Systemhelligkeit (`Settings.System.SCREEN_BRIGHTNESS`) würde die Berechtigung
+`WRITE_SETTINGS` voraussetzen, die eine Nutzerfreigabe über eine separate
+Systemeinstellungsseite erfordert (kein normaler Laufzeit-Dialog) – ein hoher
+Reibungsaufwand für ein Feature, das nur wirkt, während Lina ohnehin läuft.
+
+**Entscheidung:** Der Schlafmodus setzt `Window.attributes.screenBrightness`
+der eigenen `LauncherActivity` auf einen niedrigen Festwert (0.04) statt die
+Systemeinstellung zu ändern. Das ist eine reine Fenster-Eigenschaft ohne
+Sonderberechtigung, wirkt aber genauso auf die tatsächliche Display-Helligkeit
+(am Gerät über `dumpsys display` bestätigt: `Display Brightness=0.04`), weil
+Lina als Home-App dauerhaft im Vordergrund läuft. "Schlafmodus aus"/"wach auf"
+setzt `screenBrightness` auf `BRIGHTNESS_OVERRIDE_NONE` zurück und übergibt die
+Kontrolle wieder an die automatische Helligkeitssteuerung des Geräts. Die
+Lautstärke auf 30% nutzt dieselbe bestehende Weiche (Hörbuch vs. System) wie
+die übrigen Lautstärke-Befehle – keine neue Logik dafür.
+
+**Konsequenzen:**
+- Funktioniert ohne zusätzlichen Berechtigungsdialog, sofort nutzbar.
+- Der Effekt gilt nur, solange `LauncherActivity` im Vordergrund ist – verlässt
+  der Nutzer die App (praktisch nie, da Lina die Home-App ist), greift die
+  normale Systemhelligkeit wieder. Für dieses Projekt kein Problem, da Lina
+  bewusst immer im Vordergrund läuft.
+- Kein Persistenzzustand: Ein Neustart der App (oder des Geräts) hebt die
+  Dimmung automatisch auf, ganz ohne expliziten "wach auf"-Befehl – gewollt,
+  da niemand den Schlafmodus über einen Neustart hinweg "vergessen" soll.

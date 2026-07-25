@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -807,6 +808,28 @@ class LauncherActivity : ComponentActivity() {
     }
 
     /**
+     * Schlafmodus: dimmt nur die Helligkeit des eigenen Fensters (kein
+     * WRITE_SETTINGS nötig, da keine Systemeinstellung verändert wird – Lina
+     * läuft ohnehin dauerhaft im Vordergrund als Home-App) und senkt die
+     * Lautstärke auf einen ruhigen Pegel. Trifft Hörbuch oder System, je
+     * nachdem was gerade läuft – dieselbe Weiche wie bei "lauter"/"leiser".
+     */
+    private fun enterSleepMode() {
+        window.attributes = window.attributes.apply { screenBrightness = SLEEP_MODE_BRIGHTNESS }
+        if (audiobookManager?.isPlaying == true) {
+            audiobookManager?.setVolume(SLEEP_MODE_VOLUME_PERCENT)
+        } else {
+            setSystemVolume(SLEEP_MODE_VOLUME_PERCENT)
+        }
+    }
+
+    private fun exitSleepMode() {
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
+    }
+
+    /**
      * Debug: Foto aufnehmen und speichern, damit per adb pull geprüft werden kann,
      * ob der Kreppband-Rahmen formatfüllend im Bild der Rückkamera liegt.
      * Wird nur für die Einrichtung gebraucht – reguläres Vorlesen speichert nichts.
@@ -1372,6 +1395,14 @@ class LauncherActivity : ComponentActivity() {
             val m = now.get(java.util.Calendar.MINUTE)
             if (m == 0) "Es ist $h Uhr." else "Es ist $h Uhr $m."
         }
+        is ResolvedIntent.SleepMode -> {
+            enterSleepMode()
+            "Gute Nacht. Schlafmodus aktiviert."
+        }
+        is ResolvedIntent.SleepModeOff -> {
+            exitSleepMode()
+            "Schlafmodus beendet."
+        }
         is ResolvedIntent.Stop -> {
             ttsEngine?.stop()
             newsReader?.stop()
@@ -1416,6 +1447,8 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.SetReminderAt -> "SetReminderAt(${intent.isoZeit})"
         is ResolvedIntent.ListReminders -> "ListReminders"
         is ResolvedIntent.ClearReminders -> "ClearReminders"
+        is ResolvedIntent.SleepMode -> "SleepMode"
+        is ResolvedIntent.SleepModeOff -> "SleepModeOff"
         is ResolvedIntent.Time -> "Time"
         is ResolvedIntent.Stop -> "Stop"
         is ResolvedIntent.Unknown -> "Unknown"
@@ -1439,6 +1472,10 @@ class LauncherActivity : ComponentActivity() {
         private const val DEBUG_FILE_RETENTION_DAYS = 7L
         // Transiente Fehleranzeige der Statuskugel – danach zurück zu Idle
         private const val ERROR_DISPLAY_MS = 4_000L
+        // Fenster-Helligkeit im Schlafmodus (0f wäre komplett schwarz/unlesbar
+        // für Angehörige, die kurz nachsehen – ein schwacher Rest bleibt sichtbar)
+        private const val SLEEP_MODE_BRIGHTNESS = 0.04f
+        private const val SLEEP_MODE_VOLUME_PERCENT = 30
         private const val PREFS = "lina"
         private const val PREF_ONBOARDING_DONE = "onboarding_done"
         private const val PREF_INTERESTS = "user_interests"

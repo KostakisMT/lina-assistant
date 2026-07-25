@@ -370,3 +370,60 @@ Zielgröße: Faktor 3–5 gegenüber heute.
 - Behebt den Kernfall (jeder Gesprächsturn) vollständig – am Gerät verifiziert, kein `SecurityException`-Treffer mehr im Log.
 - Restrisiko bleibt: ein echter Prozess-Tod (OOM-Kill) im Hintergrund bräuchte weiterhin einen vollständigen `WakeWordWatchdog`-Neustart, der theoretisch noch scheitern kann, falls die App exakt dann im Hintergrund ist. Deutlich seltener als der behobene Fall, nicht weiter verfolgt.
 - Nebeneffekt: Pause/Resume ist schneller als der vorherige volle Stop/Neustart, da die ONNX-Modelle geladen bleiben.
+
+---
+
+## ADR-027: Ambiente-UI (Statuskugel + Hörbuch-Player) additiv statt als Umbau; Querformat als Standardausrichtung
+**Datum:** 2026-07-26 | **Status:** Akzeptiert
+
+**Kontext:** Der Bildschirm war bisher ein reiner Entwickler-Debugscreen, für den
+blinden Primärnutzer ohnehin irrelevant. Angehörige/Besucher sollten stattdessen
+sehen können, was Lina gerade tut, und optional ein laufendes Hörbuch bedienen
+können. Es existierte kein zentraler Aktivitätszustand (nur ~18 verstreute
+`statusText`-Zuweisungen) und keine Möglichkeit, "spricht gerade" abzufragen
+(`TtsEngine` kannte das Konzept nicht). Außerdem zeigte sich beim Verifizieren am
+Gerät, dass das Tablet praktisch immer im Querformat liegt (Ständer, Wohnzimmer),
+die App aber auf `screenOrientation="portrait"` fixiert war – sichtbares
+Letterboxing auf den Screenshots.
+
+**Entscheidung:**
+- Rein additives Zustandsmodell (`LinaActivity` sealed class) neben dem
+  bestehenden `statusText`, statt eines Umbaus – jede der ~18 bestehenden
+  Zuweisungsstellen bekommt eine zusätzliche Zeile, kein bestehendes Verhalten
+  ändert sich.
+- `TtsEngine.isSpeaking(): Boolean` neu im Interface, per Polling (250ms) aus der
+  UI abgefragt statt eines neuen Callback-Mechanismus – kein Push-System für
+  TTS-Zustand im Projekt vorhanden, ein `@Volatile`-Boolean-Read ist praktisch
+  kostenlos.
+- Kein ViewModel/StateFlow eingeführt – im ganzen Projekt existiert bisher keine
+  solche Schicht; für zwei Screens mit bescheidenen Echtzeit-Anforderungen
+  (Kugel-Phase, 1x/s Hörbuch-Fortschritt) wäre das unpassend viel neue
+  Architektur. Stattdessen `LaunchedEffect`+`delay`-Polling, exakt wie an anderen
+  Stellen im Projekt bereits üblich.
+- Statuskugel bewusst rein dekorativ (kein Touch-Target), Stil schlicht/flach
+  ohne Glow/Blur (Performance auf dem Lenovo-Tablet), Zustände nur über
+  Bewegungscharakter unterschieden, nicht über neue Farben (bleibt bei
+  Schwarz/Weiß/Gold).
+- Debug-Eingabefeld/Log komplett aus der UI entfernt statt nur versteckt – der
+  `dev.lina.DEBUG_INPUT`-Broadcast-Mechanismus bleibt unabhängig davon
+  funktionsfähig, da der `BroadcastReceiver` `processDebugInput()` direkt
+  aufruft.
+- `android:screenOrientation` von `portrait` auf `sensorLandscape` geändert
+  (statt festem `landscape`), damit beide Querformat-Rotationen erlaubt sind,
+  aber nie auf Hochformat zurückgefallen wird. Layout von `Column` auf `Row`
+  umgebaut: Kugel+Status und Hörbuch-Player nebeneinander statt untereinander.
+
+**Konsequenzen:**
+- Angehörige/Besucher sehen den Aktivitätszustand und können ein Hörbuch direkt
+  bedienen, ohne dass sich am primären Sprachinterface etwas ändert.
+- Fand nebenbei einen echten Bug: `LinaTypography.labelLarge` hatte fest Gold als
+  Textfarbe hinterlegt, wodurch Button-Beschriftungen auf dem goldenen
+  `Button`-Hintergrund unsichtbar waren (Gold auf Gold) – behoben, indem
+  `labelLarge` keine feste Farbe mehr vorgibt und stattdessen den vom jeweiligen
+  Container gesetzten `LocalContentColor` erbt.
+- Jede neue Bildschirmausgabe (z.B. künftige Screens) muss diese Falle im Blick
+  behalten: Text-Styles mit fest codierter Farbe sind nur für direkt auf dem
+  Hintergrund sitzenden Text sicher, nicht für Text auf farbigen Containern.
+- Kein Rollback-Pfad für Hochformat vorgesehen – falls das Tablet doch einmal
+  hochkant genutzt wird, dreht sich die App nicht mit (`sensorLandscape` erlaubt
+  nur die beiden Querformat-Rotationen).

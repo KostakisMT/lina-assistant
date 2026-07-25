@@ -5,6 +5,80 @@
 
 ---
 
+## [2026-07-26] Feature: Ambiente-UI für Angehörige/Besucher (Statuskugel + Hörbuch-Player) + Querformat
+
+**Was:** Der bisherige Bildschirm war ein reiner Entwickler-Debugscreen
+(Texteingabe + Log). Neu:
+- `LinaActivity` (sealed class: `Loading/Idle/Listening/Thinking/Speaking/Error`)
+  als additives Zustandsmodell neben dem bestehenden `statusText` – an allen ~18
+  bestehenden Zuweisungsstellen in `LauncherActivity.kt` ergänzt, kein
+  bestehendes Verhalten geändert.
+- `TtsEngine.isSpeaking(): Boolean` neu im Interface (vorher nur in
+  `PiperTtsEngine` vorhanden, nicht über die Abstraktion erreichbar);
+  `AndroidTtsEngine` bekommt eine eigene `@Volatile`-Implementierung. Wird von
+  der UI alle 250ms gepollt (kein Push-Mechanismus im Projekt vorhanden), hat
+  Vorrang vor jedem `linaActivity`-Wert, solange `true`.
+- `LinaOrb` (`ui/components/LinaOrb.kt`): rein dekorative, animierte
+  Statuskugel – unterscheidet Zustände über Bewegungscharakter (Puls, Ringe,
+  rotierende Bögen, Sinus-Wobble, einmaliges Wackeln bei Fehlern), bewusst
+  schlicht/flach ohne Glow/Blur, bleibt bei Schwarz/Weiß/Gold.
+- `AudiobookPlayerPanel` (`ui/components/AudiobookPlayerPanel.kt`): sichtbare
+  Steuerung fürs Hörbuch für Angehörige – Titel/Autor/Kapitel, Fortschrittsbalken
+  + mm:ss-Anzeige, Steuerzeile (Zurück/-30s/Pause-Weiter/Vor), Lautstärke
+  (Leiser/Lauter). Jeder Button ruft eine bestehende `AudiobookManager`-Methode
+  direkt auf. Neu dafür: `AudiobookManager.currentStatus()` liest Titel, Autor,
+  Kapitel, Position/Dauer, Play-Status – reiner Lesezugriff, keine neue Logik.
+  Erscheint nur, wenn tatsächlich ein Buch geladen ist (auch pausiert).
+- Debug-Eingabefeld, "Senden"-Button und Log-Text komplett aus der UI entfernt
+  (Nutzerentscheidung: kein Bedarf mehr, seit der `dev.lina.DEBUG_INPUT`-Broadcast
+  headless funktioniert). `processDebugInput()` und der Broadcast-Empfänger
+  bleiben unverändert – nur die sichtbaren Widgets sind weg.
+- **Querformat:** Tablet liegt in der Praxis fast immer im Querformat (Ständer,
+  Wohnzimmer). `android:screenOrientation` von `portrait` auf `sensorLandscape`
+  geändert; das Compose-Layout ist jetzt ein `Row` statt `Column` – Kugel+Status
+  links, Hörbuch-Player rechts (nur wenn ein Buch geladen ist), sonst zentriert
+  über die volle Breite. Vorher: fixiertes Hochformat auf physisch querliegendem
+  Gerät führte zu sichtbarem Letterboxing (System-Hintergrund links/rechts).
+
+**Bugfix währenddessen gefunden:** `LinaTypography.labelLarge` (Button-Beschriftungen)
+hatte fest `color = LinaGold` hinterlegt – auf dem goldenen `Button`-Hintergrund
+des neuen Players war der Text dadurch komplett unsichtbar (Gold auf Gold), obwohl
+`ButtonDefaults.buttonColors(contentColor = onPrimary)` korrekt gesetzt war: die
+explizite Farbe im `TextStyle` hat den vom Button bereitgestellten `LocalContentColor`
+überschrieben. Fix: `labelLarge` ohne feste Farbe – Button-Text erbt jetzt
+`onPrimary` (Schwarz auf Gold), am Gerät bestätigt. Betraf vermutlich auch den
+inzwischen entfernten Debug-"Senden"-Button.
+
+**Warum:** Angehörige und Besucher sollen sehen können, was Lina gerade tut, und
+bei Bedarf ein laufendes Hörbuch selbst bedienen können – ohne dass sich am
+primären Sprachinterface für den blinden Nutzer etwas ändert (Audio bleibt
+primär, die Kugel ist rein dekorativ ohne Touch-Target).
+
+**Dateien:**
+- Neu: `ui/launcher/LinaActivity.kt`, `ui/components/LinaOrb.kt`,
+  `ui/components/AudiobookPlayerPanel.kt`
+- Geändert: `ui/launcher/LauncherActivity.kt` (Zustandsfeld, ~18 Zuweisungen,
+  Compose-Baum auf `Row` umgebaut, Debug-Panel entfernt), `ui/components/LinaTheme.kt`
+  (labelLarge-Fix), `core/tts/TtsEngine.kt`, `core/tts/AndroidTtsEngine.kt`,
+  `core/tts/PiperTtsEngine.kt` (`isSpeaking()`), `feature/audiobook/AudiobookManager.kt`
+  (`currentStatus()`), `AndroidManifest.xml` (`screenOrientation`), `app/build.gradle.kts`
+  (`androidx.compose.animation:animation` explizit)
+
+**Verifiziert am Gerät:** Idle/Thinking/Listening-Zustände der Kugel sichtbar und
+unterscheidbar; Hörbuch-Player erscheint bei geladenem Buch, alle Buttons per
+Touch funktionsfähig (Pause/Weiter-Toggle bestätigt), Fortschrittsbalken und
+Zeitanzeige aktualisieren sich live; Querformat füllt den Bildschirm vollständig,
+kein Letterboxing mehr. Speaking-Zustand der Kugel nicht separat per Screenshot
+eingefangen (kurze Antworten liefen durch, bevor der Screenshot griff) – Logik
+ist aber identisch zu den anderen Zuständen und über `isSpeaking()`-Polling
+unabhängig getestet.
+
+**Offen:** Performance-Check (Kugel-Animation parallel zu Piper-Synthese unter
+Dauerlast) nicht gesondert gemessen, aber während des Tests keine sichtbaren
+Ruckler.
+
+---
+
 ## [2026-07-26] Feature: Direkte Lautstärke-Sollwerte + Stummschalten
 
 **Was:** Ergänzt die relative Lautstärkeregelung ("lauter"/"leiser") um direkte

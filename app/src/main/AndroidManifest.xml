@@ -33,7 +33,7 @@
             android:name=".ui.launcher.LauncherActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

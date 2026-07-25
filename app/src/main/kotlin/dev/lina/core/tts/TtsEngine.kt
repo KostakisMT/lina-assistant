@@ -8,4 +8,6 @@ interface TtsEngine {
     fun stop()
     fun setRate(rate: Float)
     fun shutdown()
+    /** true, solange gerade Text ausgegeben wird oder noch in der Warteschlange steht. */
+    fun isSpeaking(): Boolean
 }

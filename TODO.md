@@ -289,6 +289,22 @@
 
 ---
 
+## 🟢 Ambiente-UI für Angehörige/Besucher + Querformat
+
+- [x] `TtsEngine.isSpeaking()` im Interface + `AndroidTtsEngine`-Implementierung (2026-07-26)
+- [x] `LinaActivity`-Zustandsmodell (Loading/Idle/Listening/Thinking/Speaking/Error) (2026-07-26)
+- [x] `AudiobookManager.currentStatus()` (2026-07-26)
+- [x] `LinaOrb` – dekorative Statuskugel, schlicht/flach, Schwarz/Weiß/Gold (2026-07-26)
+- [x] `AudiobookPlayerPanel` – sichtbare Hörbuch-Steuerung für Angehörige (2026-07-26)
+- [x] Debug-Eingabefeld/Log aus der UI entfernt (Broadcast-Mechanismus bleibt unverändert) (2026-07-26)
+- [x] Querformat: `screenOrientation="sensorLandscape"` + Layout als `Row` (Kugel+Status links, Player rechts) (2026-07-26)
+- [x] **Bugfix:** `labelLarge`-Textstil hatte fest Gold hinterlegt → Button-Beschriftungen auf goldenen Buttons unsichtbar (Gold auf Gold), behoben (2026-07-26)
+- [x] Am Gerät verifiziert: Idle/Thinking/Listening sichtbar unterscheidbar, Player erscheint bei geladenem Buch, alle Buttons per Touch funktionsfähig, Querformat füllt Bildschirm ohne Letterboxing (2026-07-26)
+- [ ] Speaking-Zustand der Kugel noch nicht per Screenshot festgehalten (Logik aber identisch/mitgetestet über `isSpeaking()`-Polling)
+- [ ] Performance-Check unter Dauerlast (Kugel-Animation + Piper-Synthese gleichzeitig) nicht gesondert gemessen
+
+---
+
 ## 🔵 Phase 2 – Geplant (nicht jetzt)
 
 - [x] STT: Whisper über sherpa-onnx integriert (base int8, de) – 2026-07-02

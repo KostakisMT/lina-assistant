@@ -17,28 +17,25 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.lina.core.accessibility.LinaAccessibilityService
 import dev.lina.core.audio.Earcons
@@ -71,7 +68,11 @@ import dev.lina.feature.onboarding.AccessibilityGuide
 import dev.lina.feature.onboarding.VoiceOnboarding
 import dev.lina.feature.onboarding.BatteryWhitelistGuide
 import dev.lina.feature.onboarding.PermissionsGuide
+import dev.lina.ui.components.AudiobookPlayerPanel
+import dev.lina.ui.components.LinaOrb
 import dev.lina.ui.components.LinaTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 class LauncherActivity : ComponentActivity() {
 
@@ -90,6 +91,8 @@ class LauncherActivity : ComponentActivity() {
     private var audiobookManager: AudiobookManager? = null
     private var reminderManager: ReminderManager? = null
     private var statusText by mutableStateOf("Lina startet…")
+    /** Treibt die Statuskugel (LinaOrb) für Angehörige/Besucher – rein additiv neben [statusText]. */
+    private var linaActivity by mutableStateOf<LinaActivity>(LinaActivity.Loading)
     private var debugInput by mutableStateOf("")
     private var debugLog by mutableStateOf("")
     private var linaReady by mutableStateOf(false)
@@ -160,65 +163,60 @@ class LauncherActivity : ComponentActivity() {
 
         setContent {
             LinaTheme {
-                Column(
+                // "Spricht gerade" lässt sich nicht aus linaActivity ableiten (kein
+                // Aufrufpunkt setzt das) – separat gepollt, hat Vorrang vor jedem
+                // anderen Zustand, solange es zutrifft.
+                var isSpeaking by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    while (isActive) {
+                        isSpeaking = ttsEngine?.isSpeaking() == true
+                        delay(250)
+                    }
+                }
+                val resolvedActivity = if (isSpeaking) LinaActivity.Speaking else linaActivity
+
+                // Gerät liegt fast immer im Querformat (Lenovo-Tablet, Ständer) –
+                // Kugel+Status und Player nebeneinander statt untereinander, damit
+                // die Breite genutzt wird statt nur ein schmaler Mittelstreifen.
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
-                        .padding(32.dp)
-                        .verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Top,
+                        .padding(32.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Spacer(modifier = Modifier.height(48.dp))
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    val currentAudiobookManager = audiobookManager
+                    val showPlayer = linaReady && currentAudiobookManager != null &&
+                        currentAudiobookManager.currentStatus() != null
 
-                    if (linaReady) {
-                        Spacer(modifier = Modifier.height(32.dp))
-                        OutlinedTextField(
-                            value = debugInput,
-                            onValueChange = { debugInput = it },
-                            label = { Text("Sprachbefehl simulieren") },
-                            placeholder = { Text("z.B. \"Ruf Boris an\"") },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.bodyLarge,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = MaterialTheme.colorScheme.onBackground,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onBackground,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onBackground,
-                                focusedLabelColor = MaterialTheme.colorScheme.primary,
-                                unfocusedLabelColor = MaterialTheme.colorScheme.onBackground,
-                                cursorColor = MaterialTheme.colorScheme.primary,
-                            ),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = { processDebugInput() }),
-                            singleLine = true,
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        LinaOrb(activity = resolvedActivity)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center,
                         )
+                    }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { processDebugInput() },
+                    if (showPlayer) {
+                        Spacer(modifier = Modifier.width(32.dp))
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .sizeIn(minHeight = 72.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                            ),
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.Center,
                         ) {
-                            Text("Senden", style = MaterialTheme.typography.labelLarge)
-                        }
-
-                        if (debugLog.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text(
-                                text = debugLog,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                            AudiobookPlayerPanel(audiobookManager = currentAudiobookManager!!)
                         }
                     }
                 }
@@ -256,6 +254,7 @@ class LauncherActivity : ComponentActivity() {
         Thread({ cleanupOldDebugFiles() }, "debug-cleanup").start()
 
         statusText = "Linas Stimme wird geladen…"
+        linaActivity = LinaActivity.Loading
         val piper = PiperTtsEngine(applicationContext)
         piperEngine = piper
         piper.initialize(
@@ -298,6 +297,7 @@ class LauncherActivity : ComponentActivity() {
         if (voicePipelineStarted || !hasMicPermission()) return
         voicePipelineStarted = true
         statusText = "Spracherkennung wird geladen…"
+        linaActivity = LinaActivity.Loading
 
         val onSttReady: () -> Unit = {
             runOnUiThread {
@@ -309,6 +309,7 @@ class LauncherActivity : ComponentActivity() {
                 } else {
                     WakeWordService.start(this)
                     statusText = "Lina bereit – sag \"$WAKE_WORD\""
+                    linaActivity = LinaActivity.Idle
                     ttsEngine?.speak(
                         "Ich höre jetzt auf das Weckwort $WAKE_WORD.",
                         TtsPriority.NORMAL,
@@ -325,7 +326,10 @@ class LauncherActivity : ComponentActivity() {
             onReady = onSttReady,
             onError = {
                 // Fallback auf Vosk, damit die Sprachsteuerung nie ganz ausfällt
-                runOnUiThread { statusText = "Whisper fehlgeschlagen – lade Vosk…" }
+                runOnUiThread {
+                    statusText = "Whisper fehlgeschlagen – lade Vosk…"
+                    linaActivity = LinaActivity.Loading
+                }
                 val vosk = VoskSttEngine(applicationContext)
                 sttEngine = vosk
                 vosk.initialize(
@@ -334,6 +338,8 @@ class LauncherActivity : ComponentActivity() {
                         runOnUiThread {
                             voicePipelineStarted = false
                             statusText = "Spracherkennung fehlgeschlagen: ${e.message}"
+                            linaActivity = LinaActivity.Error
+                            mainHandler.postDelayed({ linaActivity = LinaActivity.Idle }, ERROR_DISPLAY_MS)
                             ttsEngine?.speak(
                                 "Die Spracherkennung konnte nicht geladen werden.",
                                 TtsPriority.HIGH,
@@ -362,6 +368,7 @@ class LauncherActivity : ComponentActivity() {
             // Erzählstimme zu und schickt Buchtext als vermeintlichen Befehl weiter
             duckedAudiobook = audiobookManager?.duckForListening() == true
             statusText = "Ich höre…"
+            linaActivity = LinaActivity.Listening
             ttsEngine?.speak("Ja?", TtsPriority.INTERRUPT)
 
             var handled = false
@@ -403,6 +410,7 @@ class LauncherActivity : ComponentActivity() {
         if (onboarding != null) return@Runnable
         WakeWordService.resumeListening(this)
         statusText = "Lina bereit – sag \"$WAKE_WORD\""
+                    linaActivity = LinaActivity.Idle
     }
 
     private fun resumeWakeWordListening() {
@@ -486,6 +494,7 @@ class LauncherActivity : ComponentActivity() {
 
         linaReady = true
         statusText = "Lina bereit"
+        linaActivity = LinaActivity.Idle
         tts.speak("Lina ist bereit.", TtsPriority.HIGH)
     }
 
@@ -514,6 +523,7 @@ class LauncherActivity : ComponentActivity() {
         cancelWakeResume()
         WakeWordService.pauseListening(this)
         statusText = "Ersteinrichtung läuft…"
+        linaActivity = LinaActivity.Loading
         val flow = VoiceOnboarding(
             tts = tts,
             stt = sttEngine as? WhisperSttEngine,
@@ -532,6 +542,7 @@ class LauncherActivity : ComponentActivity() {
             // Claude mit den frischen Interessen neu aufsetzen
             initClaude(ContactRepository(this))
             statusText = "Lina bereit – sag \"$WAKE_WORD\""
+                    linaActivity = LinaActivity.Idle
             resumeWakeWordListening()
         }
     }
@@ -639,6 +650,7 @@ class LauncherActivity : ComponentActivity() {
             quietNeeded = if (newsMode) 6 else 1,
             onReady = {
                 statusText = if (newsMode) "Nachrichten – ich höre…" else "Gespräch – ich höre…"
+                linaActivity = LinaActivity.Listening
                 Earcons.go()
                 var handled = false
                 val timeout = Runnable {
@@ -864,6 +876,7 @@ class LauncherActivity : ComponentActivity() {
         // "Alles vorlesen" nutzt das bereits vorhandene Bild – kein neues Foto
         if (verbatimOf != null) {
             statusText = "Lese den ganzen Text…"
+            linaActivity = LinaActivity.Thinking
             Earcons.thinking()
             Thread({
                 val reply = conversation.readDocument(verbatimOf, verbatim = true)
@@ -873,6 +886,7 @@ class LauncherActivity : ComponentActivity() {
         }
 
         statusText = "Ich fotografiere das Dokument…"
+        linaActivity = LinaActivity.Thinking
         ttsEngine?.speak("Einen Moment, ich schaue mir das an.", TtsPriority.INTERRUPT)
         val camera = documentCamera ?: DocumentCamera(this).also { documentCamera = it }
 
@@ -890,6 +904,7 @@ class LauncherActivity : ComponentActivity() {
                 }
                 android.util.Log.d("LinaLauncher", "Dokument-Foto: ${bytes.size / 1024} kB")
                 statusText = "Ich lese das Dokument…"
+                linaActivity = LinaActivity.Thinking
                 Earcons.thinking()
                 Thread({
                     val reply = conversation.readDocument(bytes)
@@ -943,6 +958,7 @@ class LauncherActivity : ComponentActivity() {
         waitForSilenceThenRun(
             onReady = {
                 statusText = "Dokument – ich höre…"
+                linaActivity = LinaActivity.Listening
                 Earcons.go()
                 var handled = false
                 val timeout = Runnable {
@@ -1019,6 +1035,7 @@ class LauncherActivity : ComponentActivity() {
     private fun askClaude(input: String, freshWakeWord: Boolean = false) {
         val conversation = claude ?: return
         statusText = "Lina denkt nach…"
+        linaActivity = LinaActivity.Thinking
         Earcons.thinking()
         Thread {
             val reply = conversation.ask(input, freshWakeWord)
@@ -1042,6 +1059,7 @@ class LauncherActivity : ComponentActivity() {
                     newsDo -> openFollowUpWindow(newsMode = true)
                     else -> {
                         statusText = "Lina bereit – sag \"$WAKE_WORD\""
+                    linaActivity = LinaActivity.Idle
                         resumeWakeWordListening()
                     }
                 }
@@ -1056,6 +1074,7 @@ class LauncherActivity : ComponentActivity() {
     private fun startDebugRecording() {
         WakeWordService.pauseListening(this)
         statusText = "Aufnahme läuft…"
+        linaActivity = LinaActivity.Listening
         ttsEngine?.speak(
             "Aufnahme startet und läuft dreißig Sekunden. Sprich nach dem Ton, " +
                 "mit kurzen Pausen zwischen den Sätzen.",
@@ -1118,6 +1137,7 @@ class LauncherActivity : ComponentActivity() {
                 android.util.Log.d("LinaLauncher", "Aufnahme gespeichert: ${file.absolutePath}")
                 runOnUiThread {
                     statusText = "Aufnahme gespeichert"
+                    linaActivity = LinaActivity.Idle
                     ttsEngine?.speak("Aufnahme beendet, danke.", TtsPriority.HIGH)
                     resumeWakeWordListening()
                 }
@@ -1145,11 +1165,13 @@ class LauncherActivity : ComponentActivity() {
         if (selector.isEmpty()) return false
 
         statusText = "Stimme wird gewechselt…"
+        linaActivity = LinaActivity.Loading
         piper.switchVoice(
             selector,
             onDone = { voice ->
                 runOnUiThread {
                     statusText = "Stimme: $voice"
+                    linaActivity = LinaActivity.Idle
                     debugLog = "Stimme gewechselt: $voice\n\n$debugLog"
                     piper.speak(
                         "Hallo, ich bin Lina. So klingt meine Stimme. " +
@@ -1161,6 +1183,8 @@ class LauncherActivity : ComponentActivity() {
             onError = {
                 runOnUiThread {
                     statusText = "Stimmwechsel fehlgeschlagen"
+                    linaActivity = LinaActivity.Error
+                    mainHandler.postDelayed({ linaActivity = LinaActivity.Idle }, ERROR_DISPLAY_MS)
                     ttsEngine?.speak("Diese Stimme kenne ich nicht.", TtsPriority.HIGH)
                 }
             },
@@ -1413,6 +1437,8 @@ class LauncherActivity : ComponentActivity() {
         // Whisper ist nicht-streamend: bis zu 10s Aufnahme + Transkriptionszeit
         private const val STT_TIMEOUT_MS = 30_000L
         private const val DEBUG_FILE_RETENTION_DAYS = 7L
+        // Transiente Fehleranzeige der Statuskugel – danach zurück zu Idle
+        private const val ERROR_DISPLAY_MS = 4_000L
         private const val PREFS = "lina"
         private const val PREF_ONBOARDING_DONE = "onboarding_done"
         private const val PREF_INTERESTS = "user_interests"

@@ -35,7 +35,7 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
      * true solange Lina spricht, Ansagen anstehen oder die Wiedergabe gerade
      * erst endete (Weckwort-Erkennung hinkt ~1s hinterher – Echo-Unterdrückung).
      */
-    fun isSpeaking(): Boolean =
+    override fun isSpeaking(): Boolean =
         playing || queue.isNotEmpty() ||
             System.currentTimeMillis() - lastPlaybackEnd < ECHO_GUARD_MS
 

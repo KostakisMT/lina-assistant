@@ -13,6 +13,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
     private var ready = false
     private val queue = LinkedList<Triple<String, TtsPriority, (() -> Unit)?>>()
     private val pendingCallbacks = mutableMapOf<String, () -> Unit>()
+    @Volatile private var speaking = false
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
@@ -31,6 +32,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
     }
 
     private fun fireCallback(utteranceId: String?) {
+        speaking = false
         utteranceId ?: return
         pendingCallbacks.remove(utteranceId)?.invoke()
     }
@@ -48,6 +50,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
         }
         val id = UUID.randomUUID().toString()
         if (onDone != null) pendingCallbacks[id] = onDone
+        speaking = true
         tts.speak(text, queueMode, null, id)
     }
 
@@ -58,6 +61,8 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
     override fun setRate(rate: Float) {
         tts.setSpeechRate(rate)
     }
+
+    override fun isSpeaking(): Boolean = speaking
 
     override fun shutdown() {
         tts.stop()

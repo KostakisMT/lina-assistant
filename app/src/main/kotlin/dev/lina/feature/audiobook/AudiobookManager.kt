@@ -171,6 +171,33 @@ class AudiobookManager(
 
     val isPlaying: Boolean get() = player.isPlaying
 
+    /** Für die visuelle Player-Anzeige (Angehörige/Besucher) – reiner Lesezugriff. */
+    data class AudiobookStatus(
+        val title: String,
+        val author: String,
+        val chapterTitle: String?,
+        val chapterIndex: Int,
+        val chapterCount: Int,
+        val positionMs: Long,
+        val durationMs: Long,
+        val isPlaying: Boolean,
+    )
+
+    /** @return null, wenn gerade kein Hörbuch geladen ist. */
+    fun currentStatus(): AudiobookStatus? {
+        val book = currentBook ?: return null
+        return AudiobookStatus(
+            title = book.title,
+            author = book.author,
+            chapterTitle = player.currentChapter?.title,
+            chapterIndex = player.currentChapterIndex,
+            chapterCount = book.chapters.size,
+            positionMs = player.currentPositionMs,
+            durationMs = player.durationMs,
+            isPlaying = player.isPlaying,
+        )
+    }
+
     fun pause() {
         if (!player.isPlaying) {
             ttsEngine.speak("Kein Hörbuch läuft gerade.", TtsPriority.NORMAL)

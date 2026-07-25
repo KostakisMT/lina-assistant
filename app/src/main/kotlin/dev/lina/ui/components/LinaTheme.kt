@@ -27,7 +27,10 @@ private val LinaTypography = Typography(
     bodyLarge = TextStyle(fontSize = 24.sp, color = LinaWhite),
     bodyMedium = TextStyle(fontSize = 24.sp, color = LinaWhite),
     titleLarge = TextStyle(fontSize = 32.sp, color = LinaGold),
-    labelLarge = TextStyle(fontSize = 24.sp, color = LinaGold),
+    // Kein fester Textfarbwert: labelLarge zeichnet auf farbigen Containern
+    // (z.B. Button-Hintergrund), Farbe muss vom jeweiligen contentColor kommen
+    // – sonst Gold-auf-Gold (unsichtbar) bei Buttons mit primärem Container.
+    labelLarge = TextStyle(fontSize = 24.sp),
 )
 
 @Composable

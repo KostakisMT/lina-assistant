@@ -28,6 +28,8 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
         private set
     @Volatile private var playing = false
     @Volatile private var lastPlaybackEnd = 0L
+    /** Signalisiert dem Sprech-Worker, die laufende Äußerung sofort abzubrechen. */
+    @Volatile private var stopRequested = false
 
     /**
      * true solange Lina spricht, Ansagen anstehen oder die Wiedergabe gerade
@@ -43,7 +45,14 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
      * weitermachen sollen. Der Nachlauf ist nur für die Weckwort-Erkennung da.
      */
     fun isBusySpeaking(): Boolean = playing || queue.isNotEmpty()
-    private val queue = LinkedBlockingDeque<Pair<String, TtsPriority>>()
+
+    private data class QueueItem(
+        val text: String,
+        val priority: TtsPriority,
+        val onDone: (() -> Unit)? = null,
+    )
+
+    private val queue = LinkedBlockingDeque<QueueItem>()
     private var audioTrack: AudioTrack? = null
     private var workerThread: Thread? = null
 
@@ -106,14 +115,26 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
         return OfflineTts(config = config)
     }
 
-    override fun speak(text: String, priority: TtsPriority) {
-        if (text.isBlank()) return
+    override fun speak(text: String, priority: TtsPriority, onDone: (() -> Unit)?) {
+        if (text.isBlank()) {
+            onDone?.invoke()
+            return
+        }
+        if (shuttingDown) {
+            // Engine ist heruntergefahren (z.B. eine bereits zerstörte Activity-
+            // Instanz spricht noch nach) – stiller Verlust in einer toten Queue
+            // wäre schlimmer als der fehlende Ton: sichtbar loggen und verwerfen.
+            Log.w(TAG, "speak() nach shutdown() ignoriert: \"${text.take(60)}\"")
+            onDone?.invoke()
+            return
+        }
+        val item = QueueItem(text, priority, onDone)
         if (priority == TtsPriority.INTERRUPT) {
             queue.clear()
             stopPlayback()
-            queue.offerFirst(text to priority)
+            queue.offerFirst(item)
         } else {
-            queue.offer(text to priority)
+            queue.offer(item)
         }
     }
 
@@ -139,7 +160,7 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
     private fun startWorker() {
         workerThread = Thread({
             while (!shuttingDown) {
-                val (text, _) = try {
+                val item = try {
                     queue.take()
                 } catch (_: InterruptedException) {
                     break
@@ -148,23 +169,39 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
                 // der Synthese (0.5–3s, Queue leer, noch keine Wiedergabe) fälschlich
                 // Stille – und der Gesprächsmodus nimmt Linas eigene Antwort auf
                 playing = true
+                stopRequested = false
                 try {
-                    synthesizeAndPlay(text)
+                    synthesizeAndPlay(item.text)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Sprachausgabe fehlgeschlagen: \"$text\"", e)
+                    Log.e(TAG, "Sprachausgabe fehlgeschlagen: \"${item.text}\"", e)
                 } finally {
                     playing = false
                     lastPlaybackEnd = System.currentTimeMillis()
+                    item.onDone?.invoke()
                 }
             }
         }, "piper-speak").apply { start() }
     }
 
+    /**
+     * Spricht einen Text. Lange Texte (vorgelesene Briefe, ausführliche
+     * Nachrichten) werden in Sätze zerlegt und Stück für Stück synthetisiert:
+     * ein einzelner generate()-Aufruf über sehr langen Text kann minutenlang
+     * blockieren und friert damit die ganze Sprachschleife ein. Chunking hält
+     * jeden Aufruf kurz, lässt Audio früher beginnen und macht "Stopp" wirksam.
+     */
     private fun synthesizeAndPlay(text: String) {
+        for (chunk in splitIntoChunks(text)) {
+            if (shuttingDown || stopRequested) break
+            synthesizeAndPlayChunk(chunk)
+        }
+    }
+
+    private fun synthesizeAndPlayChunk(chunk: String) {
         val t0 = System.currentTimeMillis()
         val audio = synchronized(engineLock) {
             val engine = tts ?: return
-            engine.generate(text = text, sid = 0, speed = rate)
+            engine.generate(text = chunk, sid = 0, speed = rate)
         }
         Log.d(TAG, "Synthese ${audio.samples.size / audio.sampleRate.toFloat()}s Audio in ${System.currentTimeMillis() - t0}ms")
         if (audio.samples.isEmpty()) return
@@ -189,7 +226,6 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
 
         synchronized(this) { audioTrack = track }
         try {
-            playing = true
             track.play()
             track.write(audio.samples, 0, audio.samples.size, AudioTrack.WRITE_BLOCKING)
             // Blocking write kehrt zurück, sobald der Puffer geschrieben ist –
@@ -198,13 +234,59 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
         } catch (_: IllegalStateException) {
             // stopPlayback() hat den Track parallel freigegeben
         } finally {
-            playing = false
-            lastPlaybackEnd = System.currentTimeMillis()
             synchronized(this) {
                 if (audioTrack === track) audioTrack = null
             }
             track.release()
         }
+    }
+
+    /**
+     * Zerlegt langen Text in sprechbare Stücke: zuerst an Satzenden, dann
+     * greedy auf höchstens [max] Zeichen gepackt; überlange Sätze werden an
+     * Wortgrenzen hart umbrochen. Kurze Texte bleiben ein einziges Stück.
+     */
+    private fun splitIntoChunks(text: String, max: Int = 240): List<String> {
+        val normalized = text.replace(Regex("""\s+"""), " ").trim()
+        if (normalized.length <= max) return listOf(normalized)
+
+        val sentences = Regex("""[^.!?…]*[.!?…]+|[^.!?…]+$""")
+            .findAll(normalized)
+            .map { it.value.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+
+        val chunks = ArrayList<String>()
+        val sb = StringBuilder()
+        for (sentence in sentences) {
+            val pieces = if (sentence.length <= max) listOf(sentence) else hardWrap(sentence, max)
+            for (piece in pieces) {
+                if (sb.isNotEmpty() && sb.length + 1 + piece.length > max) {
+                    chunks.add(sb.toString())
+                    sb.setLength(0)
+                }
+                if (sb.isNotEmpty()) sb.append(' ')
+                sb.append(piece)
+            }
+        }
+        if (sb.isNotEmpty()) chunks.add(sb.toString())
+        return chunks
+    }
+
+    /** Bricht einen überlangen Satz an Wortgrenzen (Fallback: hart) auf ≤ max. */
+    private fun hardWrap(sentence: String, max: Int): List<String> {
+        val out = ArrayList<String>()
+        var start = 0
+        while (start < sentence.length) {
+            var end = minOf(start + max, sentence.length)
+            if (end < sentence.length) {
+                val space = sentence.lastIndexOf(' ', end)
+                if (space > start) end = space
+            }
+            out.add(sentence.substring(start, end).trim())
+            start = end
+        }
+        return out.filter { it.isNotEmpty() }
     }
 
     private fun bufferSizeBytes(sampleRate: Int): Int {
@@ -219,6 +301,7 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
     }
 
     private fun stopPlayback() {
+        stopRequested = true
         synchronized(this) {
             try {
                 audioTrack?.pause()

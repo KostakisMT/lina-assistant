@@ -1,13 +1,31 @@
 package dev.lina.feature.audiobook
 
 import android.content.Context
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 
 class AudiobookPlayer(context: Context) {
 
-    private val player: ExoPlayer = ExoPlayer.Builder(context).build()
+    /**
+     * handleAudioFocus=false: Die App steuert Pause/Resume selbst (Duck bei
+     * Weckwort, explizite Pause/Weiter-Befehle). Mit ExoPlayers Standard-
+     * Fokusverwaltung reaktivierte sich eine pausierte Wiedergabe von selbst,
+     * sobald Piper kurz Audio-Fokus anforderte und wieder freigab (Weckwort →
+     * "Ja?" → STT) – unabhängig von jedem App-Code, beobachtete Überschneidung
+     * zwischen Ansage und Hörbuch.
+     */
+    private val player: ExoPlayer = ExoPlayer.Builder(context)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+                .build(),
+            /* handleAudioFocus = */ false,
+        )
+        .build()
     private var onPositionUpdate: ((positionMs: Long, durationMs: Long) -> Unit)? = null
     private var onChapterChanged: ((index: Int) -> Unit)? = null
     private var onFinished: (() -> Unit)? = null
@@ -130,6 +148,15 @@ class AudiobookPlayer(context: Context) {
 
     fun stop() {
         player.stop()
+    }
+
+    val currentVolume: Float get() = player.volume
+
+    /** @return neue Lautstärke (0f–1f), auf zwei Nachkommastellen gerundet. */
+    fun adjustVolume(delta: Float): Float {
+        val next = (player.volume + delta).coerceIn(0f, 1f)
+        player.volume = next
+        return next
     }
 
     fun setVolume(volume: Float) {

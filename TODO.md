@@ -111,6 +111,8 @@
 - [x] Librivox-Integration (Suche + Streaming, kein Login)
 - [x] Schlaf-Timer mit Lautstärke-Fade-Out (30s)
 - [x] Sprachbefehle: "Spiel Hörbuch ab", "Pause", "Weiter", "30 Sekunden zurück", "Was höre ich?", "Welche Hörbücher habe ich?", "Suche Brecht", "Stopp in 30 Minuten"
+- [x] Lautstärke: "lauter"/"leiser" (10%-Schritte, `AudiobookPlayer.adjustVolume()`), am Gerät getestet – 2026-07-26
+- [x] Lautstärke ohne laufendes Hörbuch: "lauter"/"leiser" steuert die Systemlautstärke (`STREAM_MUSIC`), am Gerät sauber verifiziert (entstummt + eine Stufe lauter) – 2026-07-26
 - [x] Kapitel-Infrastruktur: Playlist statt Einzeldatei, Kapitelansage, Fortschritt je Kapitel (2026-07-20)
 - [x] **Bugfix:** LibriVox endete nach dem ersten Abschnitt (nur `chapters.first()` wurde gespielt) – 2026-07-20
 - [x] DAISY 2.02 lesen: `ncc.html` + SMIL + Zeitbereiche (2026-07-20, ADR-019)
@@ -129,8 +131,11 @@
 - [x] `DaisyParserTest` – ncc.html, SMIL, Clock-Values, Sanitizing (2026-07-20)
 - [x] `FuzzyContactMatcher` testen (Arundhati, Eßfeld – spracherkennungs-kritisch); dafür `ContactSource`-Interface eingezogen – 2026-07-21
 - [x] `GermanSpellingTest` – Buchstabiertafel für den Pairing-Code (2026-07-21)
-- [ ] `RssFeedRepository` gegen gespeicherte Feed-Beispiele testen – **braucht Vorarbeit:** nutzt `XmlPullParser` (Android-API, in JVM-Tests nicht vorhanden). Erst denselben Umbau wie bei `DaisyParser` (ADR-019: `DocumentBuilder` statt `XmlPullParser`) plus Trennung von Netzabruf und Parsing
-- [ ] Mehrdeutigkeit "weiter" (Meldung vs. Hörbuch) kontextabhängig auflösen
+- [x] **Bugfix:** `PiperTtsEngine` synthetisierte lange Texte (Dokument-Vorlesen, ausführliche Antworten) in einem einzigen `generate()`-Aufruf – blockierte minutenlang und fror die komplette Sprachschleife ein (kein Weckwort-Neustart, kein Fehler). Fix: Chunking an Satzgrenzen (`splitIntoChunks`, ≤240 Zeichen) + `stopRequested`-Flag für sofortigen Abbruch – 2026-07-25
+- [x] Entscheidung `RssFeedRepository`: **behalten** als Offline-Fallback (2026-07-25) – totes Gewicht im Normalbetrieb (Nachrichten laufen über Claude, CHANGELOG 2026-07-25), aber für den Fall ohne Internet/API-Key aufgehoben
+- [ ] `RssFeedRepository` Testaufbau: `XmlPullParser` → `DocumentBuilder`-Umbau wie bei `DaisyParser` (ADR-019), damit JVM-Tests möglich werden – weiterhin offen, kein Code seit der Behalten-Entscheidung geändert
+- [x] **Bugfix:** Mehrdeutigkeit "weiter" (Hörbuch vs. freie Konversation) – `.*weiter.*` traf ohne Wortgrenzen auch "lass uns weiterreden" und startete versehentlich das Hörbuch statt an Claude zu gehen. Fix: `\b`-Wortgrenzen in `LocalCommandResolver.resolveAudiobook`, Test ergänzt, am Gerät verifiziert – 2026-07-25
+- [x] Sicherheits-Timeout für die Poll-Schleifen: gemeinsamer Helfer `waitForSilenceThenRun()` in `LauncherActivity.kt`, bricht nach 45s ab statt endlos auf `isBusySpeaking()==false` zu warten; `openFollowUpWindow`/`openDocFollowUp` darauf umgestellt, am Gerät regressionsgetestet – 2026-07-25
 
 ---
 
@@ -143,14 +148,17 @@
 - [ ] `assembleRelease` – signiertes Release-APK erzeugen
 
 ### Test auf echtem Tablet (Lenovo Idea Tab TB336ZU)
-- [ ] APK installieren (USB/ADB over WiFi)
-- [ ] Onboarding durchspielen: Berechtigungen, Battery-Whitelist, AccessibilityService
+- [x] APK installieren (adb, Build vom aktuellen Codestand) – 2026-07-25
+- [x] Onboarding durchlaufen (Interessen/Region/Name gesetzt, aus SharedPreferences bestätigt) – 2026-07-25
 - [x] Wake Word getestet – "Hey Lina" (Custom-Modell v2 mit Nutzeraufnahmen): 5/5 erkannt (2026-07-04)
-- [ ] STT: erkennt Vosk Befehle korrekt? (Ruf Boris an, Lies Nachrichten etc.)
+- [x] STT (Whisper, nicht Vosk): "wie spät ist es", "lies meine Post" korrekt erkannt (2026-07-25)
 - [ ] Anrufe: ausgehend + eingehend annehmen/ablehnen
 - [ ] SMS: senden + lesen
-- [ ] Nachrichten: RSS-Sync + Vorlesen
-- [ ] Hörbücher: Librivox-Suche + Wiedergabe + Schlaf-Timer
+- [x] ~~Nachrichten: RSS-Sync + Vorlesen~~ – Feature auf Claude+Websuche umgestellt (siehe CHANGELOG 2026-07-25), am Gerät getestet und für gut befunden
+- [x] Hörbücher: LibriVox-Suche + Wiedergabe + Pause/Weiter/Zurückspulen/Kapitel getestet (2026-07-25); Schlaf-Timer noch nicht am Gerät geprüft
+- [x] **Bugfix:** Weckwort-Erkennung ignorierte Hörbuch-Wiedergabe nicht (nur Linas eigene Stimme) – Erzählstimme konnte Weckwort auslösen und Buchtext an Claude schicken. Duck/Resume in `AudiobookManager`/`LauncherActivity` behebt die Folgen; akustische Ursache (echtes AEC) bleibt offen – 2026-07-25
+- [x] **Bugfix:** `Music/Audiobooks`-Ordner war ohne `READ_MEDIA_AUDIO` nicht lesbar (Scoped Storage) – Berechtigung ergänzt (Manifest + PermissionsGuide) – 2026-07-25
+- [x] Lokale Mehrkapitel-Bücher: `AudiobookLibrary.localFolderBooks()`, vier deutsche LibriVox-Hörbücher installiert (Tolstoi, Keller, Eichendorff, Verne) – 2026-07-25
 - [ ] Dauerbetrieb: Service stabil nach 1h, 4h, über Nacht?
 
 ### Tablet vorbereiten für Nutzer
@@ -163,7 +171,8 @@
 - [ ] Kurzanleitung erstellen (große Schrift oder Audioformat)
 
 ### Risiken & Showstopper
-- [ ] Lenovo/ZUI Battery-Optimierung – killt es den Service?
+- [x] **Gefunden UND behoben (2026-07-26):** `WakeWordService` (Mikrofon-FGS) durfte laut Android 14+/15 nicht aus dem Hintergrund neu gestartet werden (`SecurityException`), passierte bei jedem Konversationsturn. Fix: Service läuft jetzt durchgehend; statt komplettem Stop+Neustart wird nur die Engine intern pausiert/fortgesetzt (`WakeWordService.pauseListening()`/`resumeListening()`, normaler `startService()` an einen bereits laufenden Service – kein neuer FGS-Start, daher nicht von der Android-Regel betroffen). Am Gerät verifiziert: exakt das Szenario, das vorher abstürzte (Antwort → Folgefenster → Timeout → Rückkehr zum Weckwort), läuft jetzt ohne `SecurityException` durch. Restrisiko: echter Prozess-Tod (OOM-Kill) im Hintergrund bräuchte weiterhin einen echten Neustart, der theoretisch noch scheitern könnte – seltener Fall, nicht der ursprüngliche Auslöser.
+- [ ] Lenovo/ZUI Battery-Optimierung – killt es den Service zusätzlich zum obigen Android-eigenen Problem?
 - [ ] Vosk-Erkennungsqualität bei Umgebungsgeräuschen
 - [ ] TTS-Lautstärke über Tablet-Lautsprecher ausreichend?
 - [ ] RSS-Feeds erreichbar? (Junge Welt Paywall?)
@@ -197,8 +206,8 @@
 - [x] Buchstabieralphabet in `core/text/` für die phonetische Code-Ansage (`GermanSpelling`) – 2026-07-21
 
 ### Sicherheit (siehe SICHERHEIT.md, dort die vollständige Liste)
-- [ ] `EncryptedSharedPreferences` – Erinnerungen haben oft Gesundheitsbezug und liegen unverschlüsselt
-- [ ] Automatische Löschung für Einrichtungs-Sprachaufnahmen und `testfoto`-Bilder (bleiben heute unbegrenzt liegen)
+- [x] `EncryptedSharedPreferences` für Erinnerungen: `ReminderStore.kt` auf `androidx.security.crypto` (AES256-GCM/SIV) umgestellt, einmalige Migration alter Klartext-Einträge + Löschung des alten Speichers, am Gerät verifiziert (Klartext nicht mehr lesbar, Erinnerung feuert weiterhin korrekt) – 2026-07-25
+- [x] Automatische Löschung für Einrichtungs-Sprachaufnahmen und `testfoto`-Bilder: `cleanupOldDebugFiles()` in `LauncherActivity.kt`, läuft im Hintergrund bei jedem App-Start, löscht `onboarding/`- und `docphotos/`-Einträge älter als 7 Tage. Logik isoliert verifiziert (Python-Äquivalent); Live-Gerätetest an adb/run-as-Rechten im externen App-Ordner gescheitert (Testinfrastruktur, nicht Code) – 2026-07-25/26
 - [ ] Kontaktadresse für Sicherheitsmeldungen im Repository hinterlegen
 
 ### Rechtlich & Finanzierung (ADR-021)
@@ -272,8 +281,10 @@
 - [x] Intent + Folgefenster (ja/alles, wiederhole, nochmal) (2026-07-20)
 - [x] Debug-Befehl "testfoto" zum Ausrichten des Rahmens (2026-07-20)
 - [ ] Rahmen beim Testnutzer aufkleben und mit "testfoto" ausrichten
-- [ ] Mit echter Post testen (mehrseitig, Umschlag, Behördenbrief)
-- [ ] Latenz prüfen (~14s) – ggf. kleineres Bild oder Streaming
+- [x] Mit echter Post getestet (einseitiger Behördenbrief), Claude liest sinnvoll relevant vor – 2026-07-25
+- [x] Latenz gemessen: Foto→Vorlesen ~11–14s, bestätigt bisherige Schätzung – 2026-07-25
+- [x] **Bugfix:** Kameraaufnahme löste auf dem ZUI-Tablet (physisch quer montiert) über die OEM-Funktion `OvCameraRotation` einen Konfigurationswechsel aus; ohne `android:configChanges` wurde die Activity dabei zerstört/neu gebaut, der Foto→Claude→Vorlesen-Thread hing an der toten alten Instanz fest (kompletter Stillstand der Sprachsteuerung, kein Crash-Log). Fix in AndroidManifest.xml + Absicherung in `PiperTtsEngine.speak()` – 2026-07-25
+- [ ] Mehrseitige Post / Umschlag noch nicht getestet
 - [ ] Offline-Alternative (On-Device-OCR) evaluieren – Backlog
 
 ---

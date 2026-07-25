@@ -72,13 +72,11 @@ class LocalCommandResolverTest {
     // -------------------------------------------------------- Nachrichten
 
     @Test
-    fun `Nachrichtenlage abfragen`() {
-        assertEquals(ResolvedIntent.ReadNews, resolver.resolve("was gibt es neues"))
-    }
-
-    @Test
-    fun `regionale Nachfrage geht an Ebene 2`() {
-        // "aus Hannover" kann der RSS-Reader nicht – Claude soll übernehmen
+    fun `Nachrichten gehen komplett an Ebene 2`() {
+        // Nachrichten macht jetzt Claude per Websuche (relevanter Regional- und
+        // Welt-Überblick mit Rückfragen) – der lokale Resolver fasst sie nicht an,
+        // damit die Eingabe an Ebene 2 durchfällt.
+        assertNull(resolver.resolve("was gibt es neues"))
         assertNull(resolver.resolve("was gibt es neues aus hannover"))
     }
 
@@ -93,6 +91,17 @@ class LocalCommandResolverTest {
     }
 
     @Test
+    fun `weiter nur als eigenstaendiges Wort, nicht als Teilstring`() {
+        // Bugfix 2026-07-25: ".*weiter.*" traf am Gerät auch "lass uns
+        // weiterreden" (freie Konversation) und startete versehentlich das
+        // Hörbuch. Wortgrenzen stellen sicher, dass nur "weiter" als eigenes
+        // Wort zählt, nicht als Präfix eines zusammengesetzten Worts.
+        assertEquals(ResolvedIntent.ResumeAudiobook, resolver.resolve("weiter"))
+        assertEquals(ResolvedIntent.ResumeAudiobook, resolver.resolve("spiel weiter"))
+        assertNull(resolver.resolve("lass uns weiterreden"))
+    }
+
+    @Test
     fun `zurueckspulen mit und ohne Sekundenangabe`() {
         assertEquals(ResolvedIntent.RewindAudiobook(30), resolver.resolve("30 sekunden zurück"))
         assertEquals(ResolvedIntent.RewindAudiobook(15), resolver.resolve("15 sekunden zurück"))
@@ -103,6 +112,36 @@ class LocalCommandResolverTest {
     @Test
     fun `Hoerbuch suchen`() {
         assertEquals(ResolvedIntent.SearchAudiobook("tolstoi"), resolver.resolve("suche tolstoi"))
+    }
+
+    @Test
+    fun `Lautstaerke lauter und leiser`() {
+        assertEquals(ResolvedIntent.VolumeUp, resolver.resolve("lauter"))
+        assertEquals(ResolvedIntent.VolumeUp, resolver.resolve("mach lauter"))
+        assertEquals(ResolvedIntent.VolumeDown, resolver.resolve("leiser"))
+        assertEquals(ResolvedIntent.VolumeDown, resolver.resolve("etwas leiser"))
+    }
+
+    @Test
+    fun `Lautstaerke als Stufe 1 bis 10`() {
+        assertEquals(ResolvedIntent.SetVolume(10), resolver.resolve("lautstärke eins"))
+        assertEquals(ResolvedIntent.SetVolume(50), resolver.resolve("lautstärke fünf"))
+        assertEquals(ResolvedIntent.SetVolume(100), resolver.resolve("lautstärke zehn"))
+        assertEquals(ResolvedIntent.SetVolume(70), resolver.resolve("lautstärke auf 7"))
+    }
+
+    @Test
+    fun `Lautstaerke als Prozentwert`() {
+        assertEquals(ResolvedIntent.SetVolume(70), resolver.resolve("lautstärke auf 70 prozent"))
+        assertEquals(ResolvedIntent.SetVolume(35), resolver.resolve("lautstärke 35 prozent"))
+    }
+
+    @Test
+    fun `Stummschalten`() {
+        assertEquals(ResolvedIntent.SetVolume(0), resolver.resolve("ton aus"))
+        assertEquals(ResolvedIntent.SetVolume(0), resolver.resolve("stumm"))
+        assertEquals(ResolvedIntent.SetVolume(0), resolver.resolve("lautstärke aus"))
+        assertEquals(ResolvedIntent.SetVolume(0), resolver.resolve("lautstärke 0"))
     }
 
     @Test
@@ -144,12 +183,13 @@ class LocalCommandResolverTest {
     }
 
     @Test
-    fun `Kapitel schlaegt Meldung und Zurueckspulen`() {
-        // "nächste" gehört sonst zu den Nachrichten, "zurück" zum Spulen –
-        // sobald "Kapitel" fällt, gewinnt die Kapitelnavigation
+    fun `Kapitel schlaegt Zurueckspulen`() {
+        // "zurück" gehört sonst zum Spulen – sobald "Kapitel" fällt, gewinnt
+        // die Kapitelnavigation. "nächste meldung" ohne Kapitelbezug ist kein
+        // lokaler Befehl mehr (Nachrichten laufen über Claude).
         assertEquals(ResolvedIntent.NextChapter, resolver.resolve("nächstes kapitel"))
         assertEquals(ResolvedIntent.PreviousChapter, resolver.resolve("ein kapitel zurück"))
-        assertEquals(ResolvedIntent.NextNews, resolver.resolve("nächste meldung"))
+        assertNull(resolver.resolve("nächste meldung"))
     }
 
     // -------------------------------------------------- Erinnerungen / Zeit

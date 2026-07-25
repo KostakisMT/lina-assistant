@@ -74,26 +74,38 @@ class ClaudeConversation(
         }
         append(
             "\n- Für Aktuelles (Wetter, Nachrichten, Ereignisse) nutzt du die " +
-                "Websuche. Nachrichten fasst du in zwei bis drei Meldungen mit je " +
-                "ein bis zwei Sätzen zusammen – vorlesbar, ohne Quellen-URLs. " +
-                "Das Werkzeug nachrichten_vorlesen ist nur für die gespeicherten " +
-                "Standard-Schlagzeilen; bei regionalen oder thematischen " +
-                "Nachrichtenwünschen suche stattdessen selbst."
+                "Websuche. Fragt der Nutzer nach Nachrichten oder was es Neues " +
+                "gibt, gibst du einen kurzen gesprochenen Überblick: zwei bis " +
+                "drei Meldungen, die für ihn wirklich relevant sind – mische " +
+                "Wichtiges aus seiner Region mit Bedeutendem aus aller Welt, je " +
+                "ein bis zwei Sätze, ohne Quellen-URLs. Danach hängst du genau " +
+                "einen kurzen Satz an, dass er zu jedem Thema nachfragen kann, " +
+                "wenn er mehr hören will. Fragt er zu einem Thema nach, erzählst " +
+                "du ausführlicher."
         )
         append(
             "\n- Nutze dein Wissen über den Nutzer unaufdringlich: Es prägt Tiefe " +
                 "und Tonfall deiner Antworten, aber du erwähnst seine Interessen " +
                 "oder Kontakte nicht von dir aus und sagst nie Dinge wie " +
                 "\"das passt zu deinem Interesse an ...\". Keine ungefragten " +
-                "Zusatzangebote am Ende der Antwort."
+                "Zusatzangebote am Ende der Antwort – einzige Ausnahme ist der " +
+                "eine Rückfrage-Hinweis beim Nachrichten-Überblick."
         )
     }
 
     /** Dialoggedächtnis: nur Textwechsel, damit die History API-gültig bleibt. */
     private val history = ArrayDeque<MessageParam>()
 
-    fun ask(input: String): LinaReply {
-        history.addLast(message(MessageParam.Role.USER, input))
+    /**
+     * [freshWakeWord] = true: die App weiß mit Sicherheit, dass der Nutzer
+     * gerade "Hey Lina" gesagt hat (nicht Claudes Vermutung). Verhindert, dass
+     * Einladungen wie "Lass uns reden" fälschlich als Raumgespräch erkannt
+     * werden (gespraech_beenden) – ein beobachtetes Fehlverhalten trotz
+     * korrekter Transkription.
+     */
+    fun ask(input: String, freshWakeWord: Boolean = false): LinaReply {
+        val effectiveInput = if (freshWakeWord) "[Weckwort erkannt] $input" else input
+        history.addLast(message(MessageParam.Role.USER, effectiveInput))
         trimHistory()
         return try {
             val response = client.messages().create(buildParams())
@@ -282,7 +294,6 @@ class ClaudeConversation(
                 ResolvedIntent.SendSms(kontakt, text)
             }
             "sms_vorlesen" -> ResolvedIntent.ReadSms
-            "nachrichten_vorlesen" -> ResolvedIntent.ReadNews
             "hoerbuch_abspielen" -> ResolvedIntent.PlayAudiobook
             "dokument_vorlesen" -> ResolvedIntent.ReadDocument
             "erinnerung_anlegen" -> {
@@ -384,6 +395,12 @@ class ClaudeConversation(
               eine Eingabe erkennbar eine Frage oder Bitte AN DICH ist, darfst du
               um Wiederholung bitten. Alles andere: gespraech_beenden. Eine echte
               Frage kommt wieder – Hineinreden in ein Gespräch stört dagegen sehr.
+            - Beginnt eine Eingabe mit "[Weckwort erkannt]": Der Nutzer hat gerade
+              "Hey Lina" gesagt – die App weiß das sicher, nicht nur du vermutest
+              es. Diese Eingabe ist IMMER an dich gerichtet, auch wenn sie wie eine
+              Einladung unter Menschen klingt ("Lass uns reden", "Erzähl mir was").
+              Prüfe hier NICHT auf Raumgespräch und nutze gespraech_beenden nicht.
+              Ohne diese Markierung gilt die Raumgespräch-Prüfung wie gewohnt.
         """.trimIndent()
 
         private val TOOLS: List<Tool> = listOf(
@@ -401,11 +418,6 @@ class ClaudeConversation(
                 listOf("kontakt", "text"),
             ),
             tool("sms_vorlesen", "Liest die neuesten SMS vor.", emptyMap(), emptyList()),
-            tool(
-                "nachrichten_vorlesen",
-                "Liest die aktuellen Nachrichten-Schlagzeilen vor (RSS).",
-                emptyMap(), emptyList(),
-            ),
             tool("hoerbuch_abspielen", "Spielt das aktuelle Hörbuch ab.", emptyMap(), emptyList()),
             tool(
                 "erinnerung_anlegen",

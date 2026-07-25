@@ -35,7 +35,19 @@ class WakeWordService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!foregroundOk) return START_NOT_STICKY
-        startEngine()
+        // ACTION_PAUSE hält den Service (und damit die Foreground-Berechtigung)
+        // am Leben und lässt nur die Engine das Mikrofon freigeben. Wichtig:
+        // dieser Aufruf geht über das normale startService() an einen bereits
+        // laufenden Service – das zählt NICHT als neuer FGS-Start und ist daher
+        // nicht von der Android-14+-Hintergrundregel betroffen. Ein echter
+        // Stop+Neustart (frühere Implementierung) war das eigentliche Problem:
+        // startForegroundService() nach vollständigem Stop wird abgelehnt,
+        // wenn die App gerade nicht im Vordergrund ist.
+        if (intent?.action == ACTION_PAUSE) {
+            engine?.stop()
+        } else {
+            startEngine()
+        }
         return START_STICKY
     }
 
@@ -49,13 +61,18 @@ class WakeWordService : Service() {
     }
 
     private fun startEngine() {
-        if (engine != null) return
-        engine = OpenWakeWordEngine(applicationContext).also {
-            it.start {
-                // setPackage nötig: RECEIVER_NOT_EXPORTED bekommt sonst nichts (Android 14+)
-                sendBroadcast(Intent(ACTION_WAKE_WORD_DETECTED).setPackage(packageName))
-            }
+        val onDetected: () -> Unit = {
+            // setPackage nötig: RECEIVER_NOT_EXPORTED bekommt sonst nichts (Android 14+)
+            sendBroadcast(Intent(ACTION_WAKE_WORD_DETECTED).setPackage(packageName))
         }
+        val existing = engine
+        if (existing != null) {
+            // Nach ACTION_PAUSE: Modelle sind noch geladen, nur Mikrofon/Thread
+            // neu starten – schneller als eine komplette Neuerstellung.
+            existing.start(onDetected)
+            return
+        }
+        engine = OpenWakeWordEngine(applicationContext).also { it.start(onDetected) }
     }
 
     private fun acquireWakeLock() {
@@ -104,6 +121,33 @@ class WakeWordService : Service() {
         const val NOTIFICATION_ID = 1
         const val CHANNEL_ID = "lina_wakeword"
         const val ACTION_WAKE_WORD_DETECTED = "dev.lina.WAKE_WORD_DETECTED"
+        private const val ACTION_PAUSE = "dev.lina.WAKEWORD_PAUSE"
+
+        /**
+         * Pausiert nur das Zuhören (Mikrofon wird frei für STT) – der Service
+         * selbst bleibt am Leben. Ein normaler `startService()` an einen
+         * bereits laufenden Service löst KEINEN neuen Foreground-Start aus,
+         * ist also nicht von der Android-14+-Hintergrundregel betroffen. Für
+         * jeden Gesprächsturn statt [start] verwenden.
+         */
+        fun pauseListening(context: Context) {
+            try {
+                context.startService(
+                    Intent(context, WakeWordService::class.java).setAction(ACTION_PAUSE)
+                )
+            } catch (_: Exception) {
+                // Service lief evtl. schon gar nicht mehr – nichts zu tun
+            }
+        }
+
+        /**
+         * Setzt das Zuhören fort. Läuft der Service noch (Normalfall nach
+         * [pauseListening]), ist das ein normaler `startService()`-Aufruf ohne
+         * FGS-Neustart. Ist der Service tatsächlich weg (z.B. Prozess-Kill),
+         * verhält sich das wie [start] – kann dann ebenfalls an der
+         * Hintergrundregel scheitern, das ist der verbleibende Restfall.
+         */
+        fun resumeListening(context: Context) = start(context)
 
         fun start(context: Context) {
             // FGS-Typ "microphone" wirft SecurityException ohne RECORD_AUDIO (Android 14+)

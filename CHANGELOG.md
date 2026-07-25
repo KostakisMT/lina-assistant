@@ -5,6 +5,189 @@
 
 ---
 
+## [2026-07-26] Feature: Direkte Lautstärke-Sollwerte + Stummschalten
+
+**Was:** Ergänzt die relative Lautstärkeregelung ("lauter"/"leiser") um direkte
+Sollwerte: "Lautstärke eins" bis "zehn" (= 10–100% in 10er-Schritten), "Lautstärke
+(auf) X Prozent" (beliebiger Wert 0–100), und explizites Stummschalten ("Ton aus",
+"stumm", "Lautstärke aus", "Lautstärke 0" – alle über `SetVolume(0)`). Nutzt
+dieselbe Weiche wie "lauter"/"leiser": läuft ein Hörbuch, wird dessen Lautstärke
+gesetzt; sonst die Systemlautstärke (`STREAM_MUSIC`). Prozent-Muster wird vor dem
+Stufen-Muster geprüft, damit z.B. "70 Prozent" nicht fälschlich als (ungültige)
+Stufe 70 geparst wird. `AudiobookManager`s Ansage-Logik für "lauter"/"leiser" und
+den neuen Sollwert-Befehl in einen gemeinsamen `announceVolume()`-Helfer gezogen.
+
+**Warum:** Nutzerwunsch nach dem ersten Lautstärke-Feature – direkte Werte statt
+nur schrittweiser Anpassung, plus ein expliziter Mute-Befehl.
+
+**Dateien:** `core/intent/ResolvedIntent.kt`, `core/intent/LocalCommandResolver.kt`,
+`feature/audiobook/AudiobookManager.kt`, `ui/launcher/LauncherActivity.kt`,
+`test/.../LocalCommandResolverTest.kt`
+
+**Getestet (isoliert per adb, mehrfach lauter/leiser + Stufe/Prozent/Stumm, sowohl
+Hörbuch-aktiv als auch System-Pfad):** alle Kombinationen korrekt geroutet, Werte
+stimmen (mit erwarteter Rundung auf ganzzahlige System-Lautstärkestufen), Mute
+korrekt gesetzt und durch neuen Prozentwert wieder aufgehoben.
+
+---
+
+## [2026-07-26] Feature: Lautstärke "lauter"/"leiser" für Hörbücher
+
+**Was:** Neue Sprachbefehle "lauter"/"leiser" passen die Hörbuch-Lautstärke in
+10%-Schritten an (0–100%, `AudiobookPlayer.adjustVolume()`), mit gesprochener
+Rückmeldung ("Lautstärke 70 Prozent.", Grenzfälle "geht nicht lauter"/"Lautstärke
+aus."). Ohne geladenes Hörbuch: "Kein Hörbuch ausgewählt." `ResolvedIntent.VolumeUp`/
+`VolumeDown`, lokal in `LocalCommandResolver` erkannt (Wortgrenzen `\b`, aus der
+"weiter"-Lektion vom Vortag übernommen – kein reiner Teilstring-Test). Am Gerät
+getestet (lauter → lauter → leiser, alle korrekt erkannt und bestätigt).
+
+**Warum:** Nutzerwunsch – Lautstärkeregelung per Sprache fehlte bisher komplett.
+
+**Dateien:** `feature/audiobook/AudiobookPlayer.kt`, `feature/audiobook/AudiobookManager.kt`,
+`core/intent/ResolvedIntent.kt`, `core/intent/LocalCommandResolver.kt`,
+`ui/launcher/LauncherActivity.kt`, `test/.../LocalCommandResolverTest.kt`
+
+**Nachtrag (selbiger Tag):** "lauter"/"leiser" steuern jetzt zusätzlich die
+**Systemlautstärke** (`STREAM_MUSIC`, über `AudioManager.adjustStreamVolume()`),
+wenn gerade **kein Hörbuch läuft** (`audiobookManager?.isPlaying == true` entscheidet
+die Weiche in `LauncherActivity.handleIntent()`). Gesprochene Rückmeldung wie beim
+Hörbuch-Pfad, keine System-Lautstärkeanzeige (hilft einem blinden Nutzer nicht).
+Am Gerät sauber verifiziert (isoliert per adb, ohne manuelles Zutun): Tablet stand
+auf stumm (`Muted: true, streamVolume:0`) – nach dem Sprachbefehl "lauter"
+`Muted: false, streamVolume:1`, korrekt entstummt und einen Schritt lauter, plus
+gesprochene Bestätigung. Gegenprobe bei laufendem Hörbuch: "lauter" traf weiterhin
+korrekt die Hörbuch-Lautstärke, nicht das System.
+
+**Dateien (Nachtrag):** `ui/launcher/LauncherActivity.kt`
+
+---
+
+## [2026-07-26] Bugfix: WakeWordService überlebt Konversationsturns (Android-14-Hintergrundregel)
+
+**Was:** Der beim Dauerbetriebs-Check gefundene Ausfall (siehe vorheriger Eintrag)
+ist behoben. Root Cause war der Stop+Neustart-Zyklus: `LauncherActivity` stoppte
+`WakeWordService` komplett, um das Mikrofon für STT freizugeben, und startete ihn
+danach über `startForegroundService()` neu – genau dieser Neustart-Typ ist unter
+Android 14+/15 aus dem Hintergrund verboten. Fix: Der Service läuft jetzt
+durchgehend (nie mehr komplett gestoppt); `WakeWordService.pauseListening()`/
+`resumeListening()` schicken stattdessen ein Kommando per normalem `startService()`
+an die bereits laufende Instanz – das löst keinen neuen Foreground-Start aus und
+ist daher von der Android-Regel nicht betroffen. `OpenWakeWordEngine.stop()`/
+`start()` geben dabei nur Mikrofon/Thread frei bzw. neu, ohne die geladenen
+ONNX-Modelle neu zu laden (schneller als vorher als Nebeneffekt). Alle 7
+Stop-Aufrufstellen in `LauncherActivity.kt` auf `pauseListening()` umgestellt, der
+zentrale Wiederaufnahme-Punkt (`wakeResumeRunnable`) auf `resumeListening()`. Die
+beiden echten Kaltstart-Stellen (`onResume()`-Fallback, initialer Start nach
+Onboarding) bleiben bei `WakeWordService.start()`.
+
+**Warum:** Das Stop/Restart-Muster passierte bei jedem Gesprächsturn – ein
+Kernszenario für einen Sprachassistenten, nicht ein Randfall. Am Gerät verifiziert:
+exakt der Ablauf, der vorher mit `SecurityException` abstürzte (Antwort →
+Folgefenster → Stille-Timeout → Rückkehr zum Weckwort), lief danach fehlerfrei durch;
+kein Treffer der ursprünglichen Fehlermeldung mehr im gesamten Log-Puffer.
+
+**Dateien:** `core/wakeword/WakeWordService.kt`, `ui/launcher/LauncherActivity.kt`
+
+**Offen:** Echter Prozess-Tod (z.B. OOM-Kill) im Hintergrund bräuchte weiterhin
+einen vollständigen Neustart über `WakeWordWatchdog`, der theoretisch noch an
+derselben Regel scheitern könnte, falls die App exakt dann im Hintergrund ist –
+ein deutlich selteneres Restrisiko als der behobene Fall, nicht weiter verfolgt.
+
+---
+
+## [2026-07-26] Dauerbetrieb-Check: WakeWordService-Restart scheitert an Android-Hintergrundregel
+
+**Was:** Beim Dauerbetriebs-Monitoring (Plan `reicht-weiter-mit-den-ethereal-perlis.md`,
+Punkt 4) reichte normale Nutzung, um einen realen Ausfall zu reproduzieren – keine
+Stunde Wartezeit nötig. Ablauf am Gerät: ein Gesprächsturn läuft (Mikrofon wird für
+STT kurz freigegeben, `WakeWordService` gestoppt), danach soll der Service
+zurückkommen. Genau dabei schlug `startForeground()` mit
+`SecurityException: ... Foreground service started from background can not have
+... microphone access` fehl – eine Android-14/15-Regel, die Mikrofon-Foreground-
+Services grundsätzlich nicht aus dem Hintergrund neu starten lässt. Der Service
+beendet sich daraufhin selbst (kein Crash, kein Log-Fehler außer der abgefangenen
+Exception). `WakeWordWatchdog` (30s-Prüfintervall) versucht zwar nachzustarten,
+scheitert aber an derselben Regel, solange die App im Hintergrund ist. Der Code
+kennt das Problem bereits in einem Kommentar (`WakeWordService.onCreate()`),
+verlässt sich aber ausschließlich auf `LauncherActivity.onResume()` als Rettung –
+das setzt voraus, dass jemand die App manuell wieder in den Vordergrund holt.
+
+**Warum wichtig:** Das Stop/Restart-Muster passiert bei **jedem** Konversationsturn,
+nicht nur selten. Verliert die App währenddessen kurz den Vordergrund-Status (z.B.
+Bildschirm-Timeout auf dem stationären Tablet), bleibt das Weckwort dauerhaft aus,
+bis jemand die App manuell öffnet – für ein Gerät, das unbeaufsichtigt zuhören soll,
+ein potenziell gravierender Ausfall, der bisher unter "Lenovo/ZUI
+Battery-Optimierung – killt es den Service?" vermutet, aber nicht auf diese
+konkrete, andere Ursache zurückgeführt war.
+
+**Dateien:** Keine Code-Änderung – reiner Befund. `TODO.md` aktualisiert
+(Risiken & Showstopper).
+
+**Offen:** Braucht eine eigene Architekturentscheidung, nicht in dieser Session
+gelöst. Denkbare Richtungen: Bildschirm/Vordergrund-Status aktiv halten
+(`FLAG_KEEP_SCREEN_ON` o.ä.), Restart-Strategie ändern (z.B. Mikrofon-Freigabe
+seltener/kürzer, oder Service-Typ/-Architektur überdenken), oder eine
+Foreground-Ausnahme beantragen, falls möglich. Sollte vor einem produktiven
+Dauerbetrieb beim Testnutzer geklärt sein.
+
+---
+
+## [2026-07-25] Hörbuch-Nachtests: ExoPlayer-Audiofokus-Bug, "weiter"-Mehrdeutigkeit, RSS-Entscheidung
+
+**Was:**
+1. **Bugfix Audio-Überschneidung (zweite Ursache):** Der erste Überschneidungs-Fix
+   (onDone-Callback in `AudiobookManager.playBook()`) behob nur den Fall "frischer
+   Start". Am Gerät reproduziert: ein **pausiertes** Hörbuch lief von selbst wieder
+   an, sobald Piper kurz Audio-Fokus anforderte und wieder freigab (Weckwort → "Ja?"
+   → STT) – bewiesen über `AudioTrack`-Logzeilen (Hörbuch-Track lief 1+ Sekunde vor
+   Beginn der Ansage-Synthese los). Ursache: `AudiobookPlayer` erstellte ExoPlayer
+   ohne explizite `AudioAttributes`, wodurch Media3s **automatische
+   Audiofokus-Verwaltung** aktiv war und die Wiedergabe bei Fokus-Rückgewinn eigenständig
+   fortsetzte – unabhängig von jedem eigenen Play/Pause-Code. Fix:
+   `ExoPlayer.Builder(...).setAudioAttributes(..., handleAudioFocus = false)`, da die
+   App Ducking/Pause bereits selbst orchestriert.
+2. **Bugfix "weiter"-Mehrdeutigkeit:** `LocalCommandResolver.resolveAudiobook` matchte
+   `.*weiter.*` als reinen Teilstring ohne Wortgrenzen – traf dadurch auch
+   zusammengesetzte Wörter wie "weiterreden" ("lass uns weiterreden" startete
+   versehentlich das Hörbuch statt an Claude zu gehen, am Gerät reproduziert). Fix:
+   `\b`-Wortgrenzen um die Alternation.
+3. **Entscheidung RssFeedRepository: behalten** als Offline-Fallback, nicht entfernt.
+   Testaufbau (`XmlPullParser` → `DocumentBuilder`) bleibt offen.
+4. **Live-Tests bestätigt:** Schlaf-Timer (Fade-Out exakt 30s vor Ablauf, sauberer
+   Pause-Trigger bei Lautstärke 0), LibriVox-Streaming-Mehrkapitel-Navigation über die
+   Kapitelgrenze (Kapitelwechsel lädt nachweislich eine andere Remote-Datei, nicht nur
+   `chapters.first()` wie der 2026-07-20-Bug) – beide fehlerfrei am Gerät.
+
+**Warum:** Fortsetzung der Hörbuch-Testreihe laut Plan
+(`reicht-weiter-mit-den-ethereal-perlis.md`). Der Audiofokus-Bug war ein Nutzerbericht
+("Jules Verne hat getriggert") während eines freien Konversationstests – Root Cause
+lag tiefer als der erste Fix vom selben Tag.
+
+**Dateien:** `feature/audiobook/AudiobookPlayer.kt`, `core/intent/LocalCommandResolver.kt`,
+`test/.../LocalCommandResolverTest.kt`, TODO.md
+
+**Offen:** Sicherheits-Timeout für TTS-Wartefenster, EncryptedSharedPreferences für
+Erinnerungen, Auto-Löschung Setup-Aufnahmen/Testfotos, Dauerbetrieb-Monitoring (siehe
+Plan). Anrufe/SMS bleiben blockiert (kein SIM im Testtablet).
+
+---
+
+## [2026-07-25] Hörbücher: Echo-Schutz, lokale Mehrkapitel-Ordner, vier deutsche LibriVox-Bücher installiert
+
+**Was:**
+1. **Bugfix Echo/Weckwort während Hörbuch-Wiedergabe:** Die Weckwort-Erkennung ignorierte bisher nur Linas eigene TTS-Stimme (`piperEngine.isSpeaking()`), nicht die laufende Hörbuch-Wiedergabe. Die Erzählstimme konnte dadurch fälschlich das Weckwort auslösen; die STT fing dann Buchtext ein und schickte ihn als vermeintlichen Befehl an Claude – am Gerät reproduziert. Fix: `AudiobookManager.duckForListening()`/`resumeAfterListening()` pausieren/setzen lautlos fort; `LauncherActivity` duckt bei jedem Weckwort-Trigger und setzt zentral in `resumeWakeWordListening()` fort – außer der Nutzer wollte im Fenster tatsächlich pausieren/stoppen (neues Flag `explicitAudiobookPause`). Nebeneffekt behoben: „Stopp" pausiert jetzt auch tatsächlich ein laufendes Hörbuch (vorher trotz „Stoppt Vorlesen oder Wiedergabe"-Beschreibung wirkungslos für Audiobooks).
+2. **Lokale Mehrkapitel-Bücher:** `AudiobookLibrary.localFolderBooks()` – ein Unterordner in `Audiobooks/` mit mehreren Audiodateien wird zu einem Buch mit echter Kapitelnavigation (eine Datei je Kapitel, wie beim LibriVox-Streaming). Ordnername `"Titel - Autor"` wird geparst. Vorher hätte `scanLocalFiles()` jede Datei als eigenständiges Buch ohne Kapitelbezug gelistet.
+3. **Bugfix Speicherzugriff:** Der öffentliche `Music/Audiobooks`-Ordner war unter Scoped Storage (Android 13+) ohne Berechtigung nicht lesbar (`Permission denied`, am Gerät reproduziert – 4 Bücher wurden zu nur "keine Hörbücher" verarbeitet). `READ_MEDIA_AUDIO` in Manifest und `PermissionsGuide` ergänzt.
+4. **Vier deutsche LibriVox-Hörbücher installiert** (gemeinfrei, öffentlich zum Download bestimmt): Tolstoi – *Herr und Knecht* (10 Kapitel), Keller – *Der Schmied seines Glückes* (6 Kapitel), Eichendorff – *Die Entführung* (5 Kapitel), Verne – *Reise um die Erde in 80 Tagen* (37 Kapitel). Insgesamt 58 Dateien/733 MB, in `/storage/emulated/0/Music/Audiobooks/<Titel> - <Autor>/` auf dem Testgerät.
+
+**Warum:** Nutzerwunsch nach deutschsprachigem Hörbuch-Material zum Offline-Hören; der Echo-Fehler wurde beim Live-Test zufällig entdeckt („Lina hört ab und an dem Hörbuch zu und hat Eingaben/Anfragen an Claude") und ist ein reales Nutzungsproblem, kein Rand­fall.
+
+**Dateien:** `feature/audiobook/AudiobookManager.kt`, `feature/audiobook/AudiobookLibrary.kt`, `ui/launcher/LauncherActivity.kt`, `feature/onboarding/PermissionsGuide.kt`, `AndroidManifest.xml`
+
+**Offen:** Echo-Fix behebt nur die *Folgen* eines Fehlalarms (kein Claude-Unsinn mehr, Buch pausiert/läuft sauber weiter) – die akustische Ursache (Erzählstimme kann weiterhin das Weckwort selbst triggern) bräuchte eine echte Acoustic-Echo-Cancellation-Lösung, nicht nur Ducking. `localFolderBooks()` ist ungetestet in JVM-Unit-Tests (Android-`Context`/`Environment`-Abhängigkeit, wie der Rest von `AudiobookLibrary`).
+
+---
+
 ## Format
 
 ```
@@ -14,6 +197,21 @@
 **Dateien:** Welche Dateien angelegt oder geändert
 **Offen:** Was ist noch nicht fertig oder bekannt problematisch
 ```
+
+---
+
+## [2026-07-25] Nachrichten über Claude statt RSS + zwei Bring-up-Fixes vom Tabletttest
+
+**Was:**
+1. „Was gibt es Neues?" läuft jetzt komplett über Ebene 2 (`ClaudeConversation` + Websuche) statt über den RSS-Reader: zwei bis drei wirklich relevante Meldungen (Region + Welt gemischt), danach ein Rückfrage-Angebot, echte Konversation statt starrem „mehr/nächste/stopp"-Folgefenster. Das Werkzeug `nachrichten_vorlesen` und die lokale News-Erkennung in `LocalCommandResolver` sind entfernt; `NewsReader`/`RssFeedRepository` bleiben unangetastet im Code liegen (mögliche Offline-Reserve), werden aber nicht mehr angesprochen.
+2. **Bugfix TTS-Deadlock:** `PiperTtsEngine.synthesizeAndPlay` gab lange Texte (z.B. ein 1078-Zeichen-Dokument) in einem einzigen `generate()`-Aufruf an sherpa-onnx – das blockierte minutenlang, `isBusySpeaking()` blieb dauerhaft `true`, das Dokument-Folgefenster öffnete nie und das Weckwort wurde nie reaktiviert (Voice-Deadlock, reproduziert am echten Tablet bei „Lies meine Post"). Fix: Text wird jetzt an Satzgrenzen in ≤240-Zeichen-Stücke zerlegt (`splitIntoChunks`/`hardWrap`) und nacheinander synthetisiert/abgespielt; `stopRequested`-Flag lässt `stop()`/INTERRUPT den Chunk-Lauf sofort abbrechen.
+3. **Bugfix Activity-Neustart bei Kameraaufnahme:** Auf dem Lenovo-Tablet (ZUI 17.5, physisch im Querformat montiert) hat die OEM-Funktion `OvCameraRotation` beim Öffnen der Rückkamera einen Konfigurationswechsel ausgelöst. `LauncherActivity` war auf `screenOrientation="portrait"` fixiert, aber ohne `android:configChanges` – Android hat die Activity deshalb zerstört und neu aufgebaut, während der Foto→Claude→Vorlesen-Hintergrund-Thread noch lief. Der Thread sprach danach eine bereits heruntergefahrene `ttsEngine`-Instanz an; `speak()` legte den Text lautlos in eine tote Queue (kein Crash, keine Logzeile – nur Stille, zweimal exakt so reproduziert). Fix: `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"` im Manifest verhindert die Zerstörung; zusätzlich verwirft `PiperTtsEngine.speak()` jetzt Aufrufe nach `shutdown()` mit einer Log-Warnung statt sie stumm zu verschlucken.
+
+**Warum:** Nutzerfeedback nach dem ersten Tablet-Bring-up: RSS-Nachrichten waren „grausam" in Bedienung und Klang; Claude kann das mit Websuche und echtem Dialog deutlich besser und personalisiert (Region Oldenburg, Interessen Politik/Natur sind aus dem Onboarding bereits gesetzt). Die beiden Bugs wurden beim direkten Testen am Gerät gefunden – der eigentliche Wert des Tablet-Bring-ups: beide waren im Code unsichtbar und sind ohne echtes Gerät (Whisper-Timing, ZUI-OEM-Verhalten, Tablet-Orientierung) praktisch nicht zu finden.
+
+**Dateien:** `core/intent/LocalCommandResolver.kt`, `core/llm/ClaudeConversation.kt`, `core/tts/PiperTtsEngine.kt`, `AndroidManifest.xml`, `test/.../LocalCommandResolverTest.kt`
+
+**Offen:** Alter RSS-Code (`NewsReader`, `RssFeedRepository`, zugehörige Intents) ist jetzt totes Gewicht – Entscheidung noch aus, ob er als Offline-Fallback bleibt oder entfernt wird. Sicherheits-Timeout für die TTS-Wartefenster (`openFollowUpWindow`/`openDocFollowUp`) als zusätzliche Absicherung gegen künftige Hänger ist als Folgeaufgabe vorgemerkt, aber durch die beiden Fixes hier nicht mehr akut.
 
 ---
 

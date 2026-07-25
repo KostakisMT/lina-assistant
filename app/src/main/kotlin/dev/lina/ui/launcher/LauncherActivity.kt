@@ -5,10 +5,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
+import kotlin.math.roundToInt
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -93,6 +96,12 @@ class LauncherActivity : ComponentActivity() {
     private var sttEngine: SttEngine? = null
     private var onboarding: VoiceOnboarding? = null
     private var newsHintGesagt = false
+    /** true, wenn das aktuelle Zuhörfenster ein laufendes Hörbuch lautlos pausiert hat. */
+    private var duckedAudiobook = false
+    /** true, wenn der Nutzer während des Fensters explizit Pause/Stopp wollte – dann beim Aufwachen nicht automatisch weiterspielen. */
+    private var explicitAudiobookPause = false
+    /** true, wenn die nächste Claude-Anfrage direkt aus einem echten Weckwort-Trigger stammt (nicht Folgefenster/Debug). */
+    private var freshWakeWordTurn = false
     private var voicePipelineStarted = false
     private var voiceReady = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -244,6 +253,8 @@ class LauncherActivity : ComponentActivity() {
             PermissionsGuide.requestMissing(this)
         }
 
+        Thread({ cleanupOldDebugFiles() }, "debug-cleanup").start()
+
         statusText = "Linas Stimme wird geladen…"
         val piper = PiperTtsEngine(applicationContext)
         piperEngine = piper
@@ -346,7 +357,10 @@ class LauncherActivity : ComponentActivity() {
         runOnUiThread {
             val stt = sttEngine ?: return@runOnUiThread
             // Wake-Word-Engine stoppen, damit Vosk das Mikrofon exklusiv bekommt
-            stopService(Intent(this, WakeWordService::class.java))
+            WakeWordService.pauseListening(this)
+            // Hörbuch lautlos pausieren: sonst hört das Mikrofon der eigenen
+            // Erzählstimme zu und schickt Buchtext als vermeintlichen Befehl weiter
+            duckedAudiobook = audiobookManager?.duckForListening() == true
             statusText = "Ich höre…"
             ttsEngine?.speak("Ja?", TtsPriority.INTERRUPT)
 
@@ -369,6 +383,11 @@ class LauncherActivity : ComponentActivity() {
                         handled = true
                         mainHandler.removeCallbacks(timeout)
                         debugInput = text
+                        // Diese Eingabe kam direkt nach einem echten Weckwort-
+                        // Trigger – die App weiß das sicher (anders als Claudes
+                        // eigene Vermutung), verhindert fälschliches
+                        // gespraech_beenden bei Einladungen wie "Lass uns reden"
+                        freshWakeWordTurn = true
                         // Wenn Claude übernimmt, steuert der Gesprächsmodus das
                         // Zuhören selbst – KEIN Wake-Neustart planen (sonst Race:
                         // startForegroundService + sofortiges stopService = Crash)
@@ -382,11 +401,20 @@ class LauncherActivity : ComponentActivity() {
 
     private val wakeResumeRunnable = Runnable {
         if (onboarding != null) return@Runnable
-        WakeWordService.start(this)
+        WakeWordService.resumeListening(this)
         statusText = "Lina bereit – sag \"$WAKE_WORD\""
     }
 
     private fun resumeWakeWordListening() {
+        // Ein zuvor lautlos geducktes Hörbuch wieder anstellen – außer der Nutzer
+        // wollte in diesem Zuhörfenster tatsächlich pausieren/stoppen. Zentrale
+        // Stelle, weil hierher aus jedem Fenster (Befehl/Gespräch/Nachrichten/
+        // Dokument) am Ende der Weg zurückführt.
+        if (duckedAudiobook && !explicitAudiobookPause) {
+            audiobookManager?.resumeAfterListening()
+        }
+        duckedAudiobook = false
+        explicitAudiobookPause = false
         // Verzögert, damit Linas eigene Antwort nicht die Weckwort-Erkennung triggert
         mainHandler.removeCallbacks(wakeResumeRunnable)
         mainHandler.postDelayed(wakeResumeRunnable, 2_000)
@@ -394,6 +422,47 @@ class LauncherActivity : ComponentActivity() {
 
     private fun cancelWakeResume() {
         mainHandler.removeCallbacks(wakeResumeRunnable)
+    }
+
+    /**
+     * Wartet, bis Lina nicht mehr spricht (Piper-Warteschlange leer), und ruft
+     * dann [onReady] auf. Sicherheitsnetz: bricht nach [maxWaitMs] ab und ruft
+     * stattdessen [onTimeout] auf, statt endlos zu warten – die eigentlichen
+     * Auslöser dafür (Piper blockierte bei langen Texten; ExoPlayer reaktivierte
+     * sich selbst) sind am 2026-07-25 behoben, das hier ist zusätzliche Härtung
+     * gegen einen künftigen, unbekannten Hänger.
+     */
+    private fun waitForSilenceThenRun(
+        quietNeeded: Int = 1,
+        maxWaitMs: Long = 45_000L,
+        onReady: () -> Unit,
+        onTimeout: () -> Unit,
+    ) {
+        var quietChecks = 0
+        val deadline = SystemClock.uptimeMillis() + maxWaitMs
+        mainHandler.postDelayed(object : Runnable {
+            override fun run() {
+                if (onboarding != null) return
+                if (SystemClock.uptimeMillis() > deadline) {
+                    android.util.Log.w(
+                        "LinaLauncher",
+                        "waitForSilenceThenRun: Timeout nach ${maxWaitMs}ms – TTS reagiert nicht, breche ab",
+                    )
+                    onTimeout()
+                    return
+                }
+                if (piperEngine?.isBusySpeaking() == true) {
+                    quietChecks = 0
+                    mainHandler.postDelayed(this, 150)
+                    return
+                }
+                if (++quietChecks < quietNeeded) {
+                    mainHandler.postDelayed(this, 200)
+                    return
+                }
+                onReady()
+            }
+        }, 200)
     }
 
     private fun initializeLina(tts: TtsEngine) {
@@ -443,7 +512,7 @@ class LauncherActivity : ComponentActivity() {
     private fun startOnboarding() {
         val tts = ttsEngine ?: return
         cancelWakeResume()
-        stopService(Intent(this, WakeWordService::class.java))
+        WakeWordService.pauseListening(this)
         statusText = "Ersteinrichtung läuft…"
         val flow = VoiceOnboarding(
             tts = tts,
@@ -472,6 +541,11 @@ class LauncherActivity : ComponentActivity() {
     private fun processDebugInput(): Boolean {
         val input = debugInput.trim()
         if (input.isEmpty()) return false
+        // Nur beim tatsächlichen Verbrauch (Claude-Zweig unten) relevant – hier
+        // schon abgreifen, damit das Flag nicht in einen späteren, unabhängigen
+        // Aufruf durchsickert (z.B. wenn diese Eingabe stattdessen lokal matcht).
+        val freshWakeWord = freshWakeWordTurn
+        freshWakeWordTurn = false
 
         if (handleVoiceCommand(input)) {
             debugInput = ""
@@ -511,7 +585,7 @@ class LauncherActivity : ComponentActivity() {
         val resolved = intentResolver.resolve(input)
         if (resolved == null && claude != null) {
             // Ebene 2: kein lokaler Befehl erkannt – freie Konversation über Claude
-            askClaude(input)
+            askClaude(input, freshWakeWord = freshWakeWord)
             debugInput = ""
             return true
         }
@@ -558,23 +632,12 @@ class LauncherActivity : ComponentActivity() {
         val stt = sttEngine ?: return
         if (onboarding != null) return
         cancelWakeResume()
-        stopService(Intent(this, WakeWordService::class.java))
-        // Warten bis TTS wirklich fertig ist. Im News-Modus länger stabil still
-        // (RSS-Fetch kann eine Sprechpause erzeugen, bevor die Meldungen kommen).
-        val quietNeeded = if (newsMode) 6 else 1
-        var quietChecks = 0
-        mainHandler.postDelayed(object : Runnable {
-            override fun run() {
-                if (onboarding != null) return
-                if (piperEngine?.isBusySpeaking() == true) {
-                    quietChecks = 0
-                    mainHandler.postDelayed(this, 150)
-                    return
-                }
-                if (++quietChecks < quietNeeded) {
-                    mainHandler.postDelayed(this, 200)
-                    return
-                }
+        WakeWordService.pauseListening(this)
+        // Im News-Modus länger stabil still warten (RSS-Fetch kann eine
+        // Sprechpause erzeugen, bevor die Meldungen kommen).
+        waitForSilenceThenRun(
+            quietNeeded = if (newsMode) 6 else 1,
+            onReady = {
                 statusText = if (newsMode) "Nachrichten – ich höre…" else "Gespräch – ich höre…"
                 Earcons.go()
                 var handled = false
@@ -597,8 +660,9 @@ class LauncherActivity : ComponentActivity() {
                         }
                     }
                 }, 350)
-            }
-        }, 200)
+            },
+            onTimeout = { resumeWakeWordListening() },
+        )
     }
 
     private fun handleFollowUpResult(text: String, newsMode: Boolean) {
@@ -667,6 +731,70 @@ class LauncherActivity : ComponentActivity() {
     }
 
     /**
+     * Räumt alte Debug-Dateien auf, die sonst unbegrenzt liegen bleiben:
+     * VoiceOnboarding-Sitzungsordner (mit Sprachaufnahmen + Antworten) und
+     * "testfoto"-Bilder. Läuft im Hintergrund bei jedem App-Start, löscht
+     * alles älter als DEBUG_FILE_RETENTION_DAYS Tage.
+     */
+    private fun cleanupOldDebugFiles() {
+        val cutoff = System.currentTimeMillis() - DEBUG_FILE_RETENTION_DAYS * 24 * 60 * 60 * 1000L
+        listOfNotNull(
+            getExternalFilesDir("onboarding"),
+            java.io.File(getExternalFilesDir(null), "docphotos"),
+        ).forEach { dir ->
+            if (!dir.exists()) return@forEach
+            dir.listFiles()?.forEach { entry ->
+                if (entry.lastModified() < cutoff) {
+                    val deleted = entry.deleteRecursively()
+                    val status = if (deleted) "gelöscht" else "Löschen fehlgeschlagen"
+                    android.util.Log.d(
+                        "LinaLauncher",
+                        "Aufräumen: ${entry.name} (Alter über $DEBUG_FILE_RETENTION_DAYS Tage) $status",
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * "Lauter"/"leiser" außerhalb der Hörbuch-Wiedergabe: passt die
+     * Systemlautstärke (Musik-Stream, über den Piper und ExoPlayer beide
+     * ausgeben) an. Die Bestätigung wird bewusst über [ttsEngine] gesprochen,
+     * nicht über die System-Lautstärkeanzeige – die hilft einem blinden Nutzer
+     * nicht.
+     */
+    private fun adjustSystemVolume(raise: Boolean) {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.adjustStreamVolume(
+            AudioManager.STREAM_MUSIC,
+            if (raise) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
+            0,
+        )
+        announceSystemVolume(am)
+    }
+
+    /** Direkter Sollwert, z.B. aus "Lautstärke fünf" (=50) oder "... 70 Prozent". */
+    private fun setSystemVolume(percent: Int) {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val target = (max * percent.coerceIn(0, 100) / 100f).roundToInt().coerceIn(0, max)
+        am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+        announceSystemVolume(am)
+    }
+
+    private fun announceSystemVolume(am: AudioManager) {
+        val current = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val percent = if (max > 0) current * 100 / max else 0
+        val hinweis = when {
+            current >= max -> "Lautstärke $percent Prozent, geht nicht lauter."
+            current <= 0 -> "Lautstärke aus."
+            else -> "Lautstärke $percent Prozent."
+        }
+        ttsEngine?.speak(hinweis, TtsPriority.NORMAL)
+    }
+
+    /**
      * Debug: Foto aufnehmen und speichern, damit per adb pull geprüft werden kann,
      * ob der Kreppband-Rahmen formatfüllend im Bild der Rückkamera liegt.
      * Wird nur für die Einrichtung gebraucht – reguläres Vorlesen speichert nichts.
@@ -681,7 +809,7 @@ class LauncherActivity : ComponentActivity() {
             return
         }
         cancelWakeResume()
-        stopService(Intent(this, WakeWordService::class.java))
+        WakeWordService.pauseListening(this)
         ttsEngine?.speak("Ich mache ein Testfoto.", TtsPriority.INTERRUPT)
         val camera = documentCamera ?: DocumentCamera(this).also { documentCamera = it }
         mainHandler.postDelayed({
@@ -731,7 +859,7 @@ class LauncherActivity : ComponentActivity() {
         }
 
         cancelWakeResume()
-        stopService(Intent(this, WakeWordService::class.java))
+        WakeWordService.pauseListening(this)
 
         // "Alles vorlesen" nutzt das bereits vorhandene Bild – kein neues Foto
         if (verbatimOf != null) {
@@ -811,14 +939,9 @@ class LauncherActivity : ComponentActivity() {
         val stt = sttEngine ?: return
         if (onboarding != null) return
         cancelWakeResume()
-        stopService(Intent(this, WakeWordService::class.java))
-        mainHandler.postDelayed(object : Runnable {
-            override fun run() {
-                if (onboarding != null) return
-                if (piperEngine?.isBusySpeaking() == true) {
-                    mainHandler.postDelayed(this, 200)
-                    return
-                }
+        WakeWordService.pauseListening(this)
+        waitForSilenceThenRun(
+            onReady = {
                 statusText = "Dokument – ich höre…"
                 Earcons.go()
                 var handled = false
@@ -842,8 +965,12 @@ class LauncherActivity : ComponentActivity() {
                         }
                     }
                 }, 350)
-            }
-        }, 200)
+            },
+            onTimeout = {
+                lastDocumentImage = null
+                resumeWakeWordListening()
+            },
+        )
     }
 
     private fun handleDocFollowUp(text: String, lastText: String) {
@@ -889,12 +1016,12 @@ class LauncherActivity : ComponentActivity() {
      * Ebene 2 des Intent-Systems: fragt Claude (blockierend, daher eigener Thread).
      * Say → vorlesen, Do → lokal ausführen, Error → Fehlermeldung vorlesen.
      */
-    private fun askClaude(input: String) {
+    private fun askClaude(input: String, freshWakeWord: Boolean = false) {
         val conversation = claude ?: return
         statusText = "Lina denkt nach…"
         Earcons.thinking()
         Thread {
-            val reply = conversation.ask(input)
+            val reply = conversation.ask(input, freshWakeWord)
             runOnUiThread {
                 val response = when (reply) {
                     is LinaReply.Say -> reply.text
@@ -927,7 +1054,7 @@ class LauncherActivity : ComponentActivity() {
      * Datei landet in getExternalFilesDir() und ist per adb pull erreichbar.
      */
     private fun startDebugRecording() {
-        stopService(Intent(this, WakeWordService::class.java))
+        WakeWordService.pauseListening(this)
         statusText = "Aufnahme läuft…"
         ttsEngine?.speak(
             "Aufnahme startet und läuft dreißig Sekunden. Sprich nach dem Ton, " +
@@ -1112,6 +1239,7 @@ class LauncherActivity : ComponentActivity() {
         }
         is ResolvedIntent.PauseAudiobook -> {
             audiobookManager?.pause()
+            explicitAudiobookPause = true
             "Pausiert."
         }
         is ResolvedIntent.ResumeAudiobook -> {
@@ -1137,6 +1265,30 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.SleepTimer -> {
             audiobookManager?.startSleepTimer(intent.minutes)
             "Schlaf-Timer: ${intent.minutes} Minuten."
+        }
+        is ResolvedIntent.VolumeUp -> {
+            if (audiobookManager?.isPlaying == true) {
+                audiobookManager?.increaseVolume()
+            } else {
+                adjustSystemVolume(raise = true)
+            }
+            "" // Lautstärke-Ansage macht die jeweilige Stelle selbst
+        }
+        is ResolvedIntent.VolumeDown -> {
+            if (audiobookManager?.isPlaying == true) {
+                audiobookManager?.decreaseVolume()
+            } else {
+                adjustSystemVolume(raise = false)
+            }
+            ""
+        }
+        is ResolvedIntent.SetVolume -> {
+            if (audiobookManager?.isPlaying == true) {
+                audiobookManager?.setVolume(intent.percent)
+            } else {
+                setSystemVolume(intent.percent)
+            }
+            ""
         }
         is ResolvedIntent.NextChapter -> {
             audiobookManager?.nextChapter()
@@ -1199,6 +1351,9 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.Stop -> {
             ttsEngine?.stop()
             newsReader?.stop()
+            if (audiobookManager?.duckForListening() == true) {
+                explicitAudiobookPause = true
+            }
             "Gestoppt."
         }
         is ResolvedIntent.Unknown ->
@@ -1222,6 +1377,9 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.ListAudiobooks -> "ListAudiobooks"
         is ResolvedIntent.SearchAudiobook -> "SearchAudiobook(${intent.query})"
         is ResolvedIntent.SleepTimer -> "SleepTimer(${intent.minutes}min)"
+        is ResolvedIntent.VolumeUp -> "VolumeUp"
+        is ResolvedIntent.VolumeDown -> "VolumeDown"
+        is ResolvedIntent.SetVolume -> "SetVolume(${intent.percent}%)"
         is ResolvedIntent.NextChapter -> "NextChapter"
         is ResolvedIntent.PreviousChapter -> "PreviousChapter"
         is ResolvedIntent.GoToChapter -> "GoToChapter(${intent.number})"
@@ -1254,6 +1412,7 @@ class LauncherActivity : ComponentActivity() {
         private const val WAKE_WORD = "Hey Lina"
         // Whisper ist nicht-streamend: bis zu 10s Aufnahme + Transkriptionszeit
         private const val STT_TIMEOUT_MS = 30_000L
+        private const val DEBUG_FILE_RETENTION_DAYS = 7L
         private const val PREFS = "lina"
         private const val PREF_ONBOARDING_DONE = "onboarding_done"
         private const val PREF_INTERESTS = "user_interests"

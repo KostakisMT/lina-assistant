@@ -24,7 +24,7 @@ class AudiobookLibrary(private val context: Context) {
     private val daisy = DaisyRepository()
 
     fun listAvailable(): List<Audiobook> {
-        return curatedBooks() + daisyBooks() + scanLocalFiles()
+        return curatedBooks() + daisyBooks() + localFolderBooks() + scanLocalFiles()
     }
 
     fun findByQuery(query: String): Audiobook? {
@@ -82,6 +82,43 @@ class AudiobookLibrary(private val context: Context) {
                 chapters = book.chapters,
             )
         }
+    }
+
+    /**
+     * Lokale Mehrkapitel-Bücher: ein Unterordner in Audiobooks/ mit mehreren
+     * Audiodateien wird zu einem Buch mit Kapitelnavigation (eine Datei je
+     * Kapitel, wie bei gestreamtem LibriVox). Ordnername "Titel - Autor" wird
+     * aufgeteilt; ohne Trenner wird der ganze Name zum Titel. DAISY-Ordner
+     * (mit ncc.html) bleiben [daisyBooks] vorbehalten.
+     */
+    private fun localFolderBooks(): List<Audiobook> {
+        val books = mutableListOf<Audiobook>()
+        for (dir in audioDirs()) {
+            if (!dir.exists()) continue
+            dir.listFiles()?.filter { it.isDirectory }?.forEach { sub ->
+                if (File(sub, "ncc.html").exists()) return@forEach
+                val files = sub.listFiles()?.filter { it.isAudioFile() }
+                    ?.sortedBy { it.name } ?: return@forEach
+                if (files.isEmpty()) return@forEach
+
+                val (title, author) = sub.name.split(" - ", limit = 2)
+                    .let { parts -> parts[0] to (parts.getOrNull(1) ?: "Unbekannt") }
+
+                books.add(
+                    Audiobook(
+                        id = "localfolder_${sub.name}",
+                        title = title,
+                        author = author,
+                        uri = files.first().toURI().toString(),
+                        isLocal = true,
+                        chapters = files.mapIndexed { i, f ->
+                            Chapter(title = "Kapitel ${i + 1}", uri = f.toURI().toString())
+                        },
+                    )
+                )
+            }
+        }
+        return books
     }
 
     private fun audioDirs(): List<File> = listOfNotNull(

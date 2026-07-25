@@ -11,20 +11,33 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
 
     private val tts = TextToSpeech(context.applicationContext, this)
     private var ready = false
-    private val queue = LinkedList<Pair<String, TtsPriority>>()
+    private val queue = LinkedList<Triple<String, TtsPriority, (() -> Unit)?>>()
+    private val pendingCallbacks = mutableMapOf<String, () -> Unit>()
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             tts.language = Locale("de", "DE")
             tts.setSpeechRate(0.9f)
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+                override fun onDone(utteranceId: String?) = fireCallback(utteranceId)
+                override fun onStop(utteranceId: String?, interrupted: Boolean) = fireCallback(utteranceId)
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) = fireCallback(utteranceId)
+            })
             ready = true
             drainQueue()
         }
     }
 
-    override fun speak(text: String, priority: TtsPriority) {
+    private fun fireCallback(utteranceId: String?) {
+        utteranceId ?: return
+        pendingCallbacks.remove(utteranceId)?.invoke()
+    }
+
+    override fun speak(text: String, priority: TtsPriority, onDone: (() -> Unit)?) {
         if (!ready) {
-            queue.add(text to priority)
+            queue.add(Triple(text, priority, onDone))
             return
         }
         val queueMode = if (priority == TtsPriority.INTERRUPT) {
@@ -33,7 +46,9 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
         } else {
             TextToSpeech.QUEUE_ADD
         }
-        tts.speak(text, queueMode, null, UUID.randomUUID().toString())
+        val id = UUID.randomUUID().toString()
+        if (onDone != null) pendingCallbacks[id] = onDone
+        tts.speak(text, queueMode, null, id)
     }
 
     override fun stop() {
@@ -51,8 +66,8 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
 
     private fun drainQueue() {
         while (queue.isNotEmpty()) {
-            val (text, priority) = queue.poll() ?: break
-            speak(text, priority)
+            val (text, priority, onDone) = queue.poll() ?: break
+            speak(text, priority, onDone)
         }
     }
 }

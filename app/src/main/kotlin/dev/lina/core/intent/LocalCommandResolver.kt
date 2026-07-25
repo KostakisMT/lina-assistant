@@ -13,7 +13,6 @@ class LocalCommandResolver : IntentResolver {
             ?: resolveSms(normalized)
             ?: resolveDocument(normalized)
             ?: resolveCallControl(normalized)
-            ?: resolveNews(normalized)
             ?: resolveAudiobook(normalized)
             ?: resolveStop(normalized)
     }
@@ -110,21 +109,6 @@ class LocalCommandResolver : IntentResolver {
         else -> null
     }
 
-    private fun resolveNews(input: String): ResolvedIntent? = when {
-        // Regionale/thematische Nachrichtenwünsche ("... aus Hannover", "... zur
-        // Politik") gehen an Ebene 2 (Claude + Websuche), nicht an den RSS-Reader
-        input.matches(Regex(""".*(?:was gibt es neues|nachrichten|news|neuigkeiten|was ist passiert).*""")) &&
-            !input.matches(Regex(""".*(?:\baus\b|\büber\b|\bzur\b|\bzum\b|\bregion\b|\bthema\b).*""")) ->
-            ResolvedIntent.ReadNews
-        input.matches(Regex(""".*(?:mehr dazu|ausführlich|ganzer artikel|vollständig|detail).*""")) ->
-            ResolvedIntent.NewsDetail
-        // "nächstes Kapitel" gehört zum Hörbuch, nicht zu den Meldungen
-        input.matches(Regex(""".*(?:nächste|weiter|nächste meldung|skip).*""")) &&
-            !input.contains("kapitel") ->
-            ResolvedIntent.NextNews
-        else -> null
-    }
-
     private fun resolveAudiobook(input: String): ResolvedIntent? = when {
         // Kapitelbefehle zuerst: "weiter" und "zurück" unten würden sonst
         // "ein Kapitel weiter" als Fortsetzen bzw. Zurückspulen abfangen.
@@ -133,18 +117,48 @@ class LocalCommandResolver : IntentResolver {
             ResolvedIntent.PlayAudiobook
         input.matches(Regex(""".*(?:pause|anhalten|halt an).*""")) ->
             ResolvedIntent.PauseAudiobook
-        input.matches(Regex(""".*(?:weiter|fortsetzen|weiterspielen|resume).*""")) ->
+        // Wortgrenzen (\b) statt reinem Teilstring-Test: ".*weiter.*" traf sonst
+        // auch zusammengesetzte Wörter wie "weiterreden" ("lass uns weiterreden"
+        // sollte an Claude gehen, nicht versehentlich das Hörbuch fortsetzen).
+        input.matches(Regex(""".*\b(?:weiter|fortsetzen|weiterspielen|weiterhören|weitermachen|resume)\b.*""")) ->
             ResolvedIntent.ResumeAudiobook
         input.matches(Regex(""".*(?:zurück|zurückspulen|\d+\s*sekunden?\s*zurück).*""")) -> {
             val seconds = Regex("""(\d+)\s*sekunden?""").find(input)
                 ?.groupValues?.get(1)?.toIntOrNull() ?: 30
             ResolvedIntent.RewindAudiobook(seconds)
         }
+        // Stumm zuerst: "lautstärke 0" würde sonst vom Stufen-/Prozent-Muster
+        // unten als Randfall mitgenommen – hier ist die Absicht eindeutiger.
+        input.matches(Regex(""".*\b(?:ton aus|stumm(?:schalten)?)\b.*""")) ||
+            input.matches(Regex(""".*lautstärke\s+(?:aus|null|0)\b.*""")) ->
+            ResolvedIntent.SetVolume(0)
+        // Wortgrenzen wie bei "weiter" – reiner Teilstring-Test wäre riskant
+        input.matches(Regex(""".*\blauter\b.*""")) -> ResolvedIntent.VolumeUp
+        input.matches(Regex(""".*\bleiser\b.*""")) -> ResolvedIntent.VolumeDown
         input.matches(Regex(""".*(?:was höre ich|welches buch|was läuft|was spielt).*""")) ->
             ResolvedIntent.AudiobookInfo
         input.matches(Regex(""".*(?:welche hörbücher|meine hörbücher|hörbuch(?:liste|er)|bibliothek).*""")) ->
             ResolvedIntent.ListAudiobooks
-        else -> resolveSleepTimer(input) ?: resolveAudiobookSearch(input)
+        else -> resolveVolumeLevel(input) ?: resolveSleepTimer(input) ?: resolveAudiobookSearch(input)
+    }
+
+    /**
+     * Direkter Lautstärke-Sollwert: "Lautstärke (auf) fünf" = Stufe 1–10
+     * (=10–100%), oder "Lautstärke (auf) 70 Prozent" = direkter Prozentwert.
+     * Prozent-Muster zuerst, sonst würde "70 Prozent" die Stufen-Regex mit "70"
+     * als (ungültige) Stufe treffen und leer ausgehen, statt zum Prozent-Zweig
+     * durchzufallen.
+     */
+    private fun resolveVolumeLevel(input: String): ResolvedIntent? {
+        Regex("""lautstärke\s+(?:auf\s+)?(\d{1,3})\s*(?:prozent|%)""").find(input)?.let { match ->
+            match.groupValues[1].toIntOrNull()?.let { return ResolvedIntent.SetVolume(it.coerceIn(0, 100)) }
+        }
+        Regex("""lautstärke\s+(?:auf\s+)?(\d{1,2}|${GermanNumbers.ALTERNATION})\b""").find(input)?.let { match ->
+            GermanNumbers.parse(match.groupValues[1])?.toInt()?.let { level ->
+                if (level in 1..10) return ResolvedIntent.SetVolume(level * 10)
+            }
+        }
+        return null
     }
 
     /**

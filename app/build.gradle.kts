@@ -106,6 +106,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-session:1.5.1")
 
+    // EncryptedSharedPreferences (Erinnerungen haben oft Gesundheitsbezug)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // Unit-Tests (reine JVM – Parser und Intent-Erkennung, kein Gerät nötig)
     testImplementation("junit:junit:4.13.2")
 

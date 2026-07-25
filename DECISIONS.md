@@ -323,3 +323,50 @@ Zielgröße: Faktor 3–5 gegenüber heute.
 - **Kostenmodell (ADR-021):** Die auf Gemeinnützigkeit gestützte Begründung entfällt. Das Prinzip – frei für die normale Alltagsnutzung, keine Zahlungsdaten in der App – bleibt. Die Finanzierung ist offen: die laufenden Kosten trägt vorerst der Entwickler; ein tragfähiges Modell (Fördermittel, Spenden) ist an einen künftigen gemeinnützigen Partner geknüpft.
 - **Fördermittel:** Der Prototype Fund passt zur Privatperson-Struktur. Fördertöpfe und Programme, die eine gemeinnützige Organisation voraussetzen (z.B. Aktion Mensch, steuerabzugsfähige Spenden), sind ohne einen solchen Partner nicht zugänglich und bleiben ein offener Strang.
 - Diese ADR **ändert ADR-016, ADR-020 und ADR-021**; deren ursprünglicher Text bleibt als Historie stehen, jeweils mit einer Aktualisierungsnotiz versehen.
+
+---
+
+## ADR-024: Nachrichten laufen über Ebene 2 (Claude + Websuche), nicht mehr über den RSS-Reader
+**Datum:** 2026-07-25 | **Status:** Akzeptiert
+
+**Kontext:** Beim ersten Bring-up-Test auf dem echten Lenovo-Tablet war der RSS-basierte `NewsReader` (ADR aus Phase 1f) in Bedienung und Klang "grausam": starres Folgefenster mit Schlüsselwörtern ("mehr", "nächste", "stopp"), rohe RSS-Zusammenfassungen ohne Relevanzfilterung, kein Eingehen auf Rückfragen. Parallel existierte für regionale/thematische Nachrichtenwünsche bereits ein funktionierender Pfad über `ClaudeConversation` mit Websuche (ADR-017) – inklusive Dialoggedächtnis und natürlichem Gesprächsfluss. Nur der allgemeine Fall ("Was gibt es Neues?") ging noch am lokalen `LocalCommandResolver` vorbei zum RSS-Reader.
+
+**Entscheidung:** Auch der allgemeine Nachrichten-Fall läuft jetzt über Ebene 2. `LocalCommandResolver.resolveNews()` wurde entfernt – jede Nachrichtenanfrage fällt an Claude durch. Der System-Prompt weist Claude an, einen kurzen, für den Nutzer relevanten Überblick zu geben (Region + international gemischt, unter Nutzung der aus dem Onboarding bekannten Interessen und Wohnregion), gefolgt von genau einem Rückfrage-Hinweis. Das Werkzeug `nachrichten_vorlesen` wurde aus dem Tool-Set entfernt. `NewsReader`, `RssFeedRepository`, `NewsCache` und `NewsSyncWorker` bleiben im Code, werden aber nicht mehr angesprochen – Entscheidung über Entfernen vs. Offline-Fallback steht noch aus (siehe TODO.md).
+
+**Konsequenzen:**
+- Nachrichten sind jetzt zwingend online und kosten einen Claude-Turn plus ggf. Websuche (Kostenfrage siehe ADR-022) – anders als der bisher komplett offline laufende RSS-Pfad.
+- Deutlich bessere Bedienung: freier Rückfrage-Dialog statt starrem Kurzwort-Fenster, Relevanzfilterung statt roher RSS-Reihenfolge.
+- `resolveNews`-Tests in `LocalCommandResolverTest` wurden auf das neue Verhalten umgestellt (Nachrichten-Eingaben liefern jetzt bewusst `null`, damit sie an Ebene 2 durchfallen).
+- Kein Nachrichten-Zugriff mehr möglich, wenn kein `CLAUDE_API_KEY` gesetzt ist oder das Internet fehlt – das war vorher über den RSS-Cache zumindest teilweise offline abgefangen. Bewusst in Kauf genommen, da der Offline-Fall laut Feedback ohnehin schlecht war; eine Offline-Rückfallebene wäre ein separates, künftiges Thema.
+
+---
+
+## ADR-025: Lokale Hörbücher als Ordner mit einer Datei je Kapitel + READ_MEDIA_AUDIO
+**Datum:** 2026-07-25 | **Status:** Akzeptiert
+
+**Kontext:** `AudiobookLibrary.scanLocalFiles()` behandelte bisher jede Audiodatei in `Audiobooks/` als eigenständiges Buch ohne Kapitelbezug – für ein einzelnes MP3 richtig, für ein mehrteiliges Hörbuch (z.B. LibriVox-Downloads mit einer Datei je Kapitel) aber falsch: ein 37-Kapitel-Roman wäre als 37 separate "Bücher" gelistet worden. Gleichzeitig zeigte sich beim Testen, dass der öffentliche `Music/Audiobooks`-Ordner unter Scoped Storage (Android 13+) ohne `READ_MEDIA_AUDIO` für die App unlesbar war (`Permission denied`, am Gerät reproduziert) – ein reiner Dateisystemzugriff reicht auf modernen Android-Versionen nicht mehr.
+
+**Entscheidung:**
+- Ein Unterordner in `Audiobooks/` mit mehreren Audiodateien wird zu einem Buch mit echter Kapitelnavigation – eine Datei je Kapitel (`Chapter.clipStartMs/clipEndMs = 0`, wie im `Chapter`-Datenmodell für dieses Muster bereits vorgesehen). Kein Umbau am Player nötig, das Muster existierte für gestreamtes LibriVox schon.
+- Ordnername-Konvention `"Titel - Autor"` (Trennung am ersten `" - "`); ohne Trenner wird der ganze Ordnername zum Titel, Autor "Unbekannt".
+- Ordner mit `ncc.html` bleiben `daisyBooks()` vorbehalten (nicht doppelt als Mehrkapitel-Ordner erfasst).
+- `READ_MEDIA_AUDIO` als reguläre, im Onboarding abgefragte Berechtigung ergänzt (`PermissionsGuide`), da minSdk 33 sie ohnehin voraussetzt.
+
+**Konsequenzen:**
+- Lokale Hörbücher aus mehreren Dateien (curl-Downloads, Bibliotheks-Rips) sind jetzt ohne Zusatzcode direkt abspielbar, inklusive Kapitelsprung/-liste.
+- Neue Pflichtberechtigung im Onboarding – ein weiterer Dialog, den Nutzer bestätigen müssen.
+- Nicht getestet: reiner `adb push` in den App-eigenen externen Ordner (`getExternalFilesDir`) scheiterte ebenfalls mit `Permission denied` beim Lesezugriff der App auf von außen (adb/shell) hineingelegte Dateien – ein bekanntes Scoped-Storage-Verhalten. Für spätere Doku relevant: Dateien für lokale Hörbücher gehören in den **öffentlichen** `Music/Audiobooks`-Ordner (mit `READ_MEDIA_AUDIO`), nicht in den App-privaten Ordner, wenn sie von außerhalb der App dorthin gelangen sollen.
+
+---
+
+## ADR-026: WakeWordService läuft durchgehend – Pause/Resume statt Stop/Restart
+**Datum:** 2026-07-26 | **Status:** Akzeptiert
+
+**Kontext:** Der Dauerbetriebs-Check deckte einen realen Ausfall auf: `LauncherActivity` stoppte `WakeWordService` bei jedem Konversationsturn komplett (um das Mikrofon für STT freizugeben) und startete ihn danach über `startForegroundService()` neu. Android 14+/15 verbietet genau diesen Neustart-Typ für Mikrofon-Foreground-Services, wenn die App gerade nicht im Vordergrund ist (`SecurityException`). Am Gerät reproduziert: Der Service beendete sich nach einem fehlgeschlagenen Neustart selbst, `WakeWordWatchdog` scheiterte am selben Restart-Versuch – das Weckwort blieb dauerhaft aus, ohne Absturz oder Crash-Log, bis die App manuell wieder geöffnet wurde.
+
+**Entscheidung:** `WakeWordService` wird nie mehr während des normalen Betriebs komplett gestoppt. Statt `stopService()`+`startForegroundService()` schicken `WakeWordService.pauseListening()`/`resumeListening()` ein Kommando per normalem `startService()` an die bereits laufende Instanz – das ist kein neuer Foreground-Start und daher nicht von der Android-Regel betroffen. Intern ruft das nur `OpenWakeWordEngine.stop()`/`start()` auf (Mikrofon/Thread freigeben bzw. neu starten), ohne die geladenen ONNX-Modelle zu entladen. Zwei echte Kaltstarts bleiben bestehen: `onResume()`-Fallback und der initiale Start nach dem Onboarding – beide garantiert aus einem Vordergrund-Kontext.
+
+**Konsequenzen:**
+- Behebt den Kernfall (jeder Gesprächsturn) vollständig – am Gerät verifiziert, kein `SecurityException`-Treffer mehr im Log.
+- Restrisiko bleibt: ein echter Prozess-Tod (OOM-Kill) im Hintergrund bräuchte weiterhin einen vollständigen `WakeWordWatchdog`-Neustart, der theoretisch noch scheitern kann, falls die App exakt dann im Hintergrund ist. Deutlich seltener als der behobene Fall, nicht weiter verfolgt.
+- Nebeneffekt: Pause/Resume ist schneller als der vorherige volle Stop/Neustart, da die ONNX-Modelle geladen bleiben.

@@ -1,11 +1,53 @@
 package dev.lina.feature.reminder
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
-/** Persistiert die Erinnerungen (SharedPreferences, JSON-Liste). */
+/**
+ * Persistiert die Erinnerungen (EncryptedSharedPreferences, JSON-Liste).
+ * Erinnerungen haben oft Gesundheitsbezug ("an die Tabletten", "zum Arzttermin") –
+ * unverschlüsselte SharedPreferences waren eine dokumentierte Sicherheitslücke
+ * (SICHERHEIT.md). Migriert einmalig bestehende Klartext-Einträge aus dem alten
+ * Speicher und löscht ihn danach.
+ */
 class ReminderStore(context: Context) {
 
-    private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = try {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        EncryptedSharedPreferences.create(
+            context,
+            PREFS,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    } catch (e: Exception) {
+        // Nie ganz ohne Erinnerungen dastehen – lieber unverschlüsselt als gar nicht.
+        Log.e(TAG, "Verschlüsselter Speicher fehlgeschlagen, falle auf Klartext zurück", e)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    }
+
+    init {
+        migrateFromLegacyPlaintext(context)
+    }
+
+    private fun migrateFromLegacyPlaintext(context: Context) {
+        if (prefs.contains(KEY_LIST)) return
+        val legacy = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+        val legacyList = legacy.getString(KEY_LIST, null)
+        if (legacyList != null) {
+            prefs.edit().putString(KEY_LIST, legacyList).apply()
+            Log.i(TAG, "Erinnerungen aus Klartext-Speicher migriert und verschlüsselt")
+        }
+        if (legacy.contains(KEY_LIST)) {
+            legacy.edit().clear().apply()
+        }
+    }
 
     fun all(): List<Reminder> =
         Reminder.listFromJson(prefs.getString(KEY_LIST, "[]") ?: "[]")
@@ -39,7 +81,9 @@ class ReminderStore(context: Context) {
     }
 
     companion object {
-        private const val PREFS = "lina_reminders"
+        private const val TAG = "ReminderStore"
+        private const val PREFS = "lina_reminders_secure"
+        private const val LEGACY_PREFS = "lina_reminders"
         private const val KEY_LIST = "reminders"
     }
 }

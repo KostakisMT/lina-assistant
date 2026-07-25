@@ -21,6 +21,10 @@ sealed class ResolvedIntent {
     data class GoToChapter(val number: Int) : ResolvedIntent()
     data object ListChapters : ResolvedIntent()
     data class SleepTimer(val minutes: Int) : ResolvedIntent()
+    data object VolumeUp : ResolvedIntent()
+    data object VolumeDown : ResolvedIntent()
+    /** 0–100, direkter Sollwert ("Lautstärke fünf" = 50, "Lautstärke auf 70 Prozent" = 70). */
+    data class SetVolume(val percent: Int) : ResolvedIntent()
     data object AcceptCall : ResolvedIntent()
     data object RejectCall : ResolvedIntent()
     data object HangUp : ResolvedIntent()

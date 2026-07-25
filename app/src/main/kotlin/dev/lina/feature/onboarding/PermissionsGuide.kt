@@ -17,6 +17,7 @@ object PermissionsGuide {
         Manifest.permission.READ_SMS,
         Manifest.permission.RECEIVE_SMS,
         Manifest.permission.CAMERA,
+        Manifest.permission.READ_MEDIA_AUDIO,
     )
 
     const val REQUEST_CODE = 1001

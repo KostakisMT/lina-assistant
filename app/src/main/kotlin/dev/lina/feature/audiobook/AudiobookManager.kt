@@ -12,6 +12,7 @@ class AudiobookManager(
     private val ttsEngine: TtsEngine,
 ) {
 
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val player = AudiobookPlayer(context)
     private val stateStore = PlaybackStateStore(context)
     private val library = AudiobookLibrary(context)
@@ -82,15 +83,23 @@ class AudiobookManager(
             } else {
                 "${book.title} von ${book.author}."
             }
-            ttsEngine.speak(intro, TtsPriority.HIGH)
-            player.playChapters(book.chapters, index, startPositionMs)
-            saveProgress(startPositionMs, 0L)
+            // Erst nach der Ansage starten – sonst läuft die Wiedergabe (ExoPlayer)
+            // bereits los, während Lina noch die Auswahl ansagt (Überschneidung).
+            ttsEngine.speak(intro, TtsPriority.HIGH, onDone = {
+                mainHandler.post {
+                    player.playChapters(book.chapters, index, startPositionMs)
+                    saveProgress(startPositionMs, 0L)
+                }
+            })
             return
         }
 
-        ttsEngine.speak("${book.title} von ${book.author}.", TtsPriority.HIGH)
-        player.play(book.uri, startPositionMs)
-        saveProgress(startPositionMs, 0L)
+        ttsEngine.speak("${book.title} von ${book.author}.", TtsPriority.HIGH, onDone = {
+            mainHandler.post {
+                player.play(book.uri, startPositionMs)
+                saveProgress(startPositionMs, 0L)
+            }
+        })
     }
 
     // ------------------------------------------------------------- Kapitel
@@ -160,6 +169,8 @@ class AudiobookManager(
         return true
     }
 
+    val isPlaying: Boolean get() = player.isPlaying
+
     fun pause() {
         if (!player.isPlaying) {
             ttsEngine.speak("Kein Hörbuch läuft gerade.", TtsPriority.NORMAL)
@@ -181,6 +192,56 @@ class AudiobookManager(
         }
         player.resume()
         ttsEngine.speak("Weiter.", TtsPriority.HIGH)
+    }
+
+    fun increaseVolume() = adjustVolume(VOLUME_STEP)
+
+    fun decreaseVolume() = adjustVolume(-VOLUME_STEP)
+
+    /** Direkter Sollwert, z.B. aus "Lautstärke fünf" (=50) oder "... 70 Prozent". */
+    fun setVolume(percent: Int) {
+        if (currentBook == null) {
+            ttsEngine.speak("Kein Hörbuch ausgewählt.", TtsPriority.NORMAL)
+            return
+        }
+        player.setVolume(percent.coerceIn(0, 100) / 100f)
+        announceVolume(player.currentVolume)
+    }
+
+    private fun adjustVolume(delta: Float) {
+        if (currentBook == null) {
+            ttsEngine.speak("Kein Hörbuch ausgewählt.", TtsPriority.NORMAL)
+            return
+        }
+        announceVolume(player.adjustVolume(delta))
+    }
+
+    private fun announceVolume(volume: Float) {
+        val percent = (volume * 100).toInt()
+        val hinweis = when {
+            volume >= 1f -> "Lautstärke $percent Prozent, geht nicht lauter."
+            volume <= 0f -> "Lautstärke aus."
+            else -> "Lautstärke $percent Prozent."
+        }
+        ttsEngine.speak(hinweis, TtsPriority.NORMAL)
+    }
+
+    /**
+     * Pausiert lautlos für ein Zuhörfenster (Weckwort/Stopp-Befehl während der
+     * Wiedergabe) – ohne die "Pausiert."-Ansage von [pause]. Ohne dieses Ducking
+     * hört die Weckwort-Engine der eigenen Erzählstimme zu und kann Buchtext als
+     * Befehl an Claude schicken. @return true, wenn wirklich lief und pausiert wurde.
+     */
+    fun duckForListening(): Boolean {
+        if (!player.isPlaying) return false
+        player.pause()
+        saveCurrentProgress()
+        return true
+    }
+
+    /** Setzt nach einem Zuhörfenster lautlos fort – Gegenstück zu [duckForListening]. */
+    fun resumeAfterListening() {
+        player.resume()
     }
 
     fun rewind(seconds: Int) {
@@ -330,5 +391,7 @@ class AudiobookManager(
     private companion object {
         /** Mehr Kapitel am Stück vorzulesen überfordert beim Zuhören. */
         const val MAX_SPOKEN_CHAPTERS = 10
+        /** Schrittgröße für "lauter"/"leiser" – 10 Schritte von 0 bis 100%. */
+        const val VOLUME_STEP = 0.1f
     }
 }

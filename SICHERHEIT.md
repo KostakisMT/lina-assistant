@@ -18,16 +18,19 @@ drei Dinge, die andere Apps nicht in dieser Schärfe haben:
    und verwaltet Erinnerungen, die oft gesundheitsbezogen sind
    („Tabletten nehmen").
 3. **Die Nutzer:innen sind auf Hilfe angewiesen.** Einrichtung und Wartung
-   übernehmen Angehörige oder Vereinsbetreuer:innen. Jede Schutzmaßnahme,
+   übernehmen Angehörige oder Betreuer:innen. Jede Schutzmaßnahme,
    die eine sehende Person voraussetzt, ist zugleich eine Abhängigkeit.
 
 ## Verantwortlichkeit
 
-Träger und datenschutzrechtlich Verantwortlicher ist der gemeinnützige
-Trägerverein. Anthropic ist Auftragsverarbeiter für die Cloud-Funktionen; ein
-AVV ist Voraussetzung für den Regelbetrieb und steht noch aus. Mit dem Proxy
-aus [ADR-020](DECISIONS.md) kommt der Verein als weitere verarbeitende Stelle
-hinzu – die Einwilligung in [WARTUNG.md](WARTUNG.md) benennt das bereits.
+Datenschutzrechtlich verantwortlich ist derzeit der Entwickler als Privatperson,
+der das Projekt vorerst privat trägt (ADR-023). Anthropic ist Auftragsverarbeiter
+für die Cloud-Funktionen; ein AVV ist Voraussetzung für den Regelbetrieb und
+steht noch aus. In der jetzigen Übergangsphase laufen die Cloud-Funktionen direkt
+zum KI-Dienst über einen eigenen API-Key des Entwicklers – der Proxy aus
+[ADR-020](DECISIONS.md) mit einer weiteren verarbeitenden Stelle ist ein späterer
+Schritt und mit ihm eine mögliche gemeinnützige Trägerschaft. Die Einwilligung in
+[WARTUNG.md](WARTUNG.md) beschreibt den aktuellen Weg.
 
 ---
 

@@ -1,7 +1,7 @@
 # Mitmachen bei Lina
 
-Danke für dein Interesse! Lina ist ein gemeinnützig getragenes,
-nicht-kommerzielles Projekt für blinde und sehbehinderte Menschen.
+Danke für dein Interesse! Lina ist ein nicht-kommerzielles, quelloffenes
+Projekt für blinde und sehbehinderte Menschen.
 
 ## Einstieg
 

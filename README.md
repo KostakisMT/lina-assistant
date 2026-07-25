@@ -89,7 +89,7 @@ Lina ist eine Open-Source-Sprachassistentin für Android, gebaut für blinde und
 sehbehinderte Menschen. Komplett per Sprache steuerbar, Kernfunktionen offline,
 kein Login, keine Cloud-Pflicht.
 
-Getragen von einem gemeinnützigen Verein – kein kommerzielles Produkt.
+Ein quelloffenes, nicht-kommerzielles Projekt – kein kommerzielles Produkt.
 
 ## Was Lina kann
 

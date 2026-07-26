@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
+import android.net.Uri
 import kotlin.math.roundToInt
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -15,6 +16,7 @@ import android.os.SystemClock
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -48,6 +50,9 @@ import dev.lina.core.intent.LocalCommandResolver
 import dev.lina.core.intent.ResolvedIntent
 import dev.lina.core.llm.ClaudeConversation
 import dev.lina.core.llm.LinaReply
+import dev.lina.core.sim.SimChangeDetector
+import dev.lina.core.sim.SimChangeResult
+import dev.lina.core.sim.SimIdentityReader
 import dev.lina.core.stt.SttEngine
 import dev.lina.core.stt.VoskSttEngine
 import dev.lina.core.stt.WhisperSttEngine
@@ -58,6 +63,9 @@ import dev.lina.core.tts.TtsPriority
 import dev.lina.core.wakeword.WakeWordService
 import dev.lina.feature.audiobook.AudiobookManager
 import dev.lina.feature.calls.CallHandler
+import dev.lina.feature.contactimport.ContactImportManager
+import dev.lina.feature.contactimport.ContactImportStore
+import dev.lina.feature.contactimport.ImportResult
 import dev.lina.feature.news.NewsReader
 import dev.lina.feature.news.NewsSyncWorker
 import dev.lina.feature.sms.SmsReader
@@ -91,6 +99,9 @@ class LauncherActivity : ComponentActivity() {
     private var newsReader: NewsReader? = null
     private var audiobookManager: AudiobookManager? = null
     private var reminderManager: ReminderManager? = null
+    private var contactImportManager: ContactImportManager? = null
+    /** Fingerabdruck der SIM, für die gerade eine Import-Nachfrage offen ist. */
+    private var pendingSimImportIdentity: String? = null
     private var statusText by mutableStateOf("Lina startet…")
     /** Treibt die Statuskugel (LinaOrb) für Angehörige/Besucher – rein additiv neben [statusText]. */
     private var linaActivity by mutableStateOf<LinaActivity>(LinaActivity.Loading)
@@ -158,6 +169,24 @@ class LauncherActivity : ComponentActivity() {
             }
         }
     }
+
+    /**
+     * Live-Erkennung während des Betriebs (App-Start deckt den häufigeren Fall
+     * ab – das hier fängt einen SIM-Wechsel ohne Geräte-Neustart). Manche OEMs
+     * verweigern die Registrierung ohne Sonderrechte; dann bleibt der
+     * App-bereit-Check in [startVoicePipeline] die verlässliche Schiene.
+     */
+    private val simStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            // SIM-Init feuert die Broadcasts oft mehrfach kurz hintereinander.
+            mainHandler.postDelayed({ checkSimChangeAndMaybePrompt() }, 1_000)
+        }
+    }
+
+    private val vcardPickerLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            handleVcardPicked(uri)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -247,6 +276,20 @@ class LauncherActivity : ComponentActivity() {
             IntentFilter(ReminderReceiver.ACTION_REMINDER_DUE),
             RECEIVER_NOT_EXPORTED,
         )
+        try {
+            registerReceiver(
+                simStateReceiver,
+                // Beide Konstanten (ACTION_SIM_CARD_STATE_CHANGED/ACTION_SIM_STATE_CHANGED)
+                // sind @SystemApi/versteckt und im öffentlichen SDK-Stub nicht erreichbar –
+                // die Broadcast-Action als Literal funktioniert für einen zur Laufzeit
+                // registrierten Empfänger trotzdem (nur manifest-deklarierte implizite
+                // Empfänger sind seit Android 8 eingeschränkt).
+                IntentFilter("android.intent.action.SIM_STATE_CHANGED"),
+                RECEIVER_NOT_EXPORTED,
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("LinaLauncher", "SIM-Status-Empfänger nicht registrierbar", e)
+        }
 
         if (!PermissionsGuide.allGranted(this)) {
             PermissionsGuide.requestMissing(this)
@@ -315,6 +358,7 @@ class LauncherActivity : ComponentActivity() {
                         "Ich höre jetzt auf das Weckwort $WAKE_WORD.",
                         TtsPriority.NORMAL,
                     )
+                    checkSimChangeAndMaybePrompt()
                 }
             }
         }
@@ -488,6 +532,7 @@ class LauncherActivity : ComponentActivity() {
         newsReader = NewsReader(this, tts)
         audiobookManager = AudiobookManager(this, tts)
         reminderManager = ReminderManager(this, tts)
+        contactImportManager = ContactImportManager(this)
 
         NewsSyncWorker.schedule(this)
 
@@ -622,6 +667,10 @@ class LauncherActivity : ComponentActivity() {
             // Kamera + Vision laufen asynchron und übernehmen Ansagen/Folgefenster
             return true
         }
+        if (resolved is ResolvedIntent.ImportSimContacts || resolved is ResolvedIntent.ImportVcardContacts) {
+            // Import/Dateipicker läuft asynchron und übernimmt Ansage/Weckwort-Neustart selbst
+            return true
+        }
         ttsEngine?.speak(response)
         return false
     }
@@ -713,9 +762,14 @@ class LauncherActivity : ComponentActivity() {
         // Gesprächsfenster: alles über Claude – die Regex-Ebene ist für
         // Raumgespräche zu triggerfreudig ("ich ruf dich später an" → Anruf!).
         // Claude kennt den Dialog und kann Befehle (Do) wie Raumgespräche (End)
-        // unterscheiden. Nur "Stopp" bleibt lokal – muss sofort wirken.
+        // unterscheiden. Nur "Stopp" und der Schlafmodus bleiben lokal – müssen
+        // sofort wirken, unabhängig vom Gesprächsverlauf (sonst plaudert Claude
+        // nur "Gute Nacht" zurück, ohne dass Bildschirm/Lautstärke reagieren).
         val resolved = intentResolver.resolve(text)
-        if (resolved is ResolvedIntent.Stop) {
+        if (resolved is ResolvedIntent.Stop ||
+            resolved is ResolvedIntent.SleepMode ||
+            resolved is ResolvedIntent.SleepModeOff
+        ) {
             ttsEngine?.speak(handleIntent(resolved))
             resumeWakeWordListening()
             return
@@ -1049,6 +1103,181 @@ class LauncherActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * App-bereit-Check: vergleicht den aktuellen SIM-Fingerabdruck gegen den
+     * zuletzt gesehenen. `FirstSeen` (auch beim allerersten Start mit bereits
+     * eingelegter SIM) und `Changed` lösen beide die Nachfrage aus – das ist
+     * genau das Hauptszenario ("Nutzer legt seine SIM mit Kontakten ein").
+     */
+    private fun checkSimChangeAndMaybePrompt() {
+        val detector = SimChangeDetector(SimIdentityReader(this), ContactImportStore(this))
+        when (val result = detector.evaluate()) {
+            is SimChangeResult.FirstSeen -> {
+                ContactImportStore(this).recordSeen(result.identity)
+                pendingSimImportIdentity = result.identity
+                openSimImportFollowUp()
+            }
+            is SimChangeResult.Changed -> {
+                val store = ContactImportStore(this)
+                store.recordSeen(result.identity)
+                if (result.identity != store.declinedIdentity()) {
+                    pendingSimImportIdentity = result.identity
+                    openSimImportFollowUp()
+                }
+            }
+            SimChangeResult.Unchanged, SimChangeResult.NoSim -> Unit
+        }
+    }
+
+    /** Sprach-Nachfrage bei automatisch erkannter neuer/anderer SIM-Karte. */
+    private fun openSimImportFollowUp() {
+        val stt = sttEngine ?: return
+        if (onboarding != null) return
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        ttsEngine?.speak(
+            "Ich habe eine neue SIM-Karte erkannt. Soll ich die Kontakte übernehmen?",
+            TtsPriority.HIGH,
+        )
+        waitForSilenceThenRun(
+            onReady = {
+                statusText = "SIM-Import – ich höre…"
+                linaActivity = LinaActivity.Listening
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleSimImportFollowUp(text)
+                        }
+                    }
+                }, 350)
+            },
+            onTimeout = { resumeWakeWordListening() },
+        )
+    }
+
+    private fun handleSimImportFollowUp(text: String) {
+        val t = text.lowercase()
+        val identity = pendingSimImportIdentity
+        pendingSimImportIdentity = null
+        when {
+            listOf("ja", "klar", "gerne", "mach", "bitte").any { t.contains(it) } -> {
+                runSimImport()
+            }
+            listOf("nein", "nicht", "später", "spaeter").any { t.contains(it) } -> {
+                if (identity != null) ContactImportStore(this).recordDeclined(identity)
+                ttsEngine?.speak("Alles klar, ich lasse es.", TtsPriority.NORMAL)
+                resumeWakeWordListening()
+            }
+            // Weder Ja noch Nein erkannt – nicht als abgelehnt vermerken, der
+            // manuelle Befehl ("Kontakte von der SIM importieren") bleibt so
+            // als Rückweg nutzbar.
+            else -> resumeWakeWordListening()
+        }
+    }
+
+    /** Für den manuellen Sprachbefehl – keine Rückfrage nötig, der Befehl ist bereits die Bestätigung. */
+    private fun runSimImportNow() {
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        runSimImport()
+    }
+
+    private fun runSimImport() {
+        val manager = contactImportManager ?: return
+        if (!hasContactWritePermission()) return
+        statusText = "Kontakte werden übernommen…"
+        linaActivity = LinaActivity.Thinking
+        Earcons.thinking()
+        Thread({
+            val result = manager.importFromSim()
+            runOnUiThread {
+                ttsEngine?.speak(importSummary(result, "von der SIM-Karte"), TtsPriority.HIGH)
+                resumeWakeWordListening()
+            }
+        }, "sim-import").start()
+    }
+
+    /** Öffnet Androids Dateipicker für eine vCard-Datei – die Auswahl selbst ist die Bestätigung. */
+    private fun launchVcardPicker() {
+        if (!hasContactWritePermission()) return
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        ttsEngine?.speak("Bitte wähle die Kontaktdatei aus.", TtsPriority.HIGH)
+        vcardPickerLauncher.launch(arrayOf("text/vcard", "text/x-vcard", "text/directory", "*/*"))
+    }
+
+    private fun handleVcardPicked(uri: Uri?) {
+        if (uri == null) {
+            resumeWakeWordListening()
+            return
+        }
+        val manager = contactImportManager
+        if (manager == null) {
+            resumeWakeWordListening()
+            return
+        }
+        statusText = "Kontaktdatei wird gelesen…"
+        linaActivity = LinaActivity.Thinking
+        Earcons.thinking()
+        Thread({
+            val text = try {
+                contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+            } catch (e: Exception) {
+                android.util.Log.w("LinaLauncher", "Kontaktdatei nicht lesbar", e)
+                null
+            }
+            runOnUiThread {
+                if (text == null) {
+                    ttsEngine?.speak("Ich konnte die Datei leider nicht lesen.", TtsPriority.HIGH)
+                } else {
+                    val result = contactImportManager?.importFromVcardText(text)
+                    if (result != null) {
+                        ttsEngine?.speak(importSummary(result, "aus der Datei"), TtsPriority.HIGH)
+                    }
+                }
+                resumeWakeWordListening()
+            }
+        }, "vcard-import").start()
+    }
+
+    private fun hasContactWritePermission(): Boolean {
+        if (checkSelfPermission(Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            return true
+        }
+        ttsEngine?.speak(
+            "Ich darf noch keine Kontakte speichern. Bitte lass deinen Betreuer die Kontakte-Berechtigung freigeben.",
+            TtsPriority.HIGH,
+        )
+        PermissionsGuide.requestMissing(this)
+        resumeWakeWordListening()
+        return false
+    }
+
+    private fun importSummary(result: ImportResult, source: String): String {
+        if (result.imported == 0 && result.duplicates == 0) {
+            return "Ich habe keine Kontakte $source gefunden."
+        }
+        val teile = mutableListOf<String>()
+        if (result.imported > 0) teile.add("${result.imported} neue Kontakte übernommen")
+        if (result.duplicates > 0) teile.add("${result.duplicates} gab es schon")
+        if (result.failed > 0) teile.add("${result.failed} konnten nicht gespeichert werden")
+        return "Ich habe " + teile.joinToString(", ") + "."
     }
 
     /**
@@ -1403,6 +1632,14 @@ class LauncherActivity : ComponentActivity() {
             exitSleepMode()
             "Schlafmodus beendet."
         }
+        is ResolvedIntent.ImportSimContacts -> {
+            runSimImportNow()
+            ""
+        }
+        is ResolvedIntent.ImportVcardContacts -> {
+            launchVcardPicker()
+            ""
+        }
         is ResolvedIntent.Stop -> {
             ttsEngine?.stop()
             newsReader?.stop()
@@ -1449,6 +1686,8 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.ClearReminders -> "ClearReminders"
         is ResolvedIntent.SleepMode -> "SleepMode"
         is ResolvedIntent.SleepModeOff -> "SleepModeOff"
+        is ResolvedIntent.ImportSimContacts -> "ImportSimContacts"
+        is ResolvedIntent.ImportVcardContacts -> "ImportVcardContacts"
         is ResolvedIntent.Time -> "Time"
         is ResolvedIntent.Stop -> "Stop"
         is ResolvedIntent.Unknown -> "Unknown"
@@ -1459,6 +1698,7 @@ class LauncherActivity : ComponentActivity() {
         try { unregisterReceiver(accessibilityReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(wakeWordReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(reminderReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(simStateReceiver) } catch (_: Exception) {}
         sttEngine?.destroy()
         audiobookManager?.release()
         ttsEngine?.shutdown()

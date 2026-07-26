@@ -20,9 +20,9 @@ Kein Screen-Reader-Patch – von Grund auf Voice-First gebaut.
 | Datei | Inhalt | Wann lesen |
 |---|---|---|
 | `CLAUDE.md` (Root) | Vollständiger Projektkontext, Tech Stack, Architektur | Immer zuerst |
-| `docs/TODO.md` | Taskboard | Vor jeder Task |
-| `docs/CHANGELOG.md` | Was wurde wann gebaut | Bei Fragen zu Code |
-| `DECISIONS.md` | 13 ADRs – Architekturentscheidungen | Bei Designfragen |
+| `TODO.md` | Taskboard, jetzt mit Prioritäten (P0–P4) | Vor jeder Task |
+| `CHANGELOG.md` | Was wurde wann gebaut | Bei Fragen zu Code |
+| `DECISIONS.md` | ADRs – Architekturentscheidungen (aktuell 29, Zahl wächst) | Bei Designfragen |
 | `NUTZERPROFIL.md` | Detailliertes Nutzerprofil (**lokal, gitignored** – enthält persönliche Daten) | Bei Feature-Fragen |
 | `ONBOARDING.md` | Diese Datei | Einmal beim Start |
 
@@ -77,6 +77,7 @@ interface TtsEngine {
     fun speak(text: String, priority: TtsPriority = TtsPriority.NORMAL)
     fun stop()
     fun setRate(rate: Float)
+    fun isSpeaking(): Boolean
     fun shutdown()
 }
 

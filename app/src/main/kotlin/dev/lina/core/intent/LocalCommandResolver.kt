@@ -9,6 +9,7 @@ class LocalCommandResolver : IntentResolver {
 
         return resolveTime(normalized)
             ?: resolveReminder(normalized)
+            ?: resolveContactImport(normalized)
             ?: resolveCall(normalized)
             ?: resolveSms(normalized)
             ?: resolveDocument(normalized)
@@ -51,6 +52,24 @@ class LocalCommandResolver : IntentResolver {
         input.matches(Regex("""^(?:bitte\s+)?erinner\w*\s+mich\b.*""")) ||
             input.matches(Regex(""".*(?:stell|setz)\w*\s+(?:mir\s+)?(?:einen?\s+)?(?:wecker|erinnerung|timer)\b.*""")) ->
             ResolvedIntent.SetReminder(input)
+        else -> null
+    }
+
+    /**
+     * Kontakt-Import (SIM-Karte oder vCard-Datei). Steht vor resolveCall/
+     * resolveSms, damit "Kontakte importieren" nicht versehentlich als
+     * Anruf-/SMS-Muster fehlinterpretiert wird (beide brauchen ohnehin einen
+     * konkreten Namen/eine Nummer, "Kontakte" allein matcht dort nicht, aber
+     * so bleibt die Absicht klar getrennt).
+     */
+    private fun resolveContactImport(input: String): ResolvedIntent? = when {
+        input.matches(
+            Regex(""".*kontakte.*(?:von der|von meiner)\s+sim.*(?:übernehmen|uebernehmen|importieren|holen).*""")
+        ) || input.matches(Regex(""".*sim.*kontakte.*(?:übernehmen|uebernehmen|importieren|holen).*""")) ->
+            ResolvedIntent.ImportSimContacts
+        input.matches(Regex(""".*kontakte.*(?:aus einer|aus der)\s+datei\s+(?:importieren|laden).*""")) ||
+            input.matches(Regex(""".*vcard.*(?:importieren|laden).*""")) ->
+            ResolvedIntent.ImportVcardContacts
         else -> null
     }
 

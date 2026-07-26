@@ -12,9 +12,31 @@
 [!]  blockiert – Grund angeben
 ```
 
+## Prioritäten
+
+Jede Sektion trägt jetzt eine Priorität. Bezieht sich auf die noch **offenen**
+Punkte darin, nicht auf das Feature als Ganzes – eine Sektion mit 90% `[x]`
+und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
+
+| Kürzel | Bedeutung | Wann |
+|---|---|---|
+| **P0** | Kritisch/blockierend | Blockiert reale Nutzung oder andere Arbeit – zuerst |
+| **P1** | Hoch | Nächster sinnvoller Schritt Richtung Auslieferung |
+| **P2** | Mittel | Wichtig, aber ohne Termindruck |
+| **P3** | Niedrig | Politur, Nice-to-have, kein Nutzerschmerz ohne es |
+| **P4** | Backlog | Phase 2+, bewusst zurückgestellt |
+| **✅** | Erledigt | Nichts Offenes mehr (oder nur unverbindliche Politur) |
+
+**Aktuell P0/P1 auf einen Blick** (Details in den jeweiligen Sektionen):
+- **P0:** – (nichts blockiert aktuell die Weiterarbeit)
+- **P1:** Anrufe/SMS am echten Gerät testen (aktuelles Testtablet hat **keine
+  SIM** – `gsm.sim.state=ABSENT`, Test braucht ein SIM-fähiges Gerät oder eine
+  eingelegte Karte); Release-Keystore + signiertes `assembleRelease`;
+  Dauerbetrieb über Stunden/eine Nacht verifizieren
+
 ---
 
-## 🔴 Phase 0 – Projektsetup
+## 🔴 Phase 0 – Projektsetup — ✅ Erledigt
 
 - [x] Git initialisiert + initialer Commit (2026-06-20)
 - [x] GitHub Repo angelegt + Push (2026-06-20, privat, `KostakisMT/lina-assistant`)
@@ -29,7 +51,7 @@
 
 ---
 
-## 🔴 Phase 1a – Kern-Infrastruktur
+## 🔴 Phase 1a – Kern-Infrastruktur — ✅ Erledigt
 
 - [x] `TtsEngine` Interface + `TtsPriority` enum definieren
 - [x] `AndroidTtsEngine` implementieren (weiblich, de-DE, Rate 0.9f, Warteschlange)
@@ -43,7 +65,7 @@
 
 ---
 
-## 🔴 Phase 1b – AccessibilityService
+## 🔴 Phase 1b – AccessibilityService — ✅ Erledigt
 
 - [x] `LinaAccessibilityService` anlegen
 - [x] `accessibility_service_config.xml` konfigurieren
@@ -53,7 +75,7 @@
 
 ---
 
-## 🔴 Phase 1c – Kontakte & Intent
+## 🔴 Phase 1c – Kontakte & Intent — ✅ Erledigt
 
 - [x] `ContactRepository` – Kontakte aus ContactsContract laden
 - [x] `FuzzyContactMatcher` – phonetisches Matching (Arundhati, Eßfeld etc.)
@@ -65,7 +87,7 @@
 
 ---
 
-## ✅ Phase 1d – Feature: Anrufe
+## ✅ Phase 1d – Feature: Anrufe — ✅ Erledigt (Code); Gerätetest siehe P1 unten
 
 - [x] Anruf starten via Intent.ACTION_CALL + Kontakt-Auflösung
 - [x] Eingehenden Anruf annehmen/ablehnen (via TelecomManager)
@@ -75,7 +97,7 @@
 
 ---
 
-## ✅ Phase 1e – Feature: SMS
+## ✅ Phase 1e – Feature: SMS — ✅ Erledigt (Code); Gerätetest siehe P1 unten
 
 - [x] SMS-Posteingang lesen (ContentResolver, neueste zuerst)
 - [x] SMS vorlesen via TTS (Absender per PhoneLookup aufgelöst)
@@ -86,7 +108,7 @@
 
 ---
 
-## ✅ Phase 1f – Feature: Nachrichten
+## ✅ Phase 1f – Feature: Nachrichten — ✅ Erledigt (durch Claude+Websuche abgelöst, s. CHANGELOG 2026-07-25)
 
 - [x] RSS-Parser implementieren (XmlPullParser, nativ)
 - [x] Feeds vorkonfigurieren:
@@ -102,7 +124,7 @@
 
 ---
 
-## ✅ Phase 1g – Feature: Hörbücher (MVP-Hook)
+## ✅ Phase 1g – Feature: Hörbücher (MVP-Hook) — P2 Mittel (Restpunkte)
 
 - [x] ExoPlayer Integration (Media3)
 - [x] Lokale MP3/M4B aus Storage laden (Audiobooks-Ordner)
@@ -123,7 +145,7 @@
 
 ---
 
-## ✅ Qualitätssicherung – Tests
+## ✅ Qualitätssicherung – Tests — P3 Niedrig (Restpunkt)
 
 - [x] Test-Sourceset + JUnit im Build, CI läuft `testDebugUnitTest` (2026-07-20)
 - [x] `GermanTimeParserTest` – Zeitangaben, Wiederholungen, Sachtext (2026-07-20)
@@ -139,12 +161,17 @@
 
 ---
 
-## 🔴 Auslieferung Testnutzer – KW 26 (Deadline: 2026-06-27)
+## 🔴 Auslieferung Testnutzer — P1 Hoch
 
-### Build & Release
+> Ursprüngliche Deadline (KW 26, 2026-06-27) verstrichen, ohne dass alle Punkte
+> abgeschlossen sind – bewusst nicht nachträglich verschoben, sondern hier
+> offen benannt: Datum war zu optimistisch, Priorität bleibt hoch. Kein neues
+> Zieldatum gesetzt, bis Anrufe/SMS/Dauerbetrieb real getestet sind.
+
+### Build & Release — P1 Hoch
 - [x] `assembleDebug` – sauberer Build verifiziert (2026-06-20)
 - [x] Porcupine → OpenWakeWord migriert (2026-06-20, kein API-Key mehr nötig)
-- [ ] Release-Keystore anlegen (`.jks`)
+- [ ] Release-Keystore anlegen (`.jks`) – **einziger Ort dafür**, siehe auch Etappe 1 unten (dort war das dupliziert)
 - [ ] `assembleRelease` – signiertes Release-APK erzeugen
 
 ### Test auf echtem Tablet (Lenovo Idea Tab TB336ZU)
@@ -152,16 +179,16 @@
 - [x] Onboarding durchlaufen (Interessen/Region/Name gesetzt, aus SharedPreferences bestätigt) – 2026-07-25
 - [x] Wake Word getestet – "Hey Lina" (Custom-Modell v2 mit Nutzeraufnahmen): 5/5 erkannt (2026-07-04)
 - [x] STT (Whisper, nicht Vosk): "wie spät ist es", "lies meine Post" korrekt erkannt (2026-07-25)
-- [ ] Anrufe: ausgehend + eingehend annehmen/ablehnen
-- [ ] SMS: senden + lesen
+- [!] Anrufe: ausgehend + eingehend annehmen/ablehnen – **blockiert:** aktuelles Testtablet hat keine SIM (`gsm.sim.state=ABSENT`, 2026-07-26 verifiziert), braucht ein SIM-fähiges Testgerät
+- [!] SMS: senden + lesen – gleiche Blockade (kein SIM/keine Mobilfunkverbindung im Testtablet)
 - [x] ~~Nachrichten: RSS-Sync + Vorlesen~~ – Feature auf Claude+Websuche umgestellt (siehe CHANGELOG 2026-07-25), am Gerät getestet und für gut befunden
-- [x] Hörbücher: LibriVox-Suche + Wiedergabe + Pause/Weiter/Zurückspulen/Kapitel getestet (2026-07-25); Schlaf-Timer noch nicht am Gerät geprüft
+- [x] Hörbücher: LibriVox-Suche + Wiedergabe + Pause/Weiter/Zurückspulen/Kapitel getestet (2026-07-25); Schlaf-Timer (Hörbuch-Fade-Out, nicht zu verwechseln mit dem neuen Schlafmodus) am Gerät getestet (2026-07-26)
 - [x] **Bugfix:** Weckwort-Erkennung ignorierte Hörbuch-Wiedergabe nicht (nur Linas eigene Stimme) – Erzählstimme konnte Weckwort auslösen und Buchtext an Claude schicken. Duck/Resume in `AudiobookManager`/`LauncherActivity` behebt die Folgen; akustische Ursache (echtes AEC) bleibt offen – 2026-07-25
 - [x] **Bugfix:** `Music/Audiobooks`-Ordner war ohne `READ_MEDIA_AUDIO` nicht lesbar (Scoped Storage) – Berechtigung ergänzt (Manifest + PermissionsGuide) – 2026-07-25
 - [x] Lokale Mehrkapitel-Bücher: `AudiobookLibrary.localFolderBooks()`, vier deutsche LibriVox-Hörbücher installiert (Tolstoi, Keller, Eichendorff, Verne) – 2026-07-25
 - [ ] Dauerbetrieb: Service stabil nach 1h, 4h, über Nacht?
 
-### Tablet vorbereiten für Nutzer
+### Tablet vorbereiten für Nutzer — P2 Mittel
 - [ ] Lina als Standard-Home-App setzen
 - [ ] Android Schriftgröße auf Maximum
 - [ ] TalkBack-Konflikte evaluieren (parallel zu Lina?)
@@ -170,7 +197,7 @@
 - [ ] Testanruf mit echtem Kontakt
 - [ ] Kurzanleitung erstellen (große Schrift oder Audioformat)
 
-### Risiken & Showstopper
+### Risiken & Showstopper — P1 Hoch
 - [x] **Gefunden UND behoben (2026-07-26):** `WakeWordService` (Mikrofon-FGS) durfte laut Android 14+/15 nicht aus dem Hintergrund neu gestartet werden (`SecurityException`), passierte bei jedem Konversationsturn. Fix: Service läuft jetzt durchgehend; statt komplettem Stop+Neustart wird nur die Engine intern pausiert/fortgesetzt (`WakeWordService.pauseListening()`/`resumeListening()`, normaler `startService()` an einen bereits laufenden Service – kein neuer FGS-Start, daher nicht von der Android-Regel betroffen). Am Gerät verifiziert: exakt das Szenario, das vorher abstürzte (Antwort → Folgefenster → Timeout → Rückkehr zum Weckwort), läuft jetzt ohne `SecurityException` durch. Restrisiko: echter Prozess-Tod (OOM-Kill) im Hintergrund bräuchte weiterhin einen echten Neustart, der theoretisch noch scheitern könnte – seltener Fall, nicht der ursprüngliche Auslöser.
 - [ ] Lenovo/ZUI Battery-Optimierung – killt es den Service zusätzlich zum obigen Android-eigenen Problem?
 - [ ] Vosk-Erkennungsqualität bei Umgebungsgeräuschen
@@ -180,12 +207,14 @@
 
 ---
 
-## 🟠 Verteilung: Zugang, Kosten, Finanzierung (ADR-020 bis ADR-022)
+## 🟠 Verteilung: Zugang, Kosten, Finanzierung (ADR-020 bis ADR-022) — P4 Backlog
 
 > Voraussetzung dafür, dass Lina über den einzelnen Testnutzer hinauskommt.
-> Der einkompilierte `CLAUDE_API_KEY` ist für Verteilung ungeeignet.
+> Der einkompilierte `CLAUDE_API_KEY` ist für Verteilung ungeeignet. Bewusst
+> P4: In der privaten Übergangsphase (ADR-023) mit einem Testnutzer noch nicht
+> handlungsrelevant – wird P1, sobald ein zweiter/dritter Nutzer real ansteht.
 
-### Zuerst messen (blockiert alles andere)
+### Zuerst messen (blockiert alles andere in dieser Sektion)
 - [ ] Verbrauch eines realen Alltagstages messen, aufgeschlüsselt nach Tokens **und Websuchen** – ohne diese Zahlen sind Kontingentgrenze und Optimierungsreihenfolge geraten
 - [ ] Websuche-Anteil prüfen: wie oft greift `WebSearchTool20260209` wirklich, was kostet sie anteilig (wird pro Suche abgerechnet, nicht über Tokens)
 
@@ -205,12 +234,12 @@
 - [ ] Sprachdialog „Einrichtung" um Pairing-Code erweitern (`VoiceOnboarding`, nutzt `GermanSpelling`)
 - [x] Buchstabieralphabet in `core/text/` für die phonetische Code-Ansage (`GermanSpelling`) – 2026-07-21
 
-### Sicherheit (siehe SICHERHEIT.md, dort die vollständige Liste)
+### Sicherheit (siehe SICHERHEIT.md, dort die vollständige Liste) — P2 Mittel
 - [x] `EncryptedSharedPreferences` für Erinnerungen: `ReminderStore.kt` auf `androidx.security.crypto` (AES256-GCM/SIV) umgestellt, einmalige Migration alter Klartext-Einträge + Löschung des alten Speichers, am Gerät verifiziert (Klartext nicht mehr lesbar, Erinnerung feuert weiterhin korrekt) – 2026-07-25
 - [x] Automatische Löschung für Einrichtungs-Sprachaufnahmen und `testfoto`-Bilder: `cleanupOldDebugFiles()` in `LauncherActivity.kt`, läuft im Hintergrund bei jedem App-Start, löscht `onboarding/`- und `docphotos/`-Einträge älter als 7 Tage. Logik isoliert verifiziert (Python-Äquivalent); Live-Gerätetest an adb/run-as-Rechten im externen App-Ordner gescheitert (Testinfrastruktur, nicht Code) – 2026-07-25/26
 - [ ] Kontaktadresse für Sicherheitsmeldungen im Repository hinterlegen
 
-### Rechtlich & Finanzierung (ADR-021)
+### Rechtlich & Finanzierung (ADR-021) — P4 Backlog
 - [ ] Steuerberater: Zweckbetrieb §68 Nr. 4 AO, Umsatzsteuer bei 1:1-Weitergabe
 - [ ] PSP-Auswahl; Zahlungseinrichtung barrierefrei über Vertrauensperson
 - [ ] AGB und Widerrufsbelehrung barrierefrei (kein reines PDF)
@@ -219,37 +248,41 @@
 
 ---
 
-## 🟡 Plan bis zum Bewerbungsfenster (Stand 2026-07-18)
+## 🟡 Plan bis zum Bewerbungsfenster (Stand 2026-07-18, Etappen unten 2026-07-26 geprüft) — P2 Mittel
+
+> Die Etappen-Einteilung selbst ist eine strategische Entscheidung der
+> Trägerschaft und wird hier nicht neu zugeschnitten – nur der Ist-Stand der
+> einzelnen Punkte wurde gegen den Code/die Gerätetests von heute geprüft.
 
 ### Etappe 1 – Juli: Claude-Anbindung verifizieren & Release-fähig werden
-- [ ] `CLAUDE_API_KEY` in local.properties hinterlegen (Nutzer) + Tablet-Test der freien Konversation (inkl. Verhörer-Befehle wie "Rumfe mal den Boris an" → Do-Intent)
+- [x] `CLAUDE_API_KEY` in local.properties hinterlegen + Tablet-Test der freien Konversation – ausführlich am Gerät verifiziert (mehrere echte Gesprächsrunden über die gesamte Session, inkl. Do-Intents aus Freitext) – 2026-07-26
 - [x] Bestätigungston/Earcon während STT-Transkription und Claude-Wartezeit (Earcons.kt; Klang auf Gerät noch validieren) – 2026-07-18
-- [ ] Release-Keystore anlegen (`.jks`, lokal) + signiertes `assembleRelease`-APK
+- [ ] Release-Keystore anlegen (`.jks`, lokal) + signiertes `assembleRelease`-APK – **siehe "Auslieferung Testnutzer → Build & Release"**, dort der einzige Ort dafür
 - [ ] SSH-Key für GitHub einrichten (aktuell HTTPS)
 
-### Besuch Testnutzer #2 – nächste Woche (verschoben von 2026-07-19)
+### Besuch Testnutzer #2 — P2 Mittel
 - [ ] Aufnahme-Runden Zukunftsbefehle (Wetter/Nachrichten/Brief/Podcast – Liste siehe Chat/Session)
 - [ ] Wetter + Regionalnachrichten live mit Testnutzer durchspielen
 - [ ] Nachtrainiertes Weckwort-Modell aufspielen und 5/5-Test wiederholen
 - [ ] Battery-Whitelist + Dauerbetrieb prüfen, Abschluss Übergabe-Checkliste
 
-### Etappe 2 – August: Robustheit & Gerätetest komplett
-- [ ] Raumdistanz-Spike: GTCRN-Entrauschen vor Whisper (sherpa-onnx) prototypisch einbauen und auf dem Tablet messen (Fehlerrate vorher/nachher)
-- [ ] Offene Gerätetests abarbeiten (siehe Auslieferungs-Checkliste oben: Anrufe, SMS, RSS, Hörbücher, Onboarding)
-- [ ] Dauerbetrieb: Service-Stabilität 1h / 4h / über Nacht auf dem Lenovo (ZUI-Battery-Killer)
-- [ ] Tablet des Zieltestnutzers vorbereiten: Wake-Word-Nachtraining mit seiner Stimme ("Aufnahme"-Befehl → training/)
+### Etappe 2 – August: Robustheit & Gerätetest komplett — P1/P2 gemischt (siehe Einzelpunkte)
+- [ ] Raumdistanz-Spike: GTCRN-Entrauschen vor Whisper (sherpa-onnx) prototypisch einbauen und auf dem Tablet messen (Fehlerrate vorher/nachher) — P2
+- [ ] Offene Gerätetests abarbeiten (Anrufe/SMS **blockiert ohne SIM-Testgerät**, s.o.; Hörbücher/Onboarding bereits erledigt) — P1
+- [ ] Dauerbetrieb: Service-Stabilität 1h / 4h / über Nacht auf dem Lenovo (ZUI-Battery-Killer) — P1
+- [ ] Tablet des Zieltestnutzers vorbereiten: Wake-Word-Nachtraining mit seiner Stimme ("Aufnahme"-Befehl → training/) — P2
 
-### Etappe 3 – September: Sichtbarkeit & Antragsreife
+### Etappe 3 – September: Sichtbarkeit & Antragsreife — P3 Niedrig (noch nicht dran)
 - [ ] 2-Minuten-Demo-Video: Lina auf dem Tablet (Anruf, Nachrichten, Konversation) – für Landingpage und Anträge
 - [ ] Demo-Video auf Landingpage einbinden (mit Transkript/Untertiteln – barrierefrei)
 - [ ] Fördermittel-Unterlagen finalisieren (intern, siehe lokaler Ordner)
 - [ ] Kurzanleitung für Nutzer in Audioform aufnehmen
 
-### Etappe 4 – Oktober/November: Einreichen & erzählen
+### Etappe 4 – Oktober/November: Einreichen & erzählen — P3 Niedrig (noch nicht dran)
 - [ ] Förderbewerbung einreichen (Fenster: 01.10.–30.11.2026)
 - [ ] Lina in Accessibility-/FOSS-Communities vorstellen (Foren, Mastodon, ggf. Vortrag)
 
-## 🟢 Open-Source-Launch
+## 🟢 Open-Source-Launch — ✅ Erledigt
 
 - [x] Datenschutz-Sweep: NUTZERPROFIL.md gitignored, Klarnamen durch fiktive ersetzt (2026-07-16)
 - [x] LICENSE (Apache 2.0) + NOTICE.md (2026-07-16)
@@ -261,7 +294,7 @@
 
 ---
 
-## ⏰ Erinnerungen & Wecker
+## ⏰ Erinnerungen & Wecker — P2 Mittel (Restpunkte)
 
 - [x] AlarmManager-Infrastruktur, offline, Doze-fest (2026-07-20)
 - [x] Deutsches Zeitparsing lokal (relativ, Uhrzeit, halb/viertel, täglich) (2026-07-20)
@@ -274,7 +307,7 @@
 
 ---
 
-## 📷 Dokument-Vorlesen (Meilenstein 3)
+## 📷 Dokument-Vorlesen (Meilenstein 3) — P2 Mittel (Restpunkte, Offline-OCR ist P4)
 
 - [x] CameraX-Rückkamera-Aufnahme, headless mit eigenem Lifecycle (2026-07-20)
 - [x] Vision-Auswertung über Claude, relevanzgefiltert + "alles vorlesen" (2026-07-20)
@@ -289,7 +322,7 @@
 
 ---
 
-## 🟢 Ambiente-UI für Angehörige/Besucher + Querformat
+## 🟢 Ambiente-UI für Angehörige/Besucher + Querformat — P3 Niedrig (Restpunkte)
 
 - [x] `TtsEngine.isSpeaking()` im Interface + `AndroidTtsEngine`-Implementierung (2026-07-26)
 - [x] `LinaActivity`-Zustandsmodell (Loading/Idle/Listening/Thinking/Speaking/Error) (2026-07-26)
@@ -305,7 +338,7 @@
 
 ---
 
-## 🟢 Schlafmodus
+## 🟢 Schlafmodus — ✅ Erledigt
 
 - [x] `ResolvedIntent.SleepMode`/`SleepModeOff` + `LocalCommandResolver.resolveSleepMode()` (2026-07-26)
 - [x] `LauncherActivity.enterSleepMode()`/`exitSleepMode()`: Fenster-Helligkeit dimmen (0.04) + Lautstärke 30% (2026-07-26)
@@ -314,7 +347,22 @@
 
 ---
 
-## 🔵 Phase 2 – Geplant (nicht jetzt)
+## 🟢 SIM-Erkennung + Kontakt-Import (SIM & vCard-Datei) — ✅ Erledigt (Einschränkung s.u.)
+
+- [x] `SimIdentity`/`SimIdentityReader`/`SimChangeDetector` – Best-Effort-Fingerabdruck statt echter ICCID (ADR-029) (2026-07-26)
+- [x] `ContactImportStore` (EncryptedSharedPreferences, wie `ReminderStore`) (2026-07-26)
+- [x] `SimContactSource` (`content://icc/adn`), `ContactWriter` (Batch-Insert), `ContactDedup`+`PhoneNumberNormalizer` (2026-07-26)
+- [x] `VCardParser` (vCard 2.1/3.0, pure/unit-testbar) + Dateipicker-Import (`ACTION_OPEN_DOCUMENT`) (2026-07-26)
+- [x] Automatische Sprach-Nachfrage bei erkannter neuer/anderer SIM (auch beim allerersten Start) (2026-07-26)
+- [x] Sprachbefehle "Kontakte von der SIM importieren" / "Kontakte aus einer Datei importieren" (2026-07-26)
+- [x] Neue Berechtigung `WRITE_CONTACTS` (Manifest + `PermissionsGuide`) (2026-07-26)
+- [x] Unit-Tests: `SimIdentityTest`, `PhoneNumberNormalizerTest`, `ContactDedupTest`, `VCardParserTest` (2026-07-26)
+- [x] Am Gerät verifiziert: vCard-Import end-to-end (Dateipicker → Parser → Dedup → echte Contacts-DB, per `content query` bestätigt); SIM-Import-Befehl korrekt erkannt und ohne Absturz ausgeführt (Testgerät ohne SIM) (2026-07-26)
+- [ ] Echter SIM-Wechsel am Testgerät nicht prüfbar (kein SIM-Steckplatz belegt) – nur unit-getestet
+
+---
+
+## 🔵 Phase 2 – Geplant (nicht jetzt) — P4 Backlog
 
 - [x] STT: Whisper über sherpa-onnx integriert (base int8, de) – 2026-07-02
 - [x] TTS: Piper über sherpa-onnx integriert (de_DE-ramona-low) – 2026-07-02

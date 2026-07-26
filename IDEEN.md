@@ -19,33 +19,28 @@ die Bausteine sollen wiederverwendbar sein.
 
 ---
 
+## Umgesetzt
+
+Ehemals hier unter „Geplant" gelistet, inzwischen gebaut – Details siehe
+TODO.md/CHANGELOG.md.
+
+### ~~DAISY-Hörbücher~~ ✅ 2026-07-20 (ADR-019)
+War hier mit Priorität hoch gelistet. `DaisyParser`/`DaisyRepository` lesen
+`ncc.html` + SMIL wie unten beschrieben, per `XmlPullParser` wie bei RSS.
+Offen bleibt nur ein Praxistest mit einem echten Hörbücherei-Buch (Struktur
+variiert je Produktionsstelle) – siehe TODO.md.
+
+### ~~Erinnerungen & Wecker~~ ✅ 2026-07-20
+War hier mit Priorität hoch gelistet. Vollständig offline über `AlarmManager`,
+deutsches Zeitparsing, Claude-Fallback für verstümmelte Eingaben. Kleinere
+Restpunkte (Löschen einzelner Erinnerungen per Sprache) siehe TODO.md.
+
+---
+
 ## Geplant
 
-### DAISY-Hörbücher (Priorität hoch)
-**Nutzen:** sehr hoch · **Aufwand:** mittel
-
-Die Blindenhörbüchereien verleihen zehntausende Hörbücher **kostenlos** an
-nachweislich sehbehinderte Menschen (z.B. [Norddeutsche
-Hörbücherei](https://norddeutsche-hoerbuecherei.de/): ~50.000 Titel;
-[WBH Münster](https://www.bsvw.org/die-westdeutsche-hoerbuecherei/): DAISY-CDs
-per Post). Der Zugang setzt eine Mitgliedschaft mit Nachweis voraus.
-
-[DAISY 2.02](https://daisy.org/activities/standards/daisy/daisy-2/daisy-format-2-02-specification/)
-ist ein offener Standard: eine `ncc.html` mit den Kapiteln als Überschriften,
-SMIL-Dateien für die Zuordnung Kapitel → Audiodatei/Zeitbereich, dazu MP3s.
-Gut parsebar – Lina nutzt denselben `XmlPullParser` schon für RSS.
-
-**Lücke:** Aktive quelloffene DAISY-Player für Android gibt es praktisch nicht
-(vorhandene Projekte sind eingestellt oder laufen nicht auf aktuellen
-Android-Versionen). Siehe [Übersicht der DAISY-Software](https://en.wikipedia.org/wiki/List_of_Digital_Accessible_Information_System_software)
-und [DAISY Consortium auf GitHub](https://github.com/daisy).
-
-### Erinnerungen & Wecker (Priorität hoch)
-**Nutzen:** hoch · **Aufwand:** klein
-
-„Erinnere mich morgen um zehn an den Arzt", Medikamenten-Timer, wiederkehrende
-Ansagen. Vollständig offline über `AlarmManager` – kein externes Projekt nötig.
-Erfahrungsgemäß eines der meistgenutzten Features bei älteren Nutzer:innen.
+*(aktuell keine Einträge mit Priorität hoch – neue Ideen kommen ins Backlog
+unten, bis sie konkret genug für einen eigenen Plan sind)*
 
 ---
 
@@ -100,7 +95,8 @@ ohne Anbieterbindung.
 |---|---|---|
 | Einkaufsliste per Sprache (offline) | mittel | klein |
 | Verpasste Anrufe vorlesen, Anrufbeantworter transkribieren | mittel | mittel |
-| Sprechtempo/Lautstärke per Sprachbefehl | mittel | klein |
+| ~~Lautstärke per Sprachbefehl~~ | – | ✅ umgesetzt 2026-07-26 (Stufen, Prozent, Stummschalten) |
+| Sprechtempo per Sprachbefehl | mittel | klein |
 | Notruf-Schnellwahl („Ruf Hilfe") | hoch | klein |
 | Displays ablesen (Waschmaschine, Herd, Waage) per Kamera | mittel | klein* |
 | Geldscheine erkennen | mittel | klein* |

@@ -228,6 +228,26 @@ class LocalCommandResolverTest {
     }
 
     @Test
+    fun `Kontakte von der SIM importieren`() {
+        assertEquals(ResolvedIntent.ImportSimContacts, resolver.resolve("kontakte von der sim übernehmen"))
+        assertEquals(ResolvedIntent.ImportSimContacts, resolver.resolve("kontakte von meiner sim importieren"))
+        assertEquals(ResolvedIntent.ImportSimContacts, resolver.resolve("sim kontakte importieren"))
+    }
+
+    @Test
+    fun `Kontakte aus Datei importieren`() {
+        assertEquals(ResolvedIntent.ImportVcardContacts, resolver.resolve("kontakte aus einer datei importieren"))
+        assertEquals(ResolvedIntent.ImportVcardContacts, resolver.resolve("vcard importieren"))
+    }
+
+    @Test
+    fun `Kontakt-Import kollidiert nicht mit Anruf oder SMS`() {
+        assertEquals(ResolvedIntent.Call("boris"), resolver.resolve("ruf boris an"))
+        val sms = resolver.resolve("schreib boris: bin gleich da")
+        assertTrue(sms is ResolvedIntent.SendSms)
+    }
+
+    @Test
     fun `Uhrzeit abfragen`() {
         assertEquals(ResolvedIntent.Time, resolver.resolve("wie spät ist es"))
     }

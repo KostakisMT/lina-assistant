@@ -460,3 +460,59 @@ die übrigen Lautstärke-Befehle – keine neue Logik dafür.
 - Kein Persistenzzustand: Ein Neustart der App (oder des Geräts) hebt die
   Dimmung automatisch auf, ganz ohne expliziten "wach auf"-Befehl – gewollt,
   da niemand den Schlafmodus über einen Neustart hinweg "vergessen" soll.
+
+---
+
+## ADR-029: Kontakt-Import auf SIM-Erkennung + vCard-Datei begrenzt statt echtem Geräte-Pairing; Best-Effort-SIM-Fingerabdruck statt echter ICCID
+**Datum:** 2026-07-26 | **Status:** Akzeptiert
+
+**Kontext:** Gewünscht war ursprünglich ein "Migrationsassistent", der aktiv
+nach einem alten Gerät sucht und dessen Kontakte/Daten übernimmt – analog zu
+Googles eigenem "Quick Switch". Das ist für eine Drittanbieter-App technisch
+nicht umsetzbar: Es gibt keine offene Schnittstelle, über die eine normale App
+ein anderes physisches Gerät finden oder dessen Daten abrufen könnte – Quick
+Switch ist eine signierte Systemkomponente des Setup-Wizards.
+
+Zusätzlich zeigte die Recherche: Die echte ICCID (eindeutige SIM-Seriennummer)
+ist auf Android 10+/API 33 für Apps ohne Trägerrechte meist nicht mehr lesbar
+(`SecurityException` oder geschwärzter Platzhalter) – ein einzelner
+`getSimSerialNumber()`-Aufruf ist daher kein verlässliches Signal mehr.
+
+**Entscheidung:**
+- Realistischer Ersatz für den "Migrationsassistenten": (1) automatische
+  SIM-Erkennung + Import (das explizit gewünschte Kernfeature) und (2) ein
+  Sprachbefehl, der Androids eigenen Storage-Access-Framework-Dateipicker für
+  eine vCard-Datei (.vcf) öffnet – das universelle Kontakt-Exportformat, das
+  jedes alte Telefon (Android, iPhone, Feature-Phone) erzeugen kann. Für
+  Google-Konto-Sync während der Android-Ersteinrichtung ist kein Lina-Code
+  nötig, da `ContactRepository` diese Kontakte ohnehin automatisch mitliest.
+- Der SIM-Fingerabdruck (`SimIdentity.composite()`) kombiniert Subscription-ID,
+  Carrier-Name, Länderkennung und – falls lesbar – ein ICCID-Suffix zu einem
+  Best-Effort-Signal statt einer garantiert eindeutigen ID. Jedes Feld wird
+  einzeln gelesen (ein fehlendes Feld leert nicht den ganzen Fingerabdruck).
+  Bewusster Tradeoff: lieber gelegentlich unnötig nachfragen (falscher
+  Positiv-Treffer) als eine echte SIM-Änderung zu verpassen.
+- Dateibasierter Import statt passivem Ordner-Beobachten (`FileObserver` auf
+  Downloads): Scoped Storage (API 29+) erlaubt normalen Apps keinen
+  unbeaufsichtigten Zugriff auf beliebige geteilte Dateien außerhalb kuratierter
+  MediaStore-Sammlungen, und `.vcf` ist kein Medientyp mit eigener granularer
+  Berechtigung. Der Dateipicker (`ACTION_OPEN_DOCUMENT`) braucht dagegen keine
+  Sonderberechtigung und umgeht das Problem vollständig – die einmalige
+  Dateiauswahl durch einen Helfer ersetzt gleichzeitig die sonst nötige
+  Ja/Nein-Sprachbestätigung (die Auswahl selbst ist die Bestätigung).
+- Neue Berechtigung `WRITE_CONTACTS` (Kontakte schreiben), da bisher nur lesend
+  zugegriffen wurde.
+
+**Konsequenzen:**
+- Deckt den expliziten Hauptfall (SIM mit Kontakten bringen) und den
+  realistischen Ersatzfall (Kontakte aus einer Exportdatei) ab, ohne eine
+  technisch unmögliche Geräte-Suche vorzutäuschen.
+- Ein Helfer muss die Datei einmal im System-Dateipicker antippen – das kann
+  keine Sprachsteuerung ersetzen, da es System-UI außerhalb von Linas Kontrolle
+  ist. Für den blinden Primärnutzer ändert sich dadurch nichts an der
+  sonstigen Sprachbedienung.
+- Der SIM-Fingerabdruck kann in seltenen Fällen falsch auslösen (z.B. wenn ein
+  Mobilfunkanbieter seinen Netzbetreiber-Namen ändert) oder eine echte SIM-
+  Änderung verpassen (wenn alle lesbaren Felder zufällig identisch bleiben) –
+  am Testgerät (kein physischer SIM-Steckplatz belegt) nicht mit einem echten
+  SIM-Wechsel überprüfbar, nur über `SimIdentityTest` unit-getestet.

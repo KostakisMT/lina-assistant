@@ -1,6 +1,6 @@
 # SICHERHEIT.md – Sicherheits- und Datenschutzkonzept
 
-> Stand: 2026-07-21. Beschreibt den **tatsächlichen** Zustand, nicht den
+> Stand: 2026-07-26. Beschreibt den **tatsächlichen** Zustand, nicht den
 > angestrebten. Wo etwas noch fehlt, steht das ausdrücklich dabei – ein
 > Konzept, das nur Stärken aufzählt, ist als Prüfgrundlage wertlos.
 
@@ -38,14 +38,16 @@ Schritt und mit ihm eine mögliche gemeinnützige Trägerschaft. Die Einwilligun
 
 | Daten | Ort | Dauer | Verlässt das Gerät? |
 |---|---|---|---|
-| Kontakte | nur im Arbeitsspeicher, bei Bedarf aus `ContactsContract` gelesen | flüchtig | **Namen ja** – siehe unten |
+| Kontakte (lesend) | nur im Arbeitsspeicher, bei Bedarf aus `ContactsContract` gelesen | flüchtig | **Namen ja** – siehe unten |
+| Kontakte (schreibend, SIM-/vCard-Import) | dauerhaft in `ContactsContract` geschrieben (`WRITE_CONTACTS`, seit 2026-07-26) | **dauerhaft**, wie jeder andere Kontakt am Gerät | nein (Import selbst) |
+| SIM-Fingerabdruck (Erkennung neuer Karten) | `EncryptedSharedPreferences` (`ContactImportStore`) | dauerhaft | nein |
 | SMS-Inhalte | nur im Arbeitsspeicher | flüchtig | nein |
 | Dialoggedächtnis | Arbeitsspeicher, max. 20 Nachrichten | bis Neustart | ja (Konversation) |
 | Dokumentfotos (normal) | Arbeitsspeicher | bis Vorlesen endet | ja (Auswertung), nicht gespeichert |
-| Dokumentfotos (`testfoto`) | `getExternalFilesDir/docphotos/` | **unbegrenzt** | nein |
-| Sprachaufnahmen Ersteinrichtung | `getExternalFilesDir/onboarding/` | **unbegrenzt** | nein (außer Fernwartung) |
+| Dokumentfotos (`testfoto`) | `getExternalFilesDir/docphotos/` | max. 7 Tage (automatische Löschung seit 2026-07-25) | nein |
+| Sprachaufnahmen Ersteinrichtung | `getExternalFilesDir/onboarding/` | max. 7 Tage (automatische Löschung seit 2026-07-25) | nein (außer Fernwartung) |
 | Nutzerprofil (Anrede, Interessen, Region) | `SharedPreferences` unverschlüsselt | dauerhaft | ja (Teil des System-Prompts) |
-| Erinnerungen | `SharedPreferences` unverschlüsselt | dauerhaft | nur bei Cloud-Erkennung |
+| Erinnerungen | `EncryptedSharedPreferences` (AES256-GCM/SIV, seit 2026-07-25) | dauerhaft | nur bei Cloud-Erkennung |
 | Hörbuch-Fortschritt | `SharedPreferences` unverschlüsselt | dauerhaft | nein |
 | Nachrichten-Cache | `filesDir/news_cache.json` | bis Aktualisierung | nein |
 
@@ -97,15 +99,26 @@ Offen benannt, weil sie den realen Schutz bestimmen:
    auseinandernimmt, hat ihn. Für ein einzelnes Testgerät hinnehmbar, für
    Verteilung nicht – deshalb der Proxy in [ADR-020](DECISIONS.md).
    *Wichtigste offene Maßnahme.*
-2. **`SharedPreferences` sind unverschlüsselt.** Betrifft auch die
-   Erinnerungen, die häufig Gesundheitsbezug haben. Umstellung auf
-   `EncryptedSharedPreferences` steht im TODO.
-3. **Sprachaufnahmen der Ersteinrichtung bleiben liegen.** Sie enthalten die
-   Stimme und die Antworten auf persönliche Fragen. Es gibt keine
-   automatische Löschung.
-4. **`testfoto`-Aufnahmen werden nie automatisch gelöscht.** WARTUNG.md sagt
-   „danach löschen" – ein manueller Schritt, an den sich niemand erinnert.
+2. **`SharedPreferences` teilweise noch unverschlüsselt.** Erinnerungen
+   (seit 2026-07-25) und der SIM-Fingerabdruck (seit 2026-07-26) laufen über
+   `EncryptedSharedPreferences`. Nutzerprofil (Anrede/Interessen/Region) und
+   Hörbuch-Fortschritt liegen weiterhin im Klartext – geringeres Risiko
+   (keine Gesundheits-/Terminbezüge), aber noch offen.
+3. ~~**Sprachaufnahmen der Ersteinrichtung bleiben liegen.**~~ Behoben
+   2026-07-25/26: `cleanupOldDebugFiles()` löscht `onboarding/`- und
+   `docphotos/`-Einträge automatisch nach 7 Tagen bei jedem App-Start.
+4. ~~**`testfoto`-Aufnahmen werden nie automatisch gelöscht.**~~ Siehe Punkt 3
+   – dieselbe automatische Löschung deckt beide Ordner ab.
 5. **Keine Wiederanmeldung.** Wer am Gerät ist, kann alles.
+6. **Kontakt-Import kennt keine Widerspruchsprüfung gegen die sprechende
+   Person.** Wie bei Anrufen/SMS (siehe „Grenzen" unten) prüft Lina nicht,
+   *wer* die SIM-Import-Nachfrage mit "Ja" beantwortet oder den
+   Datei-Import-Befehl auslöst – jede Person im Raum kann dauerhaft neue
+   Kontakte in die System-Kontakte schreiben (`WRITE_CONTACTS`, seit
+   2026-07-26). Entschärfung: nur additiv (kein Löschen/Überschreiben
+   bestehender Kontakte), Dedup verhindert Duplikate, aber kein Undo für
+   fälschlich importierte Einträge außer manuellem Löschen in der
+   Kontakte-App.
 
 ---
 
@@ -165,8 +178,9 @@ Ohne diesen Abschnitt wäre das Konzept unehrlich.
 ## Offene Punkte
 
 - [ ] AVV mit Anthropic abschließen
-- [ ] `EncryptedSharedPreferences` einführen (Lücke 2)
-- [ ] Automatische Löschung für Einrichtungs-Aufnahmen und `testfoto`-Bilder (Lücken 3 und 4)
+- [ ] `EncryptedSharedPreferences` für Nutzerprofil und Hörbuch-Fortschritt (Rest von Lücke 2 – Erinnerungen und SIM-Fingerabdruck sind bereits umgestellt)
+- [x] ~~Automatische Löschung für Einrichtungs-Aufnahmen und `testfoto`-Bilder~~ (Lücken 3/4) – erledigt 2026-07-25/26
 - [ ] Proxy umsetzen, Schlüssel aus der APK entfernen (Lücke 1)
 - [ ] Kontaktadresse für Sicherheitsmeldungen im Repository hinterlegen
 - [ ] Aufklärung ergänzen: Kontaktnamen werden Teil des System-Prompts
+- [ ] Aufklärung ergänzen: SIM-/vCard-Kontakt-Import schreibt dauerhaft neue Kontakte (Lücke 6) – siehe WARTUNG.md-Einwilligung

@@ -11,6 +11,7 @@ object PermissionsGuide {
     private val REQUIRED_PERMISSIONS = arrayOf(
         Manifest.permission.RECORD_AUDIO,
         Manifest.permission.READ_CONTACTS,
+        Manifest.permission.WRITE_CONTACTS,
         Manifest.permission.CALL_PHONE,
         Manifest.permission.READ_CALL_LOG,
         Manifest.permission.SEND_SMS,

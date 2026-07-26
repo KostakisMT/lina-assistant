@@ -41,6 +41,8 @@ sealed class ResolvedIntent {
     /** Dimmt den Bildschirm und senkt die Lautstärke fürs Einschlafen. */
     data object SleepMode : ResolvedIntent()
     data object SleepModeOff : ResolvedIntent()
+    data object ImportSimContacts : ResolvedIntent()
+    data object ImportVcardContacts : ResolvedIntent()
     data object Time : ResolvedIntent()
     data object Stop : ResolvedIntent()
     data class Unknown(val rawInput: String) : ResolvedIntent()

@@ -32,6 +32,14 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
    Nutzungszähler pro Gerät (Proxy, ADR-020) – und damit womöglich eine
    gemeinnützige Trägerschaft als verantwortliche Stelle – ist ein späterer
    Schritt und wird hier ergänzt, sobald er kommt.
+6. **Kontakt-Import (seit 2026-07-26):** Lina erkennt eine neue oder andere
+   SIM-Karte und fragt von sich aus, ob deren Kontakte übernommen werden
+   sollen; zusätzlich gibt es den Sprachbefehl „Kontakte aus einer Datei
+   importieren" für eine vCard-Datei (.vcf) von einem alten Handy. Beides
+   schreibt **dauerhaft neue Einträge** in die System-Kontakte des Tablets
+   (nicht nur flüchtig wie das bisherige Vorlesen der Kontaktnamen). Die
+   Nutzer:in sollte wissen, dass „Ja" auf diese Nachfrage echte Kontakte
+   hinzufügt – ein Rückgängig gibt es nur manuell in der Kontakte-App.
 
 Am besten kurz und einfach erklären und die Zustimmung schriftlich oder als
 Sprachnotiz festhalten.
@@ -86,12 +94,13 @@ Debug-Befehle (Texteingabe oder `remote.sh say`):
 
 ## Checkliste Übergabetag
 
-- [ ] Einwilligung besprochen und festgehalten (s.o.)
+- [ ] Einwilligung besprochen und festgehalten (s.o., inkl. Punkt 6 Kontakt-Import)
 - [ ] WLAN der Nutzer:in eingetragen, Tablet am Strom, Ständer
 - [ ] Tailscale online (`remote.sh status` von unterwegs testen!)
 - [ ] `CLAUDE_API_KEY` in der installierten APK enthalten (freie Konversation testen)
 - [ ] Battery-Whitelist + Accessibility-Service gesetzt (App führt hin)
-- [ ] Echte Kontakte eingetragen
+- [ ] Echte Kontakte eingetragen – per SIM-Karte (Lina fragt automatisch) oder
+      vCard-Datei ("Kontakte aus einer Datei importieren") statt manuell per adb
 - [ ] `einrichtung zurücksetzen` ausgeführt, damit die Einrichtung beim
       ersten „richtigen" Start frisch beginnt
 - [ ] Testanruf + „Was gibt es Neues?" + freie Frage vor Ort durchspielen

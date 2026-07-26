@@ -2,8 +2,8 @@
 
 > **Pflichtlektüre für jede Claude Code Instanz.**
 > Lies diese Datei vollständig bevor du irgendeine Zeile Code schreibst.
-> Nach jeder abgeschlossenen Task: docs/CHANGELOG.md und docs/TODO.md aktualisieren.
-> Architekturentscheidungen immer in docs/DECISIONS.md festhalten.
+> Nach jeder abgeschlossenen Task: CHANGELOG.md und TODO.md aktualisieren (Repo-Root, nicht docs/).
+> Architekturentscheidungen immer in DECISIONS.md festhalten.
 
 ---
 
@@ -154,6 +154,7 @@ interface TtsEngine {
     fun speak(text: String, priority: TtsPriority = TtsPriority.NORMAL)
     fun stop()
     fun setRate(rate: Float)
+    fun isSpeaking(): Boolean          // treibt die Statuskugel (LinaOrb): Speaking-Zustand
     fun shutdown()
 }
 
@@ -265,8 +266,16 @@ app/src/main/kotlin/dev/lina/
 │   │   ├── LocalCommandResolver.kt  # Ebene 1: Regex/Keywords
 │   │   └── LlmIntentResolver.kt     # Ebene 2: Stub für Phase 2
 │   ├── contacts/
-│   │   ├── ContactRepository.kt     # ContactsContract Wrapper
-│   │   └── FuzzyContactMatcher.kt   # Phonetisches Matching
+│   │   ├── ContactRepository.kt     # ContactsContract Wrapper (Lesen)
+│   │   ├── FuzzyContactMatcher.kt   # Phonetisches Matching
+│   │   ├── SimContactSource.kt      # SIM-ADN-Kontakte lesen (content://icc/adn)
+│   │   ├── ContactWriter.kt         # Batch-Insert neuer Kontakte
+│   │   ├── ContactDedup.kt          # + PhoneNumberNormalizer.kt: Duplikat-Erkennung
+│   │   └── VCardParser.kt           # vCard 2.1/3.0, pure/unit-testbar
+│   ├── sim/
+│   │   ├── SimIdentity.kt           # Best-Effort-Fingerabdruck (ADR-029)
+│   │   ├── SimIdentityReader.kt     # SubscriptionManager/TelephonyManager
+│   │   └── SimChangeDetector.kt     # NoSim/FirstSeen/Unchanged/Changed
 │   └── accessibility/
 │       └── LinaAccessibilityService.kt
 ├── feature/
@@ -289,15 +298,21 @@ app/src/main/kotlin/dev/lina/
 │   │   └── PlaybackStateStore.kt    # Fortschritt persistent (inkl. Kapitel)
 │   ├── document/
 │   │   └── DocumentCamera.kt        # CameraX Rückkamera, eigener Lifecycle
+│   ├── contactimport/
+│   │   ├── ContactImportManager.kt  # Orchestriert SIM-/vCard-Import (Dedup+Write)
+│   │   └── ContactImportStore.kt    # EncryptedSharedPreferences: SIM-Fingerabdruck
 │   └── onboarding/
 │       ├── PermissionsGuide.kt
 │       ├── VoiceOnboarding.kt       # Gesprochene Ersteinrichtung
 │       └── BatteryWhitelistGuide.kt
 └── ui/
     ├── launcher/
-    │   └── LauncherActivity.kt
+    │   ├── LauncherActivity.kt
+    │   └── LinaActivity.kt          # Zustandsmodell (Idle/Listening/Thinking/Speaking/Error)
     └── components/
-        └── LinaTheme.kt             # Hochkontrast-Theme
+        ├── LinaTheme.kt             # Hochkontrast-Theme
+        ├── LinaOrb.kt               # Statuskugel für Angehörige/Besucher (dekorativ)
+        └── AudiobookPlayerPanel.kt  # Sichtbare Hörbuch-Steuerung für Angehörige
 ```
 
 ---
@@ -364,11 +379,46 @@ Dokument liegt im festen Rahmen vor dem Tablet (Rückkamera).
 > Das Bild verlässt das Gerät (Cloud-Vision) und wird **nicht** gespeichert –
 > nur transient im RAM. Einwilligung siehe WARTUNG.md.
 
+### Schlafmodus
+| Befehl | Aktion |
+|---|---|
+| "Schlafmodus" / "Gute Nacht" / "Schlafenszeit" | Bildschirm dimmen (Fenster-Helligkeit 0.04) + Lautstärke auf 30% |
+| "Schlafmodus aus" / "Wach auf" / "Licht an" | Automatische Helligkeitssteuerung wiederherstellen |
+
+Wirkt sofort, auch mitten in einem laufenden Gespräch (wie "Stopp" lokal
+priorisiert, nicht Claude überlassen) – siehe ADR-028.
+
+### SIM-Erkennung + Kontakt-Import (ADR-029)
+| Befehl | Aktion |
+|---|---|
+| (automatisch bei neuer/anderer SIM, auch beim allerersten Start) | Nachfrage: "Soll ich die Kontakte übernehmen?" |
+| "Kontakte von der SIM importieren" | SIM-Kontakte (`content://icc/adn`) lesen, entduplizieren, schreiben |
+| "Kontakte aus einer Datei importieren" | System-Dateipicker für eine vCard-Datei (.vcf) öffnen |
+
+Realistischer Ersatz für einen "Migrationsassistenten" – ein echtes
+Geräte-Pairing (Googles Quick Switch) ist für eine Drittanbieter-App nicht
+zugänglich. Google-Konto-Sync während der Android-Ersteinrichtung braucht
+keinen Lina-Code, `ContactRepository` liest diese Kontakte ohnehin mit.
+
+### Ambiente-UI für Angehörige/Besucher
+Der primäre Nutzer ist blind – die visuelle Oberfläche ist ausdrücklich für
+sehende Angehörige/Besucher gedacht, die sehen wollen, was Lina gerade tut,
+oder ein laufendes Hörbuch bedienen möchten. Audio bleibt für den Nutzer
+selbst die einzige Schnittstelle.
+- **LinaOrb:** rein dekorative animierte Statuskugel, unterscheidet
+  Idle/Listening/Thinking/Speaking/Error über Bewegungscharakter statt Farbe
+- **AudiobookPlayerPanel:** sichtbare Steuerung (Titel/Kapitel/Fortschritt,
+  Zurück/-30s/Pause/Vor, Lautstärke) – erscheint nur bei geladenem Buch
+- **Querformat:** `screenOrientation="sensorLandscape"`, da das Tablet fast
+  immer liegend im Ständer steht; Kugel+Status links, Player rechts
+
 ---
 
 ## Nächster Schritt
 
-- LLM-Anbindung (Claude API) für freie Konversation – siehe Vision
+- Anrufe/SMS am echten Gerät testen (bisher nur Kernlogik, kein SIM im Testgerät)
+- Release-Keystore anlegen + signiertes `assembleRelease`
+- Dauerbetrieb über mehrere Stunden/über Nacht verifizieren (Lenovo/ZUI Battery-Killer)
 - STT-Robustheit bei Raumdistanz verbessern (Whisper-Verhörer bei Befehlen)
 
 ## Vision (Nordstern – bestimmt die Priorisierung von Phase 2+)
@@ -389,7 +439,7 @@ und der nebenbei das Gerät bedient und im Alltag unterstützt.
 
 - ~~STT-Migration zu Whisper (Sherpa-ONNX)~~ ✅ erledigt 2026-07-02
 - ~~TTS-Upgrade auf Piper (weibliche deutsche Stimme)~~ ✅ erledigt 2026-07-02
-- LLM-Anbindung für freie Konversation (siehe Vision – empfohlen: Claude API Hybrid)
+- ~~LLM-Anbindung für freie Konversation (Claude API Hybrid, ADR-017)~~ ✅ erledigt 2026-07-16
 - Onleihe-Integration (Bibliotheksausweis → Hörbücher)
 - Podcast-Streaming (gPodder-Backend)
 - Sprach-Einkauf: Wolt, Rewe Express, Picnic via AccessibilityService
@@ -414,8 +464,11 @@ und der nebenbei das Gerät bedient und im Alltag unterstützt.
 ```xml
 <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 <uses-permission android:name="android.permission.READ_CONTACTS"/>
+<uses-permission android:name="android.permission.WRITE_CONTACTS"/> <!-- SIM-/vCard-Import, ADR-029 -->
 <uses-permission android:name="android.permission.CALL_PHONE"/>
 <uses-permission android:name="android.permission.READ_CALL_LOG"/>
+<uses-permission android:name="android.permission.ANSWER_PHONE_CALLS"/>
+<uses-permission android:name="android.permission.READ_PHONE_STATE"/>
 <uses-permission android:name="android.permission.SEND_SMS"/>
 <uses-permission android:name="android.permission.READ_SMS"/>
 <uses-permission android:name="android.permission.RECEIVE_SMS"/>
@@ -426,8 +479,15 @@ und der nebenbei das Gerät bedient und im Alltag unterstützt.
 <uses-permission android:name="android.permission.WAKE_LOCK"/>
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 <uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/> <!-- Music/Audiobooks, ADR-025 -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+<uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"/>
 ```
+
+> Quelle der Wahrheit ist `AndroidManifest.xml` – diese Liste hier ist ein
+> Spiegel für den schnellen Überblick, bei Abweichung gilt das Manifest.
 
 ---
 
@@ -447,10 +507,10 @@ Intent-Erkennung gehören dorthin: Sie entscheiden, was Lina tut, und die
 Muster-Reihenfolge im `LocalCommandResolver` ist regressionsanfällig. Alles,
 was `Context` braucht, bleibt vorerst ungetestet (kein Robolectric im Projekt).
 
-**Nach JEDER abgeschlossenen Task:**
-1. `docs/CHANGELOG.md` → Was wurde gebaut/geändert?
-2. `docs/TODO.md` → Task auf `[x]` setzen, nächste priorisieren
-3. `docs/DECISIONS.md` → Falls Architekturentscheidung getroffen: ADR anlegen
+**Nach JEDER abgeschlossenen Task** (alle drei liegen im Repo-Root, nicht in `docs/`):
+1. `CHANGELOG.md` → Was wurde gebaut/geändert?
+2. `TODO.md` → Task auf `[x]` setzen, nächste priorisieren
+3. `DECISIONS.md` → Falls Architekturentscheidung getroffen: ADR anlegen
 
 **Niemals:**
 - Vosk direkt aufrufen – immer über `SttEngine`

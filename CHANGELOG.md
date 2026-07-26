@@ -5,6 +5,112 @@
 
 ---
 
+## [2026-07-26] Doku: Gesamtüberholung + Prioritäten in TODO.md
+
+**Was:** Alle Projektdokumente gegen den tatsächlichen Code-Stand geprüft und
+aktualisiert (viel war seit Tagen/Wochen unverändert, während Code sich weiter
+entwickelt hatte). Konkret:
+- `TODO.md`: neues Prioritäts-Schema (P0–P4) in der Legende, jede Sektion
+  entsprechend getaggt; stale KW-26-Deadline ehrlich als verstrichen benannt
+  statt stillschweigend zu ignorieren; doppelten Release-Keystore-Eintrag auf
+  eine Stelle reduziert; fälschlich als offen markierte Punkte korrigiert
+  (Claude-Anbindung ist längst getestet, Hörbuch-Schlaf-Timer ist am Gerät
+  geprüft) – Anrufe/SMS-Gerätetest explizit als blockiert markiert (`[!]`,
+  Testtablet hat keine SIM: `gsm.sim.state=ABSENT`).
+- `CLAUDE.md`: Modulstruktur um `core/sim/`, `core/contacts/` (Schreib-/Import-
+  Komponenten), `feature/contactimport/`, `LinaOrb`/`AudiobookPlayerPanel`/
+  `LinaActivity` ergänzt; `WRITE_CONTACTS` in der Berechtigungsliste nachgetragen
+  (und die ganze Liste gegen das echte Manifest abgeglichen – mehrere fehlende
+  Einträge gefunden); `TtsEngine.isSpeaking()` im Interface-Snippet ergänzt;
+  Phase-1-Tabellen um Schlafmodus und SIM-/Kontakt-Import erweitert; "Nächster
+  Schritt" korrigiert (LLM-Anbindung stand noch als offen da, ist seit Wochen
+  fertig) und aktualisiert.
+- `SICHERHEIT.md`: `EncryptedSharedPreferences`- und Auto-Löschungs-Lücken als
+  (teilweise) behoben markiert; neue Datenkategorie ergänzt – Kontakt-Import
+  schreibt jetzt dauerhaft in die System-Kontakte (`WRITE_CONTACTS`), vorher
+  wurden Kontakte nur flüchtig gelesen.
+- `WARTUNG.md`: neuer Einwilligungspunkt für den Kontakt-Import (schreibt echte,
+  dauerhafte Kontakte – anders als das bisherige, nur flüchtige Vorlesen).
+- `ONBOARDING.md`: ADR-Anzahl korrigiert (13 → aktuell 29), `TtsEngine`-Snippet
+  um `isSpeaking()` ergänzt, `docs/`-Pfade auf die echten Root-Pfade korrigiert.
+- `README.md`: irreführende Aussage "Carried by a German non-profit
+  association" korrigiert (widersprach ADR-023 – aktuell privat getragen,
+  gemeinnützige Trägerschaft nur eine mögliche Zukunftsoption) + neue Features
+  (Schlafmodus, Kontakt-Import, Ambiente-Anzeige) in beide Sprachversionen
+  ergänzt.
+- `IDEEN.md`: DAISY-Hörbücher und Erinnerungen & Wecker aus "Geplant" in einen
+  neuen "Umgesetzt"-Abschnitt verschoben (waren dort mit "Priorität hoch"
+  gelistet, obwohl längst gebaut); Lautstärke-Zeile von der noch offenen
+  Sprechtempo-Idee getrennt.
+
+**Warum:** Nutzerwunsch – vor dem nächsten Commit sollten Doku und TODO wieder
+den echten Stand widerspiegeln, nicht nur der Code. Stale Doku ist besonders
+teuer in einem Projekt mit mehreren gleichzeitig arbeitenden Claude-Code-
+Instanzen (siehe ONBOARDING.md), die sich auf diese Dateien verlassen.
+
+**Offen:** Die strategische Etappen-Planung ("Plan bis zum Bewerbungsfenster")
+wurde nur auf Ist-Stand geprüft, nicht inhaltlich neu zugeschnitten – das ist
+eine Entscheidung der Trägerschaft, nicht etwas, das eine Doku-Aufräumrunde
+eigenmächtig ändern sollte.
+
+---
+
+## [2026-07-26] Feature: SIM-Erkennung + Kontakt-Import (SIM & vCard-Datei)
+
+**Was:** Lina erkennt eine neue oder andere SIM-Karte (auch beim allerersten
+Start mit bereits eingelegter SIM) und fragt per Sprache, ob die SIM-Kontakte
+übernommen werden sollen ("Ich habe eine neue SIM-Karte erkannt. Soll ich die
+Kontakte übernehmen?"). Zusätzlich neuer Sprachbefehl "Kontakte aus einer Datei
+importieren", der Androids Storage-Access-Framework-Dateipicker öffnet und eine
+vCard-Datei (.vcf) einliest – das universelle Kontakt-Exportformat, das jedes
+alte Handy (Android, iPhone, Feature-Phone) erzeugen kann. Beide Wege
+entduplizieren gegen bestehende Kontakte per normalisierter Telefonnummer und
+fassen das Ergebnis in einer gesprochenen Zusammenfassung zusammen ("Ich habe
+12 neue Kontakte übernommen, 3 gab es schon."), statt bei Dutzenden Kontakten
+einzeln nachzufragen.
+
+Ursprünglich als umfassenderer "Migrationsassistent" gewünscht (aktiv nach
+einem alten Gerät suchen) – technisch für eine Drittanbieter-App nicht möglich
+(Googles Quick-Switch-Übertragung ist eine signierte Systemkomponente ohne
+offene Schnittstelle). Nach Rücksprache auf SIM-Erkennung + Datei-Import
+begrenzt; Google-Konto-Sync während der Android-Ersteinrichtung braucht keinen
+Lina-Code, da `ContactRepository` das ohnehin schon automatisch mitliest.
+
+Der SIM-Fingerabdruck ist ein Best-Effort-Signal (Kombination aus
+Subscription-ID, Carrier-Name, Länderkennung und – falls lesbar – ICCID-Suffix)
+statt einer garantiert eindeutigen ID, da Android 10+/API 33 die echte ICCID
+für Apps ohne Trägerrechte oft schwärzt oder eine `SecurityException` wirft.
+
+**Neue Berechtigung:** `WRITE_CONTACTS` (Manifest + `PermissionsGuide`).
+
+**Dateien:**
+- Neu: `core/sim/SimIdentity.kt`, `core/sim/SimIdentityReader.kt`,
+  `core/sim/SimChangeDetector.kt`, `feature/contactimport/ContactImportStore.kt`,
+  `feature/contactimport/ContactImportManager.kt`, `core/contacts/SimContactSource.kt`,
+  `core/contacts/ContactWriter.kt`, `core/contacts/ContactDedup.kt`,
+  `core/contacts/PhoneNumberNormalizer.kt`, `core/contacts/VCardParser.kt`
+- Geändert: `ui/launcher/LauncherActivity.kt` (App-bereit-Check, Live-Erkennung
+  per `BroadcastReceiver`, Sprach-Bestätigung, Dateipicker-Anbindung, neue
+  Intent-Zweige), `core/intent/ResolvedIntent.kt`, `core/intent/LocalCommandResolver.kt`,
+  `feature/onboarding/PermissionsGuide.kt`, `AndroidManifest.xml`
+
+**Verifiziert am Gerät:** Sprachbefehle "Kontakte von der SIM importieren" und
+"Kontakte aus einer Datei importieren" korrekt als Intent erkannt und ohne
+Absturz ausgeführt (Testgerät hat keine SIM – `gsm.sim.state=ABSENT`, damit
+erwartungsgemäß "keine Kontakte gefunden"). vCard-Import komplett end-to-end
+verifiziert: Testdatei mit zwei Kontakten in Downloads gelegt, per Sprachbefehl
+den System-Dateipicker geöffnet, Datei ausgewählt, danach beide Kontakte
+tatsächlich in der echten Android-Kontakte-Datenbank gefunden (`content query`)
+– Parser, Dedup und Batch-Insert funktionieren real, nicht nur in Unit-Tests.
+Test-Kontakte danach wieder entfernt.
+
+**Offen:** Ein echter SIM-Wechsel konnte am Testgerät nicht geprüft werden
+(kein physischer SIM-Steckplatz belegt) – die Logik ist aber unit-getestet
+(`SimIdentityTest`) und die Erkennungspfade (App-Start + Live-Broadcast)
+degradieren nachweislich sauber auf "keine SIM" statt zu crashen.
+
+---
+
 ## [2026-07-26] Feature: Schlafmodus (Bildschirm dimmen + Lautstärke 30%)
 
 **Was:** Neuer Sprachbefehl "Schlafmodus" (auch "gute Nacht", "Schlafenszeit"):

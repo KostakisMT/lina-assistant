@@ -8,7 +8,8 @@ Lina is an open-source voice assistant for Android, built from the ground up for
 blind and visually impaired people. Fully controllable by voice, core features
 run offline, no login, no cloud requirement.
 
-Carried by a German non-profit association – not a commercial product.
+Currently carried privately by the developer, not a commercial product – a
+future non-profit home is possible but not yet decided (see ADR-023).
 The app currently speaks **German**; the architecture is designed
 language-agnostic, and an English release is a stated goal – contributions
 welcome.
@@ -34,6 +35,13 @@ device along the way.
   letterheads and small print) – full text on request
 - 🗣️ **Free conversation** – via the Claude API (optional, needs an API key;
   without a key all core commands keep working offline)
+- 🌙 **Sleep mode** – "sleep mode" / "good night" dims the screen and lowers
+  the volume for the night, in one voice command
+- 📇 **Contact import** – detects a new or different SIM card and offers to
+  import its contacts, or import a vCard file from an old phone
+- 🔵 **Ambient status display** – a decorative animated indicator and a
+  visible audiobook player, for sighted family/visitors to see what Lina is
+  doing or control playback – audio remains the primary interface throughout
 
 ## Technology
 
@@ -103,6 +111,14 @@ Ein quelloffenes, nicht-kommerzielles Projekt – kein kommerzielles Produkt.
   Briefköpfe und Kleingedrucktes) – auf Nachfrage der ganze Text
 - 🗣️ **Freie Konversation** – über die Claude API (optional, braucht API-Key;
   ohne Key laufen alle Kernbefehle weiter offline)
+- 🌙 **Schlafmodus** – „Schlafmodus" / „gute Nacht" dimmt den Bildschirm und
+  senkt die Lautstärke fürs Einschlafen, ein Sprachbefehl genügt
+- 📇 **Kontakt-Import** – erkennt eine neue oder andere SIM-Karte und bietet an,
+  ihre Kontakte zu übernehmen, oder importiert eine vCard-Datei vom alten Handy
+- 🔵 **Ambiente-Anzeige** – eine dekorative animierte Statuskugel und ein
+  sichtbarer Hörbuch-Player, damit sehende Angehörige/Besucher sehen können,
+  was Lina gerade tut, oder die Wiedergabe steuern können – die Sprachsteuerung
+  bleibt dabei durchgehend die primäre Schnittstelle
 
 ## Bauen & Ausprobieren
 

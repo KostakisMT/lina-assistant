@@ -18,6 +18,9 @@ data class Audiobook(
     val hasChapters: Boolean get() = chapters.size > 1
 }
 
+/** [matchedGenre] ist `null`, wenn stattdessen auf Stichwortsuche zurückgefallen wurde. */
+data class TopicSearchResult(val books: List<LibrivoxBook>, val matchedGenre: String?)
+
 class AudiobookLibrary(private val context: Context) {
 
     private val librivox = LibrivoxRepository()
@@ -47,6 +50,25 @@ class AudiobookLibrary(private val context: Context) {
         } else {
             callback(results)
         }
+    }
+
+    /**
+     * Sucht nach Thema/Genre statt nach Titel/Autor. [TopicSearchResult.matchedGenre]
+     * ist `null`, wenn kein Genre erkannt wurde oder die Genre-Suche leer war
+     * und stattdessen auf die normale Stichwortsuche zurückgefallen wurde –
+     * echte freie Themensuche kann LibriVox nicht leisten, siehe [LibrivoxGenres].
+     */
+    fun searchByTopic(topic: String, callback: (TopicSearchResult) -> Unit) {
+        val genre = LibrivoxGenres.findGenre(topic)
+        if (genre != null) {
+            val results = librivox.searchByGenre(genre)
+            if (results.isNotEmpty()) {
+                callback(TopicSearchResult(results, genre))
+                return
+            }
+        }
+        val fallback = librivox.search(topic).ifEmpty { librivox.searchByAuthor(topic) }
+        callback(TopicSearchResult(fallback, null))
     }
 
     /**

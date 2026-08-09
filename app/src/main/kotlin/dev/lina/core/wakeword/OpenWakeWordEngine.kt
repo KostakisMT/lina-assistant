@@ -12,8 +12,12 @@ import java.nio.FloatBuffer
 class OpenWakeWordEngine(
     private val context: Context,
     private val modelName: String = "hey_lina_v1.onnx",
-    private val threshold: Float = 0.3f,
-    private val patienceCount: Int = 2,
+    // War 0.3 (Validierungswert gegen MUSAN-Hintergrundgeräusche) – in der
+    // Praxis lösten schon "hey" allein oder der Name "Alina" (enthält "lina"
+    // phonetisch) Fehlalarme aus. training/README.md nennt genau das als
+    // erwarteten Grund, die Schwelle zu erhöhen.
+    private val threshold: Float = 0.5f,
+    private val patienceCount: Int = 3,
 ) : WakeWordEngine {
 
     private val ortEnv = OrtEnvironment.getEnvironment()
@@ -118,7 +122,14 @@ class OpenWakeWordEngine(
             val score = computeWakeWordScore()
             if (score > maxScore) maxScore = score
             if (score >= threshold) {
+                // Feinere Diagnose als das ~2s-Sampling oben: jeder Frame über der
+                // Schwelle wird sofort geloggt, damit ein kurzer Fehlalarm-Spike
+                // (z.B. "Alina") nicht zwischen zwei periodischen Log-Zeilen verschwindet.
                 consecutiveDetections++
+                android.util.Log.d(
+                    "OpenWakeWord",
+                    "über Schwelle: score=$score consecutive=$consecutiveDetections/$patienceCount",
+                )
                 if (consecutiveDetections >= patienceCount) {
                     consecutiveDetections = 0
                     embBuffer.clear()

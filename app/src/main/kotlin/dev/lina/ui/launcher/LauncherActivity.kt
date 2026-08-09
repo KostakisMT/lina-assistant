@@ -49,7 +49,10 @@ import dev.lina.BuildConfig
 import dev.lina.core.intent.LocalCommandResolver
 import dev.lina.core.intent.ResolvedIntent
 import dev.lina.core.llm.ClaudeConversation
+import dev.lina.core.llm.ConversationEngine
+import dev.lina.core.llm.DocumentReadResult
 import dev.lina.core.llm.LinaReply
+import dev.lina.core.llm.SuggestedCalendarEvent
 import dev.lina.core.sim.SimChangeDetector
 import dev.lina.core.sim.SimChangeResult
 import dev.lina.core.sim.SimIdentityReader
@@ -71,6 +74,8 @@ import dev.lina.feature.news.NewsSyncWorker
 import dev.lina.feature.sms.SmsReader
 import dev.lina.feature.sms.SmsSender
 import dev.lina.feature.document.DocumentCamera
+import dev.lina.core.text.GermanCalendarNames
+import dev.lina.feature.calendar.CalendarManager
 import dev.lina.feature.reminder.ReminderManager
 import dev.lina.feature.reminder.ReminderReceiver
 import dev.lina.feature.onboarding.AccessibilityGuide
@@ -78,6 +83,7 @@ import dev.lina.feature.onboarding.VoiceOnboarding
 import dev.lina.feature.onboarding.BatteryWhitelistGuide
 import dev.lina.feature.onboarding.PermissionsGuide
 import dev.lina.ui.components.AudiobookPlayerPanel
+import dev.lina.ui.components.CalendarPanel
 import dev.lina.ui.components.LinaOrb
 import dev.lina.ui.components.LinaTheme
 import kotlinx.coroutines.delay
@@ -87,10 +93,14 @@ class LauncherActivity : ComponentActivity() {
 
     private var ttsEngine: TtsEngine? = null
     private var piperEngine: PiperTtsEngine? = null
-    private var claude: ClaudeConversation? = null
+    private var claude: ConversationEngine? = null
     private var documentCamera: DocumentCamera? = null
     /** Nur während des Dokument-Folgefensters im RAM – wird danach verworfen. */
     private var lastDocumentImage: ByteArray? = null
+    /** Im Dokument erkannter Termin, während auf die Ja/Nein-Antwort gewartet wird. */
+    private var pendingCalendarSuggestion: SuggestedCalendarEvent? = null
+    /** Ansagetext, um nach der Termin-Rückfrage normal in openDocFollowUp() weiterzumachen. */
+    private var pendingDocumentFollowUpText: String? = null
     private val intentResolver = LocalCommandResolver()
     private var contactMatcher: FuzzyContactMatcher? = null
     private var callHandler: CallHandler? = null
@@ -99,15 +109,20 @@ class LauncherActivity : ComponentActivity() {
     private var newsReader: NewsReader? = null
     private var audiobookManager: AudiobookManager? = null
     private var reminderManager: ReminderManager? = null
+    private var calendarManager: CalendarManager? = null
     private var contactImportManager: ContactImportManager? = null
     /** Fingerabdruck der SIM, für die gerade eine Import-Nachfrage offen ist. */
     private var pendingSimImportIdentity: String? = null
+    /** true, wenn `listBooks()` gerade den LibriVox-Vorschlags-Dialog geöffnet hat (steuert Weckwort-Neustart). */
+    private var librivoxSuggestionOpened = false
     private var statusText by mutableStateOf("Lina startet…")
     /** Treibt die Statuskugel (LinaOrb) für Angehörige/Besucher – rein additiv neben [statusText]. */
     private var linaActivity by mutableStateOf<LinaActivity>(LinaActivity.Loading)
     private var debugInput by mutableStateOf("")
     private var debugLog by mutableStateOf("")
     private var linaReady by mutableStateOf(false)
+    /** Steuert, ob der rechte Panel-Slot den Kalender statt des Hörbuch-Players zeigt. */
+    private var calendarVisible by mutableStateOf(false)
     private var sttEngine: SttEngine? = null
     private var onboarding: VoiceOnboarding? = null
     private var newsHintGesagt = false
@@ -217,7 +232,9 @@ class LauncherActivity : ComponentActivity() {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val currentAudiobookManager = audiobookManager
-                    val showPlayer = linaReady && currentAudiobookManager != null &&
+                    val currentCalendarManager = calendarManager
+                    val showCalendar = linaReady && calendarVisible && currentCalendarManager != null
+                    val showPlayer = !showCalendar && linaReady && currentAudiobookManager != null &&
                         currentAudiobookManager.currentStatus() != null
 
                     Column(
@@ -237,7 +254,18 @@ class LauncherActivity : ComponentActivity() {
                         )
                     }
 
-                    if (showPlayer) {
+                    if (showCalendar) {
+                        Spacer(modifier = Modifier.width(32.dp))
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            CalendarPanel(calendarManager = currentCalendarManager!!)
+                        }
+                    } else if (showPlayer) {
                         Spacer(modifier = Modifier.width(32.dp))
                         Column(
                             modifier = Modifier
@@ -532,6 +560,7 @@ class LauncherActivity : ComponentActivity() {
         newsReader = NewsReader(this, tts)
         audiobookManager = AudiobookManager(this, tts)
         reminderManager = ReminderManager(this, tts)
+        calendarManager = CalendarManager(this, tts)
         contactImportManager = ContactImportManager(this)
 
         NewsSyncWorker.schedule(this)
@@ -669,6 +698,11 @@ class LauncherActivity : ComponentActivity() {
         }
         if (resolved is ResolvedIntent.ImportSimContacts || resolved is ResolvedIntent.ImportVcardContacts) {
             // Import/Dateipicker läuft asynchron und übernimmt Ansage/Weckwort-Neustart selbst
+            return true
+        }
+        if (resolved is ResolvedIntent.ListAudiobooks && librivoxSuggestionOpened) {
+            // Nur bei dünner Bibliothek: das Folgefenster übernimmt Weckwort-Neustart selbst
+            librivoxSuggestionOpened = false
             return true
         }
         ttsEngine?.speak(response)
@@ -956,8 +990,8 @@ class LauncherActivity : ComponentActivity() {
             linaActivity = LinaActivity.Thinking
             Earcons.thinking()
             Thread({
-                val reply = conversation.readDocument(verbatimOf, verbatim = true)
-                runOnUiThread { speakDocumentReply(reply, verbatimOf, offerFullText = false) }
+                val result = conversation.readDocument(verbatimOf, verbatim = true)
+                runOnUiThread { speakDocumentReply(result, verbatimOf, offerFullText = false) }
             }, "doc-verbatim").start()
             return
         }
@@ -984,8 +1018,8 @@ class LauncherActivity : ComponentActivity() {
                 linaActivity = LinaActivity.Thinking
                 Earcons.thinking()
                 Thread({
-                    val reply = conversation.readDocument(bytes)
-                    runOnUiThread { speakDocumentReply(reply, bytes, offerFullText = true) }
+                    val result = conversation.readDocument(bytes)
+                    runOnUiThread { speakDocumentReply(result, bytes, offerFullText = true) }
                 }, "doc-read").start()
             }
         }, 1_500)
@@ -993,10 +1027,11 @@ class LauncherActivity : ComponentActivity() {
 
     /** Ergebnis der Dokument-Auswertung vorlesen und Folgefenster öffnen. */
     private fun speakDocumentReply(
-        reply: LinaReply,
+        result: DocumentReadResult,
         bytes: ByteArray,
         offerFullText: Boolean,
     ) {
+        val reply = result.reply
         val text = when (reply) {
             is LinaReply.Say -> reply.text
             is LinaReply.Error -> reply.text
@@ -1006,20 +1041,83 @@ class LauncherActivity : ComponentActivity() {
         debugLog = "Dokument: ${text.take(200)}\n\n$debugLog"
 
         val erfolg = reply is LinaReply.Say
-        val ansage = if (erfolg && offerFullText) {
-            "$text … Soll ich den ganzen Text vorlesen?"
-        } else {
-            text
+        val suggestion = result.suggestedEvent.takeIf { erfolg }
+        val ansage = buildString {
+            append(if (erfolg && offerFullText) "$text … Soll ich den ganzen Text vorlesen?" else text)
+            if (suggestion != null) {
+                append(" Übrigens, im Dokument steht ein Termin: ${suggestion.title} am ${suggestion.date}.")
+                append(" Soll ich den eintragen?")
+            }
         }
         if (ansage.isNotBlank()) ttsEngine?.speak(ansage, TtsPriority.HIGH)
 
         if (erfolg) {
             lastDocumentImage = bytes
-            openDocFollowUp(text)
+            if (suggestion != null) {
+                pendingCalendarSuggestion = suggestion
+                pendingDocumentFollowUpText = text
+                openDocCalendarFollowUp()
+            } else {
+                openDocFollowUp(text)
+            }
         } else {
             lastDocumentImage = null
             resumeWakeWordListening()
         }
+    }
+
+    /**
+     * Eigener, komplett neuer Ja/Nein-Dialog für einen im Dokument erkannten
+     * Termin – bewusst NICHT in handleDocFollowUp() gemischt, damit "ja"/
+     * "alles" dort weiterhin ausschließlich "ganzen Text vorlesen" bedeutet.
+     * Nach der Antwort geht es normal in openDocFollowUp() weiter (das
+     * "alles vorlesen?"-Fenster bleibt erreichbar).
+     */
+    private fun openDocCalendarFollowUp() {
+        val stt = sttEngine ?: return
+        if (onboarding != null) return
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        waitForSilenceThenRun(
+            onReady = {
+                statusText = "Termin eintragen? – ich höre…"
+                linaActivity = LinaActivity.Listening
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        openDocFollowUp(pendingDocumentFollowUpText ?: "")
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleDocCalendarFollowUp(text)
+                        }
+                    }
+                }, 350)
+            },
+            onTimeout = { openDocFollowUp(pendingDocumentFollowUpText ?: "") },
+        )
+    }
+
+    private fun handleDocCalendarFollowUp(text: String) {
+        val lower = text.lowercase()
+        val suggestion = pendingCalendarSuggestion
+        pendingCalendarSuggestion = null
+        if (suggestion != null &&
+            listOf("ja", "klar", "gerne", "mach", "bitte").any { lower.contains(it) }
+        ) {
+            calendarManager?.create(suggestion.title, suggestion.date, suggestion.time, source = "document")
+        }
+        openDocFollowUp(pendingDocumentFollowUpText ?: "")
     }
 
     /**
@@ -1189,6 +1287,98 @@ class LauncherActivity : ComponentActivity() {
             // als Rückweg nutzbar.
             else -> resumeWakeWordListening()
         }
+    }
+
+    /**
+     * Ja/Nein-Rückfrage, wenn `AudiobookManager.listBooks()` eine leere/sehr
+     * kleine Bibliothek meldet – gleiches Muster wie
+     * `openSimImportFollowUp()`/`handleSimImportFollowUp()`. Die eigentliche
+     * Frage hat `listBooks()` schon gesprochen, hier wird nur zugehört.
+     */
+    private fun openLibrivoxSuggestionFollowUp() {
+        val stt = sttEngine ?: return
+        if (onboarding != null) return
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        waitForSilenceThenRun(
+            onReady = {
+                statusText = "Hörbuch-Vorschlag – ich höre…"
+                linaActivity = LinaActivity.Listening
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleLibrivoxSuggestionFollowUp(text)
+                        }
+                    }
+                }, 350)
+            },
+            onTimeout = { resumeWakeWordListening() },
+        )
+    }
+
+    private fun handleLibrivoxSuggestionFollowUp(text: String) {
+        val t = text.lowercase()
+        when {
+            listOf("ja", "klar", "gerne", "mach", "bitte").any { t.contains(it) } ->
+                openLibrivoxTopicFollowUp()
+            listOf("nein", "nicht", "später", "spaeter").any { t.contains(it) } -> {
+                ttsEngine?.speak("Alles klar.", TtsPriority.NORMAL)
+                resumeWakeWordListening()
+            }
+            else -> resumeWakeWordListening()
+        }
+    }
+
+    /** Fragt nach dem Thema, nachdem der Nutzer der LibriVox-Suche zugestimmt hat. */
+    private fun openLibrivoxTopicFollowUp() {
+        val stt = sttEngine ?: return
+        if (onboarding != null) return
+        ttsEngine?.speak("Zu welchem Thema?", TtsPriority.HIGH)
+        waitForSilenceThenRun(
+            onReady = {
+                statusText = "Thema – ich höre…"
+                linaActivity = LinaActivity.Listening
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { topic ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            if (topic.isNotBlank()) {
+                                audiobookManager?.searchByTopic(topic)
+                            }
+                            resumeWakeWordListening()
+                        }
+                    }
+                }, 350)
+            },
+            onTimeout = { resumeWakeWordListening() },
+        )
     }
 
     /** Für den manuellen Sprachbefehl – keine Rückfrage nötig, der Befehl ist bereits die Bestätigung. */
@@ -1510,6 +1700,7 @@ class LauncherActivity : ComponentActivity() {
             "Detail wird vorgelesen."
         }
         is ResolvedIntent.PlayAudiobook -> {
+            calendarVisible = false
             audiobookManager?.play()
             "Hörbuch wird gestartet…"
         }
@@ -1519,6 +1710,7 @@ class LauncherActivity : ComponentActivity() {
             "Pausiert."
         }
         is ResolvedIntent.ResumeAudiobook -> {
+            calendarVisible = false
             audiobookManager?.resume()
             "Weiter."
         }
@@ -1531,12 +1723,17 @@ class LauncherActivity : ComponentActivity() {
             ""
         }
         is ResolvedIntent.ListAudiobooks -> {
-            audiobookManager?.listBooks()
-            "Hörbücher werden aufgelistet…"
+            librivoxSuggestionOpened = audiobookManager?.listBooks() == true
+            if (librivoxSuggestionOpened) openLibrivoxSuggestionFollowUp()
+            "" // listBooks() spricht bereits alles Nötige selbst
         }
         is ResolvedIntent.SearchAudiobook -> {
             audiobookManager?.searchAndPlay(intent.query)
             "Suche nach ${intent.query}…"
+        }
+        is ResolvedIntent.SearchAudiobookByGenre -> {
+            audiobookManager?.searchByTopic(intent.topic)
+            "Suche zum Thema ${intent.topic}…"
         }
         is ResolvedIntent.SleepTimer -> {
             audiobookManager?.startSleepTimer(intent.minutes)
@@ -1624,6 +1821,33 @@ class LauncherActivity : ComponentActivity() {
             val m = now.get(java.util.Calendar.MINUTE)
             if (m == 0) "Es ist $h Uhr." else "Es ist $h Uhr $m."
         }
+        is ResolvedIntent.Date -> {
+            val now = java.util.Calendar.getInstance()
+            val wochentag = GermanCalendarNames.weekdayName(now)
+            val monat = GermanCalendarNames.monthName(now)
+            "Heute ist $wochentag, der ${now.get(java.util.Calendar.DAY_OF_MONTH)}. $monat."
+        }
+        is ResolvedIntent.SetCalendarEvent -> {
+            calendarManager?.createFromSpeech(intent.rawInput)
+            "" // CalendarManager sagt selbst an
+        }
+        is ResolvedIntent.SetCalendarEventAt -> {
+            calendarManager?.create(intent.title, intent.isoDatum, intent.isoZeit, source = "manual")
+            ""
+        }
+        is ResolvedIntent.ShowCalendar -> {
+            calendarVisible = true
+            calendarManager?.list()
+            ""
+        }
+        is ResolvedIntent.HideCalendar -> {
+            calendarVisible = false
+            "Kalender ausgeblendet."
+        }
+        is ResolvedIntent.ClearCalendarEvents -> {
+            calendarManager?.clearAll()
+            ""
+        }
         is ResolvedIntent.SleepMode -> {
             enterSleepMode()
             "Gute Nacht. Schlafmodus aktiviert."
@@ -1668,6 +1892,7 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.AudiobookInfo -> "AudiobookInfo"
         is ResolvedIntent.ListAudiobooks -> "ListAudiobooks"
         is ResolvedIntent.SearchAudiobook -> "SearchAudiobook(${intent.query})"
+        is ResolvedIntent.SearchAudiobookByGenre -> "SearchAudiobookByGenre(${intent.topic})"
         is ResolvedIntent.SleepTimer -> "SleepTimer(${intent.minutes}min)"
         is ResolvedIntent.VolumeUp -> "VolumeUp"
         is ResolvedIntent.VolumeDown -> "VolumeDown"
@@ -1689,6 +1914,12 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.ImportSimContacts -> "ImportSimContacts"
         is ResolvedIntent.ImportVcardContacts -> "ImportVcardContacts"
         is ResolvedIntent.Time -> "Time"
+        is ResolvedIntent.Date -> "Date"
+        is ResolvedIntent.SetCalendarEvent -> "SetCalendarEvent"
+        is ResolvedIntent.SetCalendarEventAt -> "SetCalendarEventAt(${intent.isoDatum})"
+        is ResolvedIntent.ShowCalendar -> "ShowCalendar"
+        is ResolvedIntent.HideCalendar -> "HideCalendar"
+        is ResolvedIntent.ClearCalendarEvents -> "ClearCalendarEvents"
         is ResolvedIntent.Stop -> "Stop"
         is ResolvedIntent.Unknown -> "Unknown"
     }

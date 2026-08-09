@@ -1,5 +1,6 @@
 package dev.lina.feature.reminder
 
+import dev.lina.core.text.GermanCalendarNames
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -33,13 +34,9 @@ data class Reminder(
             1 -> "morgen"
             2 -> "übermorgen"
             else -> {
-                val wochentage = listOf(
-                    "Sonntag", "Montag", "Dienstag", "Mittwoch",
-                    "Donnerstag", "Freitag", "Samstag",
-                )
-                val name = wochentage[cal.get(Calendar.DAY_OF_WEEK) - 1]
+                val name = GermanCalendarNames.weekdayName(cal)
                 if (tagUnterschied in 3..6) "am $name" else {
-                    "am ${cal.get(Calendar.DAY_OF_MONTH)}. ${monatsName(cal)}"
+                    "am ${cal.get(Calendar.DAY_OF_MONTH)}. ${GermanCalendarNames.monthName(cal)}"
                 }
             }
         }
@@ -82,10 +79,5 @@ data class Reminder(
             }
             return ((b.timeInMillis - a.timeInMillis) / 86_400_000L).toInt()
         }
-
-        private fun monatsName(cal: Calendar): String = listOf(
-            "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
-            "August", "September", "Oktober", "November", "Dezember",
-        )[cal.get(Calendar.MONTH)]
     }
 }

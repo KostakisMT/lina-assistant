@@ -12,6 +12,7 @@ data class LibrivoxBook(
     val description: String,
     val totalDurationSecs: Int,
     val rssUrl: String,
+    val language: String = "",
 ) {
     val durationDescription: String
         get() {
@@ -36,28 +37,47 @@ class LibrivoxRepository {
     fun search(query: String, language: String = "German"): List<LibrivoxBook> {
         return try {
             val encoded = URLEncoder.encode(query, "UTF-8")
-            val url = "$BASE_URL/audiobooks/?title=^$encoded" +
-                "&format=json&fields={id,title,authors,description,totaltime,totaltimesecs,url_rss}" +
-                "&limit=5"
-            val json = fetchJson(url)
-            parseBooks(json)
+            val url = "$BASE_URL/audiobooks/?title=^$encoded&format=json&limit=$OVER_FETCH_LIMIT"
+            filterByLanguage(parseBooks(fetchJson(url)), language)
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    fun searchByAuthor(author: String): List<LibrivoxBook> {
+    fun searchByAuthor(author: String, language: String = "German"): List<LibrivoxBook> {
         return try {
             val encoded = URLEncoder.encode(author, "UTF-8")
-            val url = "$BASE_URL/audiobooks/?author=$encoded" +
-                "&format=json&fields={id,title,authors,description,totaltime,totaltimesecs,url_rss}" +
-                "&limit=5"
-            val json = fetchJson(url)
-            parseBooks(json)
+            val url = "$BASE_URL/audiobooks/?author=$encoded&format=json&limit=$OVER_FETCH_LIMIT"
+            filterByLanguage(parseBooks(fetchJson(url)), language)
         } catch (_: Exception) {
             emptyList()
         }
     }
+
+    /**
+     * [genre] muss ein exakter Wert aus [LibrivoxGenres.TAXONOMY] sein, nie
+     * Rohtext vom Nutzer – ein unbekannter Wert liefert von der API kein
+     * leeres Ergebnis, sondern HTTP 500 (live gegen die echte API geprüft).
+     */
+    fun searchByGenre(genre: String, language: String = "German"): List<LibrivoxBook> {
+        return try {
+            val encoded = URLEncoder.encode(genre, "UTF-8")
+            val url = "$BASE_URL/audiobooks/?genre=$encoded&format=json&limit=$OVER_FETCH_LIMIT"
+            filterByLanguage(parseBooks(fetchJson(url)), language)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Der `language`-Query-Parameter wird von LibriVox serverseitig ignoriert
+     * (live geprüft: `language=English` liefert trotzdem deutschsprachige
+     * Treffer mit) – Filterung muss hier passieren. Deshalb wird mit
+     * [OVER_FETCH_LIMIT] statt der gewünschten Endgröße angefragt und danach
+     * auf [RESULT_LIMIT] gekappt.
+     */
+    private fun filterByLanguage(books: List<LibrivoxBook>, language: String): List<LibrivoxBook> =
+        books.filter { it.language.equals(language, ignoreCase = true) }.take(RESULT_LIMIT)
 
     fun fetchChapters(rssUrl: String): List<LibrivoxChapter> {
         return try {
@@ -120,7 +140,8 @@ class LibrivoxRepository {
 
     private fun Int?.orZero(): Int = this ?: 0
 
-    private fun parseBooks(json: String): List<LibrivoxBook> {
+    /** internal statt private, damit ein reiner JVM-Test das Parsing ohne Netzwerk prüfen kann. */
+    internal fun parseBooks(json: String): List<LibrivoxBook> {
         val result = mutableListOf<LibrivoxBook>()
         try {
             val root = JSONObject(json)
@@ -140,6 +161,7 @@ class LibrivoxRepository {
                     description = book.optString("description", ""),
                     totalDurationSecs = book.optInt("totaltimesecs", 0),
                     rssUrl = book.optString("url_rss", ""),
+                    language = book.optString("language", ""),
                 ))
             }
         } catch (_: Exception) {}
@@ -156,5 +178,9 @@ class LibrivoxRepository {
 
     companion object {
         private const val BASE_URL = "https://librivox.org/api/feed"
+        // Serverseitiger language-Filter ist wirkungslos (live geprüft) – wir
+        // fragen mehr an, als wir zeigen wollen, und filtern client-seitig.
+        private const val OVER_FETCH_LIMIT = 20
+        private const val RESULT_LIMIT = 5
     }
 }

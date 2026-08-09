@@ -112,6 +112,9 @@ dependencies {
 
     // Unit-Tests (reine JVM – Parser und Intent-Erkennung, kein Gerät nötig)
     testImplementation("junit:junit:4.13.2")
+    // Echtes org.json für JVM-Tests (Android liefert dafür nur einen Stub) –
+    // nötig, um LibrivoxRepository.parseBooks() ohne Gerät zu testen.
+    testImplementation("org.json:json:20240303")
 
     // CameraX (Dokument-Foto für Vorlesen per Vision)
     implementation("androidx.camera:camera-core:1.4.1")

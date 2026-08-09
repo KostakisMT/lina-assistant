@@ -23,6 +23,12 @@ training/data/
 training/tts/
 __pycache__/
 
+# LLM-Training (ADR-032): Scripts/Prompts versioniert, Umgebung/Daten/Checkpoints nicht
+training/llm/venv/
+training/llm/data/
+training/llm/adapters/
+training/llm/models/
+
 # Persönliche Daten des Primärnutzers – bleibt lokal
 NUTZERPROFIL.md
 

@@ -295,12 +295,25 @@ app/src/main/kotlin/dev/lina/
 │   │   ├── Chapter.kt               # Kapitel-Modell (opt. Zeitbereich)
 │   │   ├── DaisyParser.kt           # DAISY 2.02: ncc.html + SMIL
 │   │   ├── DaisyRepository.kt       # Buchordner erkennen und auflösen
+│   │   ├── LibrivoxRepository.kt    # LibriVox-API (Titel/Autor/Genre, deutschsprachig gefiltert)
+│   │   ├── LibrivoxGenres.kt        # Feste Genre-Taxonomie + deutsche Synonyme (ADR-030)
 │   │   └── PlaybackStateStore.kt    # Fortschritt persistent (inkl. Kapitel)
 │   ├── document/
 │   │   └── DocumentCamera.kt        # CameraX Rückkamera, eigener Lifecycle
 │   ├── contactimport/
 │   │   ├── ContactImportManager.kt  # Orchestriert SIM-/vCard-Import (Dedup+Write)
 │   │   └── ContactImportStore.kt    # EncryptedSharedPreferences: SIM-Fingerabdruck
+│   ├── reminder/
+│   │   ├── Reminder.kt              # Datenmodell + spokenTime()
+│   │   ├── ReminderStore.kt         # EncryptedSharedPreferences
+│   │   ├── ReminderScheduler.kt     # AlarmManager (setAlarmClock, Doze-fest)
+│   │   ├── ReminderManager.kt       # Anlegen/Ansagen/Löschen
+│   │   └── GermanTimeParser.kt      # Relative Zeiten/Uhrzeiten (kein Datum)
+│   ├── calendar/
+│   │   ├── CalendarEvent.kt         # Termin-Datenmodell (Datum/Uhrzeit/Quelle)
+│   │   ├── CalendarStore.kt         # EncryptedSharedPreferences
+│   │   ├── GermanDateParser.kt      # Datumsphrasen: relativ/Wochentag/explizit
+│   │   └── CalendarManager.kt       # Legt bei jedem Termin eine verknüpfte Reminder an (ADR-031)
 │   └── onboarding/
 │       ├── PermissionsGuide.kt
 │       ├── VoiceOnboarding.kt       # Gesprochene Ersteinrichtung
@@ -312,7 +325,8 @@ app/src/main/kotlin/dev/lina/
     └── components/
         ├── LinaTheme.kt             # Hochkontrast-Theme
         ├── LinaOrb.kt               # Statuskugel für Angehörige/Besucher (dekorativ)
-        └── AudiobookPlayerPanel.kt  # Sichtbare Hörbuch-Steuerung für Angehörige
+        ├── AudiobookPlayerPanel.kt  # Sichtbare Hörbuch-Steuerung für Angehörige
+        └── CalendarPanel.kt         # Wochenansicht für Angehörige/Pflegepersonal
 ```
 
 ---
@@ -359,11 +373,21 @@ app/src/main/kotlin/dev/lina/
 | "Nächstes Kapitel" / "Ein Kapitel zurück" | Kapitel wechseln |
 | "Kapitel drei" | Zu Kapitel springen (Zahl oder Zahlwort) |
 | "Welche Kapitel gibt es?" | Kapitel auflisten (max. 10, dann Hinweis) |
+| "Welche Hörbücher habe ich?" | Lokale Bibliothek auflisten + LibriVox-Hinweis; bei ≤2 Büchern proaktive Ja/Nein-Frage |
+| "Hörbücher zum Thema Politik" | LibriVox-Genre-Suche (ADR-030) – feste Taxonomie + Stichwort-Fallback |
+| "Suche Tolstoi" | Titel-/Autorensuche (lokal, sonst LibriVox) |
 
 **Formate:** lokale MP3/M4B, LibriVox-Streaming und **DAISY 2.02** – das Format
 der Blindenhörbüchereien (Buchordner mit `ncc.html`, ADR-019). Kapitel sind
 durchgängiges Konzept: der Player spielt immer eine Playlist, nie eine
 Einzeldatei.
+
+**LibriVox-Genre-Suche (ADR-030):** LibriVox hat keine freie Themensuche, nur
+eine feste, englischsprachige Genre-Taxonomie (`LibrivoxGenres.kt`, live von
+librivox.org gescrapt – kein API-Endpunkt dafür). Ein ungültiger Genre-Name
+liefert HTTP 500, nie eine leere Liste – deshalb wird jeder Nutzer-Rohtext
+erst gegen die Taxonomie validiert. Ohne Treffer fällt die Suche auf normale
+Stichwortsuche zurück; Lina sagt an, welcher der beiden Wege es war.
 
 ### Dokument-Vorlesen (Priorität 5, ADR-018)
 Dokument liegt im festen Rahmen vor dem Tablet (Rückkamera).
@@ -400,17 +424,37 @@ Geräte-Pairing (Googles Quick Switch) ist für eine Drittanbieter-App nicht
 zugänglich. Google-Konto-Sync während der Android-Ersteinrichtung braucht
 keinen Lina-Code, `ContactRepository` liest diese Kontakte ohnehin mit.
 
+### Kalender (ADR-031)
+| Befehl | Aktion |
+|---|---|
+| "Welches Datum haben wir heute?" / "Welcher Tag ist heute?" | Datum ansagen |
+| "Trage einen Termin ein für nächsten Montag: Zahnarzt" | Termin anlegen (Doppelpunkt trennt Datum von Titel) + automatische Erinnerung |
+| "Zeig mir den Kalender" / "Was sind meine nächsten Termine?" | Wochenansicht einblenden + Termine ansagen |
+| "Verstecke den Kalender" | Wochenansicht ausblenden |
+| "Lösche meine Termine" | Alle Termine + verknüpfte Erinnerungen löschen |
+| (automatisch beim Dokument-Vorlesen) | Erkennt Claude einen konkreten Termin/eine Frist im Foto, bietet an, ihn einzutragen |
+
+Jeder Termin legt automatisch eine ganz normale `Reminder` an – kein zweites
+Scheduling-System. `GermanDateParser` versteht relative Tage, Wochentag-relativ
+("nächsten Montag") und explizite Daten ("am 15. März", "15.3."), aber keine
+Wiederholung und keinen konfigurierbaren Erinnerungs-Vorlauf (bewusst einfach
+gehalten). Die Dokument-Erkennung läuft über ein isoliertes Claude-Tool, das
+ausschließlich beim Vorlesen registriert wird – nie im freien Gesprächspfad.
+
 ### Ambiente-UI für Angehörige/Besucher
 Der primäre Nutzer ist blind – die visuelle Oberfläche ist ausdrücklich für
 sehende Angehörige/Besucher gedacht, die sehen wollen, was Lina gerade tut,
-oder ein laufendes Hörbuch bedienen möchten. Audio bleibt für den Nutzer
-selbst die einzige Schnittstelle.
+oder ein laufendes Hörbuch bedienen bzw. den Kalender einsehen möchten. Audio
+bleibt für den Nutzer selbst die einzige Schnittstelle.
 - **LinaOrb:** rein dekorative animierte Statuskugel, unterscheidet
   Idle/Listening/Thinking/Speaking/Error über Bewegungscharakter statt Farbe
 - **AudiobookPlayerPanel:** sichtbare Steuerung (Titel/Kapitel/Fortschritt,
   Zurück/-30s/Pause/Vor, Lautstärke) – erscheint nur bei geladenem Buch
+- **CalendarPanel:** Wochenansicht (heute..+6 Tage), große Schrift – teilt
+  sich den rechten Panel-Slot mit dem AudiobookPlayerPanel (Kalender hat
+  Vorrang, solange er per Sprachbefehl angefordert wurde)
 - **Querformat:** `screenOrientation="sensorLandscape"`, da das Tablet fast
-  immer liegend im Ständer steht; Kugel+Status links, Player rechts
+  immer liegend im Ständer steht; Kugel+Status links, Player/Kalender rechts
 
 ---
 
@@ -420,6 +464,7 @@ selbst die einzige Schnittstelle.
 - Release-Keystore anlegen + signiertes `assembleRelease`
 - Dauerbetrieb über mehrere Stunden/über Nacht verifizieren (Lenovo/ZUI Battery-Killer)
 - STT-Robustheit bei Raumdistanz verbessern (Whisper-Verhörer bei Befehlen)
+- Dokument-Termin-Erkennung mit einem echten Dokument (Datum/Frist) am Gerät verifizieren – bisher nur der unveränderte Negativ-Pfad bestätigt
 
 ## Vision (Nordstern – bestimmt die Priorisierung von Phase 2+)
 
@@ -518,6 +563,12 @@ was `Context` braucht, bleibt vorerst ungetestet (kein Robolectric im Projekt).
 - ONNX-Modelle ins Git committen – immer per `scripts/download-models.sh` laden
 - `when`-Block als vollständigen Intent-Parser verwenden
 - Feature bauen ohne TTS-Feedback von Lina
+- `git clean -x`/`-xd`/`-xdf` im Repo-Root ausführen, ohne vorher
+  `.git/info/exclude` zu prüfen (`cat .git/info/exclude`) – dort können
+  unversionierte Verzeichnisse mit eigener Git-Historie eingetragen sein,
+  die `-x` mitlöschen würde (anders als reine `.gitignore`-Einträge). Falls
+  nötig, gezielt mit `-e <verzeichnis>` ausschließen oder ganz auf `-x`
+  verzichten.
 
 ---
 

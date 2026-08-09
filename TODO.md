@@ -220,7 +220,7 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 
 ### Kostensenkung (ADR-022)
 - [ ] Modell-Routing Haiku 4.5 / Sonnet 5 mit Qualitätsvergleich an echten Turns
-- [ ] `LlmIntentResolver` mit On-Device-Modell reaktivieren (ersetzt den Backlog-Eintrag „ggf. obsolet")
+- [ ] `LlmIntentResolver` mit On-Device-Modell reaktivieren – jetzt Teil von ADR-032 (siehe Sektion „Lokaler Gemma-3n-Pfad" unten), nicht mehr eigenständig verfolgt
 - [ ] `maxUses` der Websuche senken, Auslösung an Aktualitätsbezug binden
 - [ ] `MAX_HISTORY` senken, Wirkung auf Gesprächsqualität messen
 
@@ -245,6 +245,43 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [ ] AGB und Widerrufsbelehrung barrierefrei (kein reines PDF)
 - [ ] AVV mit Anthropic
 - [ ] Anfrage an Anthropic wegen Nonprofit-/Förder-API-Credits (Entwurf liegt vor)
+
+---
+
+## 🟣 Lokaler Gemma-3n-Pfad für NGO-Partner (ADR-032) — P4 Backlog
+
+> Der Nutzer testet/finetuned seit 2026-08-04 aktiv weiter (Tablet ist jetzt
+> vor Ort), unabhängig davon, ob eine NGO schon konkret ansteht – die
+> ursprüngliche Gate-Bedingung ist damit überholt, Priorität faktisch höher
+> als P4. Löst ADR-020/021/022 für diesen Build-Flavor komplett ab, s. ADR-032.
+
+- [x] Mac/MLX-Spike: `mlx-vlm`/`mlx-lm` laden Gemma-3n-E2B fehlerfrei;
+  Basismodell gegen 20 handgeschriebene Prompts getestet – 11/20 korrekt,
+  bestätigt die beiden Finetuning-Gründe aus ADR-032 empirisch (2026-08-04,
+  Details `training/llm/README.md`)
+- [x] Synthetischer Trainingsdaten-Generator (`training/llm/gen_dialogue.py`
+  + `build_dataset.py`, Bootstrap über Claude API) – erste Testcharge 52
+  Rohbeispiele erzeugt und in train/valid/test gesplittet (2026-08-04)
+- [~] LoRA-Finetuning-Durchlauf @claude – erster Versuch mit 39 Beispielen
+  lief durch (nach Fix für einen Gemma3n-AltUp-Absturz), aber der Adapter
+  ist noch zu schwach für einen messbaren Effekt; ein reproduzierbares
+  Problem bleibt offen (`self_attn.q_proj` bekommt keinen Gradienten, siehe
+  `training/llm/README.md`/ADR-032-Nachtrag). Nächster Schritt: Datensatz
+  auf mehrere hundert Beispiele skalieren, Lernrate senken (Divergenz bei
+  1e-4 auf diesem kleinen Datensatz beobachtet), ggf. `q_proj`-Befund als
+  Upstream-Issue bei `ml-explore/mlx-lm` melden
+- [ ] Build-Flavor-Grundgerüst (Gradle): NGO-Flavor ohne `CLAUDE_API_KEY`,
+  Proxy, Kostenkontingent – `ConversationEngine`-Interface dafür bereits
+  vorbereitet (`core/llm/ConversationEngine.kt`, 2026-08-04, reiner Refactor,
+  `ClaudeConversation` unverändertes Verhalten)
+- [ ] Entscheidung Websuche-/Vision-Ersatz im NGO-Flavor (RSS-Fallback
+  reaktivieren vs. Feature weglassen; Gemma-3n-Vision fürs Dokument-Vorlesen
+  gegen Sonnet 5 prüfen – Risiko für eine Zielgruppe, die nicht gegenlesen
+  kann)
+- [ ] Lizenz-Weitergabepflicht (Gemma Terms of Use) gegenüber dem
+  NGO-Betreiber klären, bevor ein Gerät ausgeliefert wird
+- [ ] Gezielter Gerätetest (Latenz/Akku/Thermik) auf Dimensity-6300-Klasse –
+  nicht zwingend das eigene Tablet
 
 ---
 
@@ -362,6 +399,39 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 
 ---
 
+## 🟢 Hörbuch-Verfügbarkeit + LibriVox-Genre-Suche (ADR-030) — ✅ Erledigt (Einschränkung s.u.)
+
+- [x] **Bugfix (P1, bestehendes Feature war lautlos kaputt):** `fields=`-Parameter entfernt – lieferte keine zusammengeführten JSON-Objekte, Titel/Autor/Dauer waren bei jeder LibriVox-Suche bisher leer bzw. „Unbekannt" (2026-07-26)
+- [x] **Bugfix (P1):** `language`-Parameter wurde nie gesendet und wird von der API ohnehin ignoriert – jetzt client-seitiger Sprachfilter auf das API-Feld `language` (2026-07-26)
+- [x] `LibrivoxGenres.kt` – Taxonomie (live von librivox.org/search gescrapt) + deutsche Synonymtabelle + `findGenre()` (2026-07-26)
+- [x] `LibrivoxRepository.searchByGenre()`, `AudiobookLibrary.searchByTopic()` (Genre-Treffer, sonst Stichwort-Fallback) (2026-07-26)
+- [x] `AudiobookManager.listBooks()` erweitert: LibriVox-Hinweis immer, proaktive Ja/Nein-Frage bei ≤2 Büchern (2026-07-26)
+- [x] Neuer Sprachbefehl "Hörbücher zum Thema X" (`ResolvedIntent.SearchAudiobookByGenre`), vor der bestehenden Titel-/Autorensuche in der Erkennungskette (2026-07-26)
+- [x] Unit-Tests: `LibrivoxGenresTest`, `LibrivoxRepositoryParseTest` (Regressionstest für den `fields=`-Bug), Resolver-Abgrenzungstests (2026-07-26)
+- [x] `org.json:json` als Test-Abhängigkeit ergänzt (Android liefert nur einen Stub, damit war die Parsing-Logik bisher nicht JVM-testbar) (2026-07-26)
+- [x] Am Gerät verifiziert: "Suche Hörbücher zum Thema Politik" → korrekt zu "Political Science" aufgelöst → echter Treffer *Manifest der Kommunistischen Partei* mit korrektem Titel/Autor; Regressionscheck normale Titel-/Autorensuche weiterhin einwandfrei (2026-07-26)
+- [ ] Proaktiver Ja/Nein-Vorschlag bei dünner Bibliothek nicht separat am Gerät getestet (Testbibliothek hat >2 Bücher) – Logik folgt 1:1 dem verifizierten SIM-Import-Muster
+
+---
+
+## 🟢 Kalender (Datum, Termine + automatische Erinnerung, Dokument-Trigger, Wochenansicht, ADR-031) — ✅ Erledigt (Einschränkung s.u.)
+
+- [x] `GermanCalendarNames.kt` – Wochentag-/Monatswortschatz aus `Reminder.kt` promoted, reiner Refactor (2026-07-26)
+- [x] Datum-Ansage: `ResolvedIntent.Date` + `resolveDate()`, spiegelt `Time` (2026-07-26)
+- [x] `CalendarEvent`/`CalendarStore` (EncryptedSharedPreferences wie `ReminderStore`) (2026-07-26)
+- [x] `GermanDateParser` (P1, pure): relative Tage, Wochentag-relativ, explizite Daten, optionale Uhrzeit (2026-07-26)
+- [x] `CalendarManager`: Termin-Anlage legt automatisch eine verknüpfte `Reminder` über die bestehende Infrastruktur an, kein zweites Scheduling (2026-07-26)
+- [x] Neue Intents/Resolver: `SetCalendarEvent`/`SetCalendarEventAt`/`ShowCalendar`/`HideCalendar`/`ClearCalendarEvents`, vor `resolveReminder()` in der Kette (2026-07-26)
+- [x] **Regex-Korrektur (P1, bestehendes Feature):** `ClearReminders`/`ListReminders` reagierten bisher auch auf "Termine" – hätte "lösche meine Termine" fälschlich alle Erinnerungen löschen lassen. Beide Regexe jetzt nur noch "Erinnerung(en)" (2026-07-26)
+- [x] Claude-Tools: `termin_anlegen` (Ebene-2-Fallback, wie `erinnerung_anlegen`) + isoliertes `termin_erkannt` nur in `readDocument()` (2026-07-26)
+- [x] **Dokument-Integration (P2, höheres Risiko):** `readDocument()` liefert jetzt `DocumentReadResult` (Text + optionaler Terminvorschlag); eigener neuer Ja/Nein-Dialog (`openDocCalendarFollowUp`), bestehende `handleDocFollowUp()` unangetastet (2026-07-26)
+- [x] `CalendarPanel.kt`: Wochenansicht, große Schrift, Schwarz/Weiß/Gold, teilt sich den rechten Spalten-Slot mit `AudiobookPlayerPanel` (2026-07-26)
+- [x] Unit-Tests: `GermanCalendarNamesTest`, `GermanDateParserTest` (12 Fälle), `CalendarEventTest` (JSON-Rundtrip), Resolver-Ergänzungen inkl. ClearReminders/ClearCalendarEvents-Abgrenzung (2026-07-26)
+- [x] Am Gerät verifiziert: Datum-Ansage korrekt, Termin-Anlage plant sichtbar eine `Reminder` ("morgen um 9 Uhr" für "nächsten Montag" an einem Sonntag), `CalendarPanel` zeigt Woche inkl. Termin korrekt, Verstecken/Löschen funktioniert, **unveränderter Dokument-Pfad zuerst gegengetestet** (kein Termin erkannt → `termin_erkannt=false`, kein Absturz, Verhalten wie vorher) (2026-07-26)
+- [ ] Positiver Dokument-Erkennungspfad (`termin_erkannt=true`) nicht am Gerät verifiziert – braucht ein reales Foto eines Dokuments mit konkretem Datum
+
+---
+
 ## 🔵 Phase 2 – Geplant (nicht jetzt) — P4 Backlog
 
 - [x] STT: Whisper über sherpa-onnx integriert (base int8, de) – 2026-07-02
@@ -372,7 +442,6 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [ ] STT-Robustheit bei Raumdistanz: Entrauschen vor Whisper prüfen (sherpa-onnx Speech-Enhancement/GTCRN – gleiche Runtime; Alternativen: RNNoise, Android NoiseSuppressor)
 - [x] LLM-Anbindung: Claude API für freie Konversation (`ClaudeConversation`, ADR-017) – 2026-07-16
 - [ ] Claude-Anbindung auf dem Tablet testen (echter API-Key in local.properties)
-- [ ] LlmIntentResolver implementieren (lokales Modell – **nicht mehr obsolet**: durch ADR-022 zum Kostenhebel geworden, siehe Abschnitt „Verteilung")
 - [ ] Onleihe-Integration (Bibliothek per Ausweis)
 - [ ] Podcast-Streaming (gPodder-Backend)
 - [ ] Sprach-Einkauf: Wolt, Rewe Express, Picnic

@@ -27,6 +27,22 @@ NEGATIVE_TEXTS = [
     "Bitte mach das Radio an.", "Die Katze schläft auf dem Sofa.",
     "What time is it right now?", "The weather is nice today.",
     "Please turn on the lights.", "I would like to read a book.",
+    # "Alina" (echter Name, klingt phonetisch fast wie "Hey Lina") und mehr
+    # englische Sätze mit lockerem, gesprächigem Register (nicht nur saubere
+    # Instruktionssätze) – gezielte Gegenbeispiele nach den am Gerät
+    # beobachteten Fehlalarmen (Fernseh-/YouTube-Ton, der Name "Alina").
+    "Alina.", "Hallo Alina.", "Alina, kommst du?", "Ist Alina schon da?",
+    "Alina hat angerufen.", "Wo ist Alina?",
+    "So yeah, I think that's basically it for today.",
+    "Okay guys, welcome back to the channel.",
+    "Honestly, I have no idea what just happened.",
+    "Let me know what you think in the comments.",
+    "And that's exactly why I love this so much.",
+    "Anyway, let's get into it.",
+    "This is actually crazy if you think about it.",
+    "I can't believe how good this turned out.",
+    "Alright, so here's what we're gonna do.",
+    "Thanks so much for watching, see you next time.",
 ]
 
 GERMAN_VOICES = [

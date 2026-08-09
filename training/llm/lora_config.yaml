@@ -1,0 +1,24 @@
+# LoRA-Zielmodule bewusst auf self_attn.v_proj beschraenkt (siehe README,
+# Phase C: zwei live reproduzierte Befunde vom 2026-08-04):
+#
+# 1. mlx-lm's generische Layer-Erkennung wrapt standardmaessig JEDEN
+#    nn.Linear der letzten N Layer, inklusive Gemma3nAltUp.correction_coefs /
+#    .prediction_coefs. Deren Code (mlx_lm/models/gemma3n.py) greift direkt
+#    auf `.weight` zu statt regulaer aufzurufen - nach dem LoRA-Wrap bricht
+#    das mit `AttributeError: 'LoRALinear' object has no attribute 'weight'`.
+#    Fix: explizite `keys`, AltUp wird gar nicht erst angefasst.
+# 2. Mit `keys: [self_attn.q_proj, self_attn.v_proj]` lief das Training zwar
+#    durch, aber `q_proj.lora_b` blieb nach 200 Iterationen exakt 0.0 in
+#    JEDER der 8 Zeil-Layer (per safetensors-Inspektion verifiziert) -
+#    keine Ausreisser, sondern ein durchgaengiges Muster. `v_proj.lora_b`
+#    bekam im selben Lauf durchgaengig echte, von 0 verschiedene Werte
+#    (abs_sum ~13 je Layer). Der Gradient zu q_proj scheint in Gemma3ns
+#    Attention-Pfad blockiert zu sein (Ursache nicht abschliessend geklärt,
+#    Kandidat: eine Query-Normalisierung/-Skalierung ausserhalb des
+#    autodiff-getrackten Pfads, aehnlich dem direkten .weight-Zugriff bei
+#    AltUp). Deshalb hier bewusst nur v_proj - das trainiert nachweislich.
+lora_parameters:
+  rank: 8
+  dropout: 0.0
+  scale: 20.0
+  keys: ["self_attn.v_proj"]

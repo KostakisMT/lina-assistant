@@ -516,3 +516,284 @@ ist auf Android 10+/API 33 für Apps ohne Trägerrechte meist nicht mehr lesbar
   Änderung verpassen (wenn alle lesbaren Felder zufällig identisch bleiben) –
   am Testgerät (kein physischer SIM-Steckplatz belegt) nicht mit einem echten
   SIM-Wechsel überprüfbar, nur über `SimIdentityTest` unit-getestet.
+
+---
+
+## ADR-030: LibriVox-Genre-Suche als feste Taxonomie + Stichwort-Fallback statt freier Themensuche
+**Datum:** 2026-07-26 | **Status:** Akzeptiert
+
+**Kontext:** ADR-010/011 hatten LibriVox bewusst auf Titel-/Autorensuche
+begrenzt. Der Nutzer wollte jetzt zusätzlich wissen können, was er abspielen
+kann, und Lina soll LibriVox nach deutschen Inhalten nach Thema/Genre
+durchsuchen können. Live gegen die echte LibriVox-API geprüft (nur lesende
+`curl`-Aufrufe): LibriVox hat **keine freie Themensuche** – nur eine feste,
+englischsprachige Genre-Taxonomie (`?genre=<exakter Name>`) ohne eigenen
+Genres-Endpunkt (musste von `librivox.org/search`s Dropdown gescrapt werden).
+Ein nicht existierender Genre-Name liefert **HTTP 500**, keine leere Liste.
+Außerdem wurde dabei entdeckt, dass der bestehende `language`-Parameter von
+der API ignoriert wird (serverseitig wirkungslos) und dass der bisherige
+`fields=`-Parameter beim Parsen praktisch nur die Buch-ID durchließ – beides
+echte, seit dem ursprünglichen MVP unbemerkte Bugs, die mit repariert wurden.
+
+**Entscheidung:**
+- Genre-Suche nutzt eine hartkodierte Taxonomie-Liste (`LibrivoxGenres.
+  TAXONOMY`, Top-Level-Fiction-Genres + erste Ebene unter "*Non-fiction" –
+  bewusst nicht die volle, mehrfach verschachtelte ~140-Einträge-Liste mit
+  mehrdeutigen Doppel-Namen) plus eine kleine deutsche Synonymtabelle für die
+  bekannten Interessen des Nutzers. Nutzereingaben werden **immer** gegen diese
+  Liste validiert, bevor ein Netzwerkruf mit `?genre=` passiert – nie Rohtext.
+- Findet die Genre-Suche nichts (oder wurde kein Genre erkannt), fällt
+  `AudiobookLibrary.searchByTopic()` automatisch auf die normale
+  Stichwortsuche zurück. Lina sagt an, was tatsächlich passiert ist
+  ("gefunden in der Kategorie X" vs. "stattdessen nach dem Stichwort
+  gesucht"), statt Präzision vorzutäuschen, die die API nicht liefern kann.
+- Sprachfilter jetzt client-seitig (auf das von der API gelieferte
+  `language`-Feld), mit höherem `limit`, um nach dem Filtern noch brauchbar
+  viele Treffer übrig zu haben – der Server filtert trotz Parameter nicht.
+
+**Konsequenzen:**
+- Für Themen mit passender Taxonomie-Kategorie (Marxismus → "Political
+  Science", live verifiziert: Treffer ist tatsächlich das *Manifest der
+  Kommunistischen Partei*) funktioniert die Suche gut. Für Themen ohne
+  passende Kategorie (z.B. "Segeln" → "Nautical & Marine Fiction", aber
+  deutschsprachige Abdeckung dort dünn) bleiben die Ergebnisse mager – das ist
+  eine echte, dauerhafte Grenze der LibriVox-API, keine Einschränkung, die
+  später "nachgerüstet" werden könnte.
+- Der `fields=`-Fix betrifft auch die bestehende Titel-/Autorensuche
+  (`SearchAudiobook`) – dort waren Titel/Autor/Dauer vermutlich seit dem
+  MVP-Start leer bzw. „Unbekannt", ohne dass es aufgefallen ist, weil die
+  Suche trotzdem irgendein Ergebnis lieferte und abspielbar war.
+- Zukünftige Erweiterungen der Genre-Liste müssen weiterhin gegen die echte
+  API geprüft werden (ein falscher Name liefert HTTP 500, keinen Hinweis).
+
+---
+
+## ADR-031: Kalender-Termine laufen über eine verknüpfte Reminder statt eigenem Scheduling; Datum-Parser bewusst ohne Vorlauf/Wiederholung; Dokument-Erkennung als isoliertes Tool
+**Datum:** 2026-07-26 | **Status:** Akzeptiert
+
+**Kontext:** Neues Kalender-Feature (Datum-Ansage, Termine, automatische
+Erinnerung, Dokument-Trigger, Familien-Wochenansicht). Die bestehende
+Erinnerungs-Infrastruktur (`ReminderStore`/`ReminderScheduler`, AlarmManager,
+Boot-Rescheduling) deckt "automatische Erinnerung" bereits vollständig ab;
+`GermanTimeParser` kann aber nur relative Zeiten/Uhrzeiten, keine echten
+Kalendertage. Die Dokument-Vorlese-Funktion (`ClaudeConversation.readDocument()`)
+hatte diese Session bereits zwei ernsthafte Hänger-Bugs (beide behoben) – jede
+Änderung daran birgt Regressionsrisiko.
+
+**Entscheidungen:**
+1. **Kein zweites Scheduling-System.** Ein `CalendarEvent` legt beim Anlegen
+   immer eine ganz normale `Reminder` über die bestehenden `ReminderStore`/
+   `ReminderScheduler` an (Text `"Termin: $title"`, Standardzeit 9 Uhr ohne
+   genannte Uhrzeit) und merkt sich deren `reminderId` nur zur gekoppelten
+   Löschung. Dauerbetrieb, Doze-Festigkeit und Boot-Rescheduling kommen damit
+   kostenlos mit, ohne eine zweite AlarmManager-Integration zu pflegen.
+2. **`GermanDateParser` bewusst ohne Vorlauf-Konfiguration und ohne
+   Wiederholung.** Kein "erinnere mich einen Tag vorher", keine
+   wiederkehrenden Termine (nur `Reminder.daily`, falls je gebraucht) –
+   Erinnerung ist immer am Tag selbst. Ebenso bewusst: kein automatischer
+   Claude-Fallback innerhalb `CalendarManager.createFromSpeech()`, wenn die
+   Datumsphrase nicht lokal erkannt wird (exakt wie `ReminderManager.
+   createFromSpeech()` es bereits hält) – Ebene 2 greift nur, wenn die
+   gesamte Äußerung schon auf Ebene 1 keinen Treffer hatte.
+3. **Termin-Erkennung im Dokument als komplett isoliertes Claude-Tool.** Das
+   neue `termin_erkannt`-Tool wird ausschließlich in `readDocument()`s eigenem
+   Params-Builder registriert, niemals in `buildParams()`/`TOOLS` (dem freien
+   Konversationspfad `ask()`). `readDocument()`s Rückgabetyp wechselt von
+   `LinaReply` zu `DocumentReadResult` (Ansagetext + optionaler
+   `SuggestedCalendarEvent`), damit Text und Terminvorschlag in einer Antwort
+   zurückkommen, ohne einen zweiten Rundlauf zu brauchen. Die Ja/Nein-Nachfrage
+   dazu läuft über einen komplett neuen, eigenen Dialog
+   (`openDocCalendarFollowUp`/`handleDocCalendarFollowUp`) statt die
+   bestehende `handleDocFollowUp()`-Verzweigung ("ja"/"alles" = ganzer Text)
+   um eine dritte Bedeutung zu erweitern – der unveränderte Fall (kein Termin
+   erkannt) verhält sich dadurch garantiert byte-identisch zum bisherigen Code,
+   was am Gerät auch so verifiziert wurde, bevor der neue Zweig getestet wurde.
+4. **Bestehende Erinnerungs-Regex korrigiert.** `ClearReminders`/
+   `ListReminders` reagierten vorher auch auf "Termine" – das hätte "lösche
+   meine Termine" fälschlich zum Löschen ALLER Erinnerungen gemacht. Beide
+   Regexe reagieren jetzt nur noch auf "Erinnerung(en)"; `resolveCalendar()`
+   läuft in der Erkennungskette vor `resolveReminder()` und beansprucht den
+   gesamten "Termin"-Wortschatz exklusiv.
+
+**Konsequenzen:**
+- Löschen aller Termine storniert automatisch die verknüpften Erinnerungen
+  (kein verwaistes Alarm-Objekt).
+- `GermanDateParser` ist absichtlich einfacher als ein vollständiger
+  Kalender-Parser – deckt die in der Praxis erwarteten Formulierungen ab,
+  keine Rekurrenzregeln, keine Zeitzonen-Sonderfälle.
+- Ein Dokument mit einem echten, positiv erkannten Termin (`termin_erkannt=true`)
+  wurde nicht am Gerät verifiziert (braucht ein reales Foto mit Datum) – nur
+  der unveränderte Negativ-Pfad ist bestätigt.
+
+---
+
+## ADR-032: Lokaler Gemma-3n-Pfad als eigener Build-Flavor neben Claude API (nicht Ersatz); Finetuning-Strategie
+**Datum:** 2026-08-04 | **Status:** Teilweise umgesetzt (Mac-Pipeline steht, kein nutzbarer Adapter, kein Android-Code)
+
+**Kontext:** Blindenvereine/NGOs, die als mögliche zukünftige Tester/Partner
+in Frage kommen (ADR-023 hält Kandidaten bewusst offen und unbenannt), lehnen
+eine Anthropic-Anbindung ab und fordern ein lokales Modell auf dem Tablet.
+Das berührt ADR-017 (Claude API für freie Konversation, Tools, Persona),
+ADR-018 (Claude Vision fürs Dokument-Vorlesen) und ADR-020/021/022 (Proxy,
+Kostenmodell, Modell-Routing) – alle setzen bisher eine Cloud-LLM-Anbindung
+voraus.
+
+Ausgangsannahme war, das Lenovo Idea Tab (TB336ZU) sei zu schwach, um ein
+lokales Modell überhaupt zu testen. Das trifft für das konkret gemeinte
+Modell **Gemma 3n** (E2B/E4B) nicht zu: Google baut diese Modellfamilie
+gezielt für genau diese Geräteklasse. Recherchestand:
+
+- **Zielgerät:** TB336ZU = MediaTek Dimensity 6300, Mali-G57 MC2 GPU, 4GB-
+  oder 8GB-RAM-Varianten, Android 15.
+- **RAM-Bedarf Gemma 3n (Laufzeit, int4):** E2B (5B nominell, 2B effektiv
+  durch "selective parameter activation") ~2GB RAM; E4B (8B nominell, 4B
+  effektiv) ~3GB RAM. Passt rechnerisch selbst auf die 4GB-Variante.
+- **Bundle-/Speicherplatzbedarf** (nicht RAM): E2B-it-int4 ~3.1GB,
+  E4B-it-int4 ~4.4GB als `.task`/`.litertlm`-Bundle – deutlich mehr als der
+  bisherige Whisper+Piper-Fußabdruck zusammen (~220MB).
+- **Runtime:** Google AI Edge SDK / MediaPipe LLM Inference API
+  (`.task`/`.litertlm`), eigenständig neben sherpa-onnx (ADR-015) – eine
+  weitere native Laufzeitabhängigkeit, nicht mit dem bestehenden
+  Whisper/Piper-Stack teilbar.
+- **Multimodalität:** Gemma 3n verarbeitet nativ Text, Bild (MobileNet-V5-
+  Encoder, 256/512/768px), Audio und Video als Input, Text als Output. Bild-
+  Input ist relevant für ADR-018, Audio-Input nicht – Whisper bleibt STT.
+- **Deutsch:** verbesserte Mehrsprachigkeit auch für Deutsch (WMT24++ ChrF
+  50,1 %), aber ausdrücklich schwache Audio-Transkription auf Deutsch – für
+  Lina irrelevant, da Gemma 3n hier nur Text (und ggf. Bild) bekommt.
+- **Function Calling:** unterstützt, aber im "pythonischen" Format statt der
+  JSON-Schema-Tools der Anthropic-SDK (`ClaudeConversation.TOOLS`) – nicht
+  1:1 übertragbar, eigene Prompt-/Parsing-Schicht nötig. Googles
+  **FunctionGemma** (270M, aus Gemma 3 abgeleitet) ist ein noch kleineres,
+  dediziert auf Function-Calling trainiertes Modell – als möglicher
+  zusätzlicher Baustein für die Tool-Routing-Ebene vermerkt, hier nicht
+  entschieden.
+- **Lizenz:** Gemma Terms of Use – kein Apache 2.0, eigenes Google-
+  Lizenzwerk mit Prohibited-Use-Policy, Weitergabepflicht an nachgelagerte
+  Nutzer (hier: den NGO-Betreiber) und einseitigem Widerrufsrecht durch
+  Google. Anderer Charakter als die NC-Klausel der Piper-Stimme (ADR-016):
+  dort nur eine Nutzungsart-Einschränkung, hier ein aktives Kontrollrecht
+  des Lizenzgebers.
+- **Test ohne Zielgerät:** Gemma 3n läuft quantisiert (4-bit) direkt auf dem
+  Entwickler-Mac via MLX (`mlx-community`-Checkpoints, `mlx_lm.generate`,
+  ab ~16GB Unified Memory). Konversationsqualität, Tool-Calling-
+  Treffsicherheit, Persona und Raumgespräch-Filterung sind damit auf dem Mac
+  bewertbar, ganz ohne Android-Gerät. Nur Latenz, Akkulaufzeit und
+  thermisches Verhalten unter Android brauchen echte Zielhardware
+  (Dimensity-6300-Klasse – nicht zwingend das eigene Tablet).
+- **Finetuning:** LoRA/QLoRA ist der Standardweg für Gemma. MediaPipe
+  unterstützt separate LoRA-Gewichte fürs On-Device-Deployment – ein kleiner
+  Adapter statt ein komplett neu exportiertes Modell. LoRA-Finetuning ist
+  auch direkt mit MLX auf dem Mac möglich, ohne Cloud-GPU-Miete.
+
+**Entscheidung:**
+
+1. **Zwei Build-Flavors statt Laufzeit-Fallback.** Anders als
+   Whisper→Vosk oder Piper→AndroidTTS ist hier kein Laufzeit-Fallback
+   sinnvoll: Die Modell-Assets sind mit mehreren GB zu groß, um beide Pfade
+   in einer APK auszuliefern. NGO-Flavor: kein `CLAUDE_API_KEY`, kein Proxy,
+   kein Kostenkontingent – ADR-020/021/022 entfallen für diesen Flavor
+   komplett (echter Vereinfachungsgewinn). Privater/Standard-Flavor: ADR-017
+   unverändert.
+2. **Modellwahl:** E2B als Standard (passt auf 4GB-Geräte), E4B als Option
+   für 8GB-Varianten – eine Konfigurationsfrage pro NGO-Gerätepark, keine
+   Codegabel.
+3. **Bewusst offen gelassene Fragen** (nicht stillschweigend übergangen):
+   - Websuche/Nachrichten (ADR-024) hat im NGO-Flavor keine Entsprechung –
+     entweder den bereits im Code liegenden `RssFeedRepository`-Fallback
+     (ADR-024-Konsequenzen) reaktivieren, oder das Feature im NGO-Flavor
+     bewusst weglassen.
+   - Dokument-Vision (ADR-018) mit Gemma 3n statt Sonnet 5: Bildqualität und
+     Layoutverständnis bei Behördenbriefen sind ungeprüft – für eine
+     Zielgruppe, die Fehler nicht selbst gegenlesen kann, ein echtes Risiko.
+     "Geht technisch" heißt hier ausdrücklich nicht "ist gut genug".
+   - Die Lizenz-Weitergabepflicht (Gemma Terms of Use) an den NGO-Betreiber
+     muss geklärt sein, bevor ein Gerät ausgeliefert wird.
+4. **Finetuning ist Teil der Entscheidung, nicht Phase-2-Kosmetik.** Ein
+   Stock-Gemma-3n-Checkpoint reicht nicht:
+   - Tool-Calling-Zuverlässigkeit für Linas konkrete deutsche Werkzeuge
+     (`anrufen`, `sms_senden`, `hoerbuch_abspielen`, `erinnerung_anlegen`,
+     `termin_anlegen`, `dokument_vorlesen`, `stopp`, `gespraech_beenden`) im
+     pythonischen Gemma-Format.
+   - Die sicherheitskritische Raumgespräch-Erkennung (`gespraech_beenden`)
+     ist aktuell ein langer, mehrteiliger Regelblock im Claude-System-Prompt
+     (`BASE_PROMPT`) – ein kleines Modell hält sich an lange System-Prompts
+     erfahrungsgemäß schlechter als Sonnet 5. Finetuning auf Beispielen statt
+     auf noch mehr Prompt-Text.
+   - Persona/Tonfall (kurz, warm, "wie eine gute Bekannte", kein Markdown,
+     1–3 Sätze) konsistent zum bestehenden Charakter halten.
+   - Robustheit gegenüber verstümmelten Whisper-Transkripten (vom Nutzer
+     beobachtet, im Code kommentiert, z. B. "Rumfe, Boris an").
+
+   Methode: LoRA/QLoRA auf Gemma-3n-E2B/E4B-Basis, separate LoRA-Gewichte
+   fürs On-Device-Deployment. Erste Wahl fürs Training: MLX-LoRA auf dem
+   Entwickler-Mac; Hugging-Face-QLoRA auf gemieteter GPU als Fallback, falls
+   die Zielqualität mit MLX nicht erreichbar ist. Trainingsdaten werden
+   synthetisch generiert, methodisch analog zum bestehenden
+   Wake-Word-Trainingsmuster (`training/gen_samples.py`,
+   `training/README.md`) – dort synthetische TTS-Audio-Samples, hier
+   synthetische Dialogbeispiele (mehrere Formulierungsvarianten +
+   Whisper-Verhörer je Tool, Raumgespräch-Negativbeispiele, freie
+   Konversationsbeispiele für Tonfall). Pragmatischer Bootstrap: den
+   bestehenden Claude-Pfad nutzen, um diesen Korpus zu generieren, bevor der
+   lokale Pfad ihn ablöst. Evaluation über einen eigenen, von den
+   Trainingsdaten getrennten Testsatz, automatisiert bewertbar (richtiges
+   Tool getroffen? Ton konsistent? korrekt NICHT reagiert bei
+   Raumgesprächen?) – analog zur Recall-/Fehlalarm-Messung beim
+   Wake-Word-Training, lauffähig auf dem Mac vor jedem Gerätetest.
+
+**Konsequenzen:**
+- App-Größe im NGO-Flavor wächst um mehrere GB (E2B ~3,1GB / E4B ~4,4GB),
+  weiterhin nur per `scripts/download-models.sh`-Muster geladen, nicht ins
+  Git (wie alle ONNX/GGUF-Assets laut `.gitignore`).
+- Für den NGO-Flavor entfällt die Notwendigkeit von Proxy, Gerätetoken und
+  Kostenkontingent (ADR-020/021/022) vollständig – ein echter
+  Vereinfachungsgewinn gegenüber dem Cloud-Pfad.
+- Zwei parallel zu pflegende System-Prompts/Tool-Definitionen –
+  Drift-Risiko für Linas Persona zwischen den beiden Pfaden.
+- Kein einmaliger Trainingsprozess: Jede künftige Erweiterung von Linas
+  Tool-Set braucht danach zwei Updates (`ClaudeConversation.TOOLS` UND die
+  Finetuning-Daten des lokalen Pfads) – zusätzlicher Pflegeaufwand, den es
+  beim reinen Cloud-Pfad nicht gab.
+- Noch keine Entscheidung zu Websuche-/Vision-Ersatz im NGO-Flavor – siehe
+  offene Fragen oben; TODO.md verfolgt die konkreten nächsten Schritte
+  (Mac/MLX-Spike, Trainingsdaten-Generator, LoRA-Durchlauf, Build-Flavor-
+  Grundgerüst, gezielter Gerätetest).
+- Keine NGO wird hier namentlich benannt (ADR-023 bleibt gültig).
+
+**Update vom selben Tag – erste Umsetzung (`training/llm/`):**
+
+Tooling empirisch geprüft statt nur recherchiert: `mlx-vlm`/`mlx-lm` laden
+`mlx-community/gemma-3n-E2B-it-*4bit` auf dem Entwickler-Mac fehlerfrei
+(bestätigt entgegen einem älteren, öffentlichen `mlx-lm`-Issue zu fehlendem
+Gemma-3n-Support – mit der hier installierten Version nicht mehr
+reproduzierbar). Der Mac-Spike gegen 20 handgeschriebene deutsche Prompts
+(Basismodell, kein Finetuning) ergab 11/20 korrekt – bestätigt empirisch
+genau die beiden oben genannten Finetuning-Gründe: Tool-Aufrufe mit
+Namensargument funktionieren bereits zero-shot, parameterlose Befehle
+(„Stopp", „Lies die Post vor") und die Raumgespräch-Erkennung nicht.
+
+Der erste LoRA-Finetuning-Versuch (39 synthetische Trainingsbeispiele) deckte
+zwei reproduzierbare, modellarchitektur-spezifische Probleme in `mlx-lm`s
+noch jungem Gemma-3n-Support auf: (1) `mlx-lm`s generische LoRA-Layer-
+Erkennung wrapt versehentlich Gemma3ns AltUp-Mechanismus, was das Training
+zum Absturz bringt – behoben durch explizite Ziel-Modul-Liste. (2) Selbst
+mit dem Fix bekommt `self_attn.q_proj` reproduzierbar keinen Gradienten
+(über alle 8 trainierten Layer hinweg exakt 0 geblieben), nur `v_proj`
+trainiert tatsächlich. Details, Zahlen und der volle Befund in
+`training/llm/README.md`. Mit nur 39 Beispielen war der resultierende
+Adapter am Ende zu schwach, um die Greedy-Generierung überhaupt sichtbar zu
+verändern (0/8 Verbesserung gegenüber dem Basismodell) – kein Hinweis auf
+einen grundsätzlich kaputten Weg, sondern ein zu kleiner erster Versuch.
+Nächster Schritt: deutlich größerer Trainingsdatensatz.
+
+Nebenbei umgesetzt, unabhängig vom Finetuning-Ausgang: `ConversationEngine`-
+Interface aus `ClaudeConversation` extrahiert (`core/llm/
+ConversationEngine.kt`, `LinaReply` dorthin verschoben), `LauncherActivity`
+auf den Interface-Typ umgestellt – reiner Refactor, `ClaudeConversation`
+bleibt unverändertes Verhalten, `./gradlew compileDebugKotlin` grün. Das ist
+die Stelle, an der ein künftiges `GemmaConversation` andockt (Phase D).
+
+Phase D.5 (Formatkompatibilität eines Adapters fürs Gerät über MediaPipe/
+`ai-edge-torch`) bleibt unangetastet – ohne einen überhaupt wirksamen
+Adapter aus Phase C ist diese Frage noch nicht handlungsrelevant.

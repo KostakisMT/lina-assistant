@@ -295,14 +295,21 @@ class AudiobookManager(
         )
     }
 
-    fun listBooks() {
+    /**
+     * @return true, wenn die Bibliothek leer/sehr klein ist und der Aufrufer
+     * proaktiv per Sprache fragen sollte, ob LibriVox durchsucht werden soll
+     * (die eigentliche Ja/Nein-Rückfrage braucht STT-Zugriff, den dieser
+     * Manager nicht hat – das übernimmt der Aufrufer, z.B. `LauncherActivity`).
+     */
+    fun listBooks(): Boolean {
         val books = library.listAvailable()
         if (books.isEmpty()) {
             ttsEngine.speak(
-                "Du hast noch keine Hörbücher. Sag zum Beispiel: Suche Tolstoi.",
+                "Du hast noch keine Hörbücher. Soll ich bei LibriVox nach " +
+                    "deutschen Hörbüchern für dich suchen?",
                 TtsPriority.HIGH,
             )
-            return
+            return true
         }
         val intro = if (books.size == 1) "Du hast ein Hörbuch." else "Du hast ${books.size} Hörbücher."
         ttsEngine.speak(intro, TtsPriority.HIGH)
@@ -310,6 +317,21 @@ class AudiobookManager(
             ttsEngine.speak("${i + 1}. ${book.title} von ${book.author}.", TtsPriority.NORMAL)
         }
         ttsEngine.speak("Welches möchtest du hören?", TtsPriority.NORMAL)
+        val sparse = books.size <= SPARSE_LIBRARY_THRESHOLD
+        if (sparse) {
+            ttsEngine.speak(
+                "Ich kann auch bei LibriVox nach deutschen Hörbüchern suchen – " +
+                    "zum Beispiel zum Thema Politik. Soll ich das tun?",
+                TtsPriority.NORMAL,
+            )
+        } else {
+            ttsEngine.speak(
+                "Ich kann auch bei LibriVox nach deutschen Hörbüchern suchen – " +
+                    "sag zum Beispiel: Suche Hörbücher zum Thema Politik.",
+                TtsPriority.NORMAL,
+            )
+        }
+        return sparse
     }
 
     fun searchAndPlay(query: String) {
@@ -331,6 +353,82 @@ class AudiobookManager(
                         )
                         return@launch
                     }
+
+                    val intro = if (results.size == 1) "Ein Ergebnis." else "${results.size} Ergebnisse."
+                    ttsEngine.speak(intro, TtsPriority.HIGH)
+                    results.forEachIndexed { i, book ->
+                        ttsEngine.speak(
+                            "${i + 1}. ${book.title} von ${book.author}. ${book.durationDescription}.",
+                            TtsPriority.NORMAL,
+                        )
+                    }
+
+                    // Erstes Ergebnis automatisch vorbereiten
+                    val first = results.first()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        library.resolveLibrivoxChapters(first) { chapters ->
+                            if (chapters.isEmpty()) return@resolveLibrivoxChapters
+                            val audiobook = Audiobook(
+                                id = "librivox_${first.id}",
+                                title = first.title,
+                                author = first.author,
+                                uri = chapters.first().uri,
+                                isLocal = false,
+                                chapters = chapters,
+                                rssUrl = first.rssUrl,
+                            )
+                            CoroutineScope(Dispatchers.Main).launch {
+                                ttsEngine.speak(
+                                    "Sag 'Spiel Hörbuch ab' um ${first.title} zu starten.",
+                                    TtsPriority.NORMAL,
+                                )
+                                currentBook = audiobook
+                                stateStore.save(PlaybackState(
+                                    bookId = audiobook.id,
+                                    title = audiobook.title,
+                                    author = audiobook.author,
+                                    uri = audiobook.uri,
+                                    positionMs = 0L,
+                                    durationMs = first.totalDurationSecs * 1000L,
+                                    chapterTitle = chapters.first().title,
+                                    rssUrl = first.rssUrl,
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Sucht bei LibriVox nach Thema/Genre statt nach Titel/Autor (siehe
+     * [AudiobookLibrary.searchByTopic]/[LibrivoxGenres]). Sagt explizit an,
+     * ob über eine Kategorie gefunden wurde oder ersatzweise per Stichwort –
+     * echte freie Themensuche kann LibriVox nicht leisten, das soll nicht
+     * vorgetäuscht werden.
+     */
+    fun searchByTopic(topic: String) {
+        ttsEngine.speak("Ich suche bei LibriVox zum Thema $topic.", TtsPriority.HIGH)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            library.searchByTopic(topic) { result ->
+                CoroutineScope(Dispatchers.Main).launch {
+                    val results = result.books
+                    if (results.isEmpty()) {
+                        ttsEngine.speak(
+                            "Ich habe nichts zu $topic gefunden.",
+                            TtsPriority.HIGH,
+                        )
+                        return@launch
+                    }
+
+                    val fundstelle = if (result.matchedGenre != null) {
+                        "Gefunden in der Kategorie ${result.matchedGenre}."
+                    } else {
+                        "Ich habe stattdessen nach dem Stichwort gesucht."
+                    }
+                    ttsEngine.speak(fundstelle, TtsPriority.NORMAL)
 
                     val intro = if (results.size == 1) "Ein Ergebnis." else "${results.size} Ergebnisse."
                     ttsEngine.speak(intro, TtsPriority.HIGH)
@@ -420,5 +518,7 @@ class AudiobookManager(
         const val MAX_SPOKEN_CHAPTERS = 10
         /** Schrittgröße für "lauter"/"leiser" – 10 Schritte von 0 bis 100%. */
         const val VOLUME_STEP = 0.1f
+        /** Ab wie vielen lokalen Büchern der proaktive LibriVox-Vorschlag ausbleibt. */
+        const val SPARSE_LIBRARY_THRESHOLD = 2
     }
 }

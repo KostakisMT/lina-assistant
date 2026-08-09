@@ -20,27 +20,11 @@ import com.anthropic.models.messages.ToolUseBlock
 import com.anthropic.models.messages.WebSearchTool20260209
 import dev.lina.core.intent.ResolvedIntent
 
-/** Ergebnis einer Claude-Anfrage. */
-sealed class LinaReply {
-    /** Freie Konversationsantwort – direkt vorlesen. */
-    data class Say(val text: String) : LinaReply()
-
-    /** Claude hat einen Gerätebefehl erkannt – lokal ausführen. */
-    data class Do(val intent: ResolvedIntent) : LinaReply()
-
-    /** Fehler (offline, API nicht erreichbar …) – Meldung vorlesen. */
-    data class Error(val text: String) : LinaReply()
-
-    /** Eingabe war nicht an Lina gerichtet (Raumgespräch) – still beenden. */
-    object End : LinaReply()
-}
-
 /**
- * Ebene 2 des Intent-Systems (siehe CLAUDE.md): freie Konversation über die
- * Claude API mit Lina-Persona und Dialoggedächtnis. Gerätebefehle, die die
- * lokale Ebene 1 nicht verstanden hat (z.B. verstümmelte STT-Transkripte wie
- * "Rumfe, Boris an"), erkennt Claude per Tool-Definition und reicht sie als
- * [ResolvedIntent] zur lokalen Ausführung zurück.
+ * [ConversationEngine]-Implementierung über die Claude API (ADR-017).
+ * Erkennt Gerätebefehle, die die lokale Ebene 1 nicht verstanden hat (z.B.
+ * verstümmelte STT-Transkripte wie "Rumfe, Boris an"), per Tool-Definition
+ * und reicht sie als [ResolvedIntent] zur lokalen Ausführung zurück.
  *
  * Blockierend – immer von einem Hintergrund-Thread aufrufen.
  */
@@ -52,7 +36,7 @@ class ClaudeConversation(
     interests: String = "",
     /** Wohnregion für Wetter/Regionalnachrichten via Websuche (aus lokalem Profil). */
     region: String = "",
-) {
+) : ConversationEngine {
 
     private val client: AnthropicClient =
         AnthropicOkHttpClient.builder().apiKey(apiKey).build()
@@ -103,7 +87,7 @@ class ClaudeConversation(
      * werden (gespraech_beenden) – ein beobachtetes Fehlverhalten trotz
      * korrekter Transkription.
      */
-    fun ask(input: String, freshWakeWord: Boolean = false): LinaReply {
+    override fun ask(input: String, freshWakeWord: Boolean): LinaReply {
         val effectiveInput = if (freshWakeWord) "[Weckwort erkannt] $input" else input
         history.addLast(message(MessageParam.Role.USER, effectiveInput))
         trimHistory()
@@ -186,7 +170,7 @@ class ClaudeConversation(
         }
     }
 
-    fun reset() = history.clear()
+    override fun reset() = history.clear()
 
     /**
      * Liest ein fotografiertes Dokument vor (Vision, einmalig und zustandslos –
@@ -199,7 +183,10 @@ class ClaudeConversation(
      *
      * Blockierend – vom Hintergrund-Thread aufrufen.
      */
-    fun readDocument(jpegBytes: ByteArray, verbatim: Boolean = false): LinaReply {
+    override fun readDocument(jpegBytes: ByteArray, verbatim: Boolean): DocumentReadResult {
+        fun result(reply: LinaReply, suggestedEvent: SuggestedCalendarEvent? = null) =
+            DocumentReadResult(reply, suggestedEvent)
+
         return try {
             val base64 = java.util.Base64.getEncoder().encodeToString(jpegBytes)
             val image = ContentBlockParam.ofImage(
@@ -217,7 +204,7 @@ class ClaudeConversation(
                     .text(if (verbatim) DOC_PROMPT_VERBATIM else DOC_PROMPT_RELEVANT)
                     .build()
             )
-            val params = MessageCreateParams.builder()
+            val paramsBuilder = MessageCreateParams.builder()
                 .model(MODEL)
                 .maxTokens(DOC_MAX_TOKENS)
                 .thinking(ThinkingConfigDisabled.builder().build())
@@ -230,32 +217,54 @@ class ClaudeConversation(
                         .contentOfBlockParams(listOf(image, instruction))
                         .build()
                 )
-                .build()
+            // Isoliert von TOOLS/buildParams() – betrifft nur diesen einen Aufruf,
+            // rührt den freien Konversationspfad (ask()) nicht an.
+            DOC_TOOLS.forEach { paramsBuilder.addTool(it) }
 
-            val response = client.messages().create(params)
+            val response = client.messages().create(paramsBuilder.build())
             val text = response.content()
                 .mapNotNull { it.text().orElse(null)?.text() }
                 .joinToString(" ")
                 .trim()
-            Log.d(TAG, "readDocument(verbatim=$verbatim): ${text.length} Zeichen")
+            val suggestedEvent = response.content()
+                .mapNotNull { it.toolUse().orElse(null) }
+                .firstOrNull { it.name() == "termin_erkannt" }
+                ?.let { toolUse ->
+                    fun arg(name: String): String? =
+                        toolUse._input().asObject().orElse(null)?.get(name)?.asString()?.orElse(null)
+                    val titel = arg("titel")
+                    val datum = arg("datum")
+                    if (titel != null && datum != null) {
+                        SuggestedCalendarEvent(titel, datum, arg("zeit")?.takeIf { it.isNotBlank() })
+                    } else null
+                }
+            Log.d(
+                TAG,
+                "readDocument(verbatim=$verbatim): ${text.length} Zeichen, " +
+                    "termin_erkannt=${suggestedEvent != null}",
+            )
             if (text.isEmpty()) {
-                LinaReply.Error("Ich konnte auf dem Bild nichts erkennen.")
+                result(LinaReply.Error("Ich konnte auf dem Bild nichts erkennen."))
             } else {
-                LinaReply.Say(text)
+                result(LinaReply.Say(text), suggestedEvent)
             }
         } catch (e: RateLimitException) {
             Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Rate-Limit)", e)
-            LinaReply.Error("Gerade ist viel los bei mir. Versuch es gleich noch einmal.")
+            result(LinaReply.Error("Gerade ist viel los bei mir. Versuch es gleich noch einmal."))
         } catch (e: AnthropicServiceException) {
             Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Dienst)", e)
-            LinaReply.Error(
-                "Mein Sprachdienst meldet ein Problem. Bitte sag deinem Betreuer Bescheid."
+            result(
+                LinaReply.Error(
+                    "Mein Sprachdienst meldet ein Problem. Bitte sag deinem Betreuer Bescheid."
+                )
             )
         } catch (e: Exception) {
             Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Verbindung)", e)
-            LinaReply.Error(
-                "Ich kann das Dokument gerade nicht auswerten. " +
-                    "Wahrscheinlich fehlt die Internetverbindung."
+            result(
+                LinaReply.Error(
+                    "Ich kann das Dokument gerade nicht auswerten. " +
+                        "Wahrscheinlich fehlt die Internetverbindung."
+                )
             )
         }
     }
@@ -308,6 +317,15 @@ class ClaudeConversation(
                 )
             }
             "erinnerungen_vorlesen" -> ResolvedIntent.ListReminders
+            "termin_anlegen" -> {
+                val titel = arg("titel") ?: return null
+                val datum = arg("datum") ?: return null
+                ResolvedIntent.SetCalendarEventAt(
+                    title = titel,
+                    isoDatum = datum,
+                    isoZeit = arg("zeit")?.takeIf { it.isNotBlank() },
+                )
+            }
             "stopp" -> ResolvedIntent.Stop
             else -> null
         }
@@ -346,6 +364,11 @@ class ClaudeConversation(
             - Nenne niemals Bildkoordinaten oder Layout-Details ("oben rechts steht").
             - Ist das Bild leer, unscharf, zu dunkel oder kein Dokument: sag das
               freundlich in einem Satz und schlage vor, das Blatt neu zu legen.
+            - Steht im Dokument ein eindeutiger, konkreter Termin oder eine Frist
+              (z.B. ein Arzttermin, eine Zahlungsfrist, eine Einladung mit festem
+              Datum), rufe zusätzlich zu deinem gesprochenen Text das Werkzeug
+              termin_erkannt auf. Bei vagen oder unsicheren Zeitangaben
+              ("demnächst", "bald", "in Kürze") rufe es NICHT auf.
         """.trimIndent()
 
         private val DOC_PROMPT_RELEVANT = """
@@ -370,6 +393,23 @@ class ClaudeConversation(
             Zusammenfassung. Auch Anschriften, Fußzeilen und Kleingedrucktes.
             Gib den Text als fließenden Sprechtext wieder.
         """.trimIndent()
+
+        /**
+         * Ausschließlich für readDocument() – niemals in TOOLS/buildParams()
+         * mischen, damit der freie Konversationspfad (ask()) unberührt bleibt.
+         */
+        private val DOC_TOOLS: List<Tool> = listOf(
+            tool(
+                "termin_erkannt",
+                "Meldet einen im Dokument gefundenen konkreten Termin oder eine Frist.",
+                mapOf(
+                    "titel" to "Kurze Beschreibung, z.B. \"Zahlungsfrist Stromrechnung\"",
+                    "datum" to "Datum als ISO 8601, z.B. 2026-08-15",
+                    "zeit" to "Uhrzeit als HH:mm, falls genannt – sonst leer lassen",
+                ),
+                listOf("titel", "datum"),
+            ),
+        )
 
         private val BASE_PROMPT = """
             Du bist Lina, die Sprachassistentin eines blinden Menschen in Deutschland.
@@ -437,6 +477,19 @@ class ClaudeConversation(
                 "erinnerungen_vorlesen",
                 "Liest die anstehenden Erinnerungen vor.",
                 emptyMap(), emptyList(),
+            ),
+            tool(
+                "termin_anlegen",
+                "Legt einen Kalender-Termin an. Nutze dies bei Wünschen wie " +
+                    "\"trag einen Termin ein für nächsten Montag: Zahnarzt\". " +
+                    "Rechne die Datumsangabe in ein konkretes Datum um.",
+                mapOf(
+                    "titel" to "Worum es geht, z.B. \"Zahnarzt\"",
+                    "datum" to "Datum als ISO 8601, z.B. 2026-08-03",
+                    "zeit" to "Uhrzeit als HH:mm, z.B. 14:30 – leer lassen, " +
+                        "wenn keine Uhrzeit genannt wurde",
+                ),
+                listOf("titel", "datum"),
             ),
             tool(
                 "dokument_vorlesen",

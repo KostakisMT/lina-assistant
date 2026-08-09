@@ -1,0 +1,20 @@
+{"input": "Ruf Boris an", "expected_type": "tool", "expected_tool": "anrufen", "note": "Standardfall Anruf"}
+{"input": "Rumfe, Boris an", "expected_type": "tool", "expected_tool": "anrufen", "note": "verstuemmeltes Whisper-Transkript, siehe ClaudeConversation-Kommentar"}
+{"input": "kannst du bitte mal Annika anrufen", "expected_type": "tool", "expected_tool": "anrufen", "note": "hoefliche Umschreibung statt Imperativ"}
+{"input": "Schreib Ulla, ich komme heute etwas spaeter", "expected_type": "tool", "expected_tool": "sms_senden", "note": "SMS mit Text nach Doppelpunkt-Konvention"}
+{"input": "Lies mir meine Nachrichten vor", "expected_type": "tool", "expected_tool": "sms_vorlesen", "note": "SMS vorlesen, kein Kontakt noetig"}
+{"input": "Spiel mein Hoerbuch ab", "expected_type": "tool", "expected_tool": "hoerbuch_abspielen", "note": "Hoerbuch starten"}
+{"input": "Erinnere mich morgen um zehn an den Arzttermin", "expected_type": "tool", "expected_tool": "erinnerung_anlegen", "note": "Zeitangabe muss in ISO umgerechnet werden"}
+{"input": "Was steht als naechstes in meinen Erinnerungen an", "expected_type": "tool", "expected_tool": "erinnerungen_vorlesen", "note": "Erinnerungen vorlesen"}
+{"input": "Trag einen Termin ein fuer naechsten Montag: Zahnarzt", "expected_type": "tool", "expected_tool": "termin_anlegen", "note": "Doppelpunkt trennt Datum von Titel"}
+{"input": "Lies mir die Post vor", "expected_type": "tool", "expected_tool": "dokument_vorlesen", "note": "Dokument-Vorlesen ueber Kamera"}
+{"input": "Stopp", "expected_type": "tool", "expected_tool": "stopp", "note": "Vorlesen/Wiedergabe stoppen"}
+{"input": "Hoer auf damit", "expected_type": "tool", "expected_tool": "stopp", "note": "Stopp als Umschreibung"}
+{"input": "ja mach ich morgen, sag ich dir dann Bescheid", "expected_type": "silence", "expected_tool": null, "note": "Antwort an eine andere Person im Raum, nicht an Lina gerichtet"}
+{"input": "guck mal, die spielen gerade das Tor nochmal", "expected_type": "silence", "expected_tool": null, "note": "Fernsehton/Raumgespraech"}
+{"input": "also ich finde schon, dass wir das anders machen sollten", "expected_type": "silence", "expected_tool": null, "note": "Gespraech zwischen Personen im Raum"}
+{"input": "[Weckwort erkannt] Lass uns reden", "expected_type": "say", "expected_tool": null, "note": "Mit Weckwort-Markierung IMMER an Lina gerichtet, auch wenn es wie eine Einladung klingt"}
+{"input": "Was haeltst du von Tolstoi?", "expected_type": "say", "expected_tool": null, "note": "freie Konversation, Tonfall/Persona-Check"}
+{"input": "Wie geht es dir heute?", "expected_type": "say", "expected_tool": null, "note": "freie Konversation, kurz und warm erwartet"}
+{"input": "Erzaehl mir kurz was ueber Segelboote", "expected_type": "say", "expected_tool": null, "note": "freie Konversation zu einem Interessensgebiet"}
+{"input": "Kannst du mir helfen, ich weiss nicht mehr, was ich sagen wollte", "expected_type": "say", "expected_tool": null, "note": "echte, aber unklare Frage AN Lina - darf um Wiederholung bitten, nicht schweigen"}

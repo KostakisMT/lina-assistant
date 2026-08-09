@@ -115,6 +115,30 @@ class LocalCommandResolverTest {
     }
 
     @Test
+    fun `Hoerbuch-Suche nach Thema Genre`() {
+        assertEquals(
+            ResolvedIntent.SearchAudiobookByGenre("segeln"),
+            resolver.resolve("hörbücher zum thema segeln"),
+        )
+        assertEquals(
+            ResolvedIntent.SearchAudiobookByGenre("politik"),
+            resolver.resolve("suche hörbücher zum thema politik"),
+        )
+        assertEquals(
+            ResolvedIntent.SearchAudiobookByGenre("segeln"),
+            resolver.resolve("gibt es hörbücher über segeln"),
+        )
+    }
+
+    @Test
+    fun `Themen-Suche verwechselt sich nicht mit normaler Titel-Autoren-Suche`() {
+        // Singular "hörbuch"/"buch" bleibt normale Titel-/Autorensuche
+        assertEquals(ResolvedIntent.SearchAudiobook("tolstoi"), resolver.resolve("suche tolstoi"))
+        val einzelbuch = resolver.resolve("hörbuch über tolstoi")
+        assertTrue(einzelbuch is ResolvedIntent.SearchAudiobook)
+    }
+
+    @Test
     fun `Lautstaerke lauter und leiser`() {
         assertEquals(ResolvedIntent.VolumeUp, resolver.resolve("lauter"))
         assertEquals(ResolvedIntent.VolumeUp, resolver.resolve("mach lauter"))
@@ -253,9 +277,39 @@ class LocalCommandResolverTest {
     }
 
     @Test
+    fun `Datum abfragen`() {
+        assertEquals(ResolvedIntent.Date, resolver.resolve("welches datum haben wir heute"))
+        assertEquals(ResolvedIntent.Date, resolver.resolve("welcher tag ist heute"))
+        assertEquals(ResolvedIntent.Date, resolver.resolve("der wievielte ist heute"))
+    }
+
+    @Test
     fun `Erinnerungen auflisten und loeschen`() {
         assertEquals(ResolvedIntent.ListReminders, resolver.resolve("welche erinnerungen habe ich"))
         assertEquals(ResolvedIntent.ClearReminders, resolver.resolve("lösche alle erinnerungen"))
+    }
+
+    @Test
+    fun `Termin anlegen`() {
+        val intent = resolver.resolve("trage einen termin ein für nächsten montag: zahnarzt")
+        assertTrue(intent is ResolvedIntent.SetCalendarEvent)
+    }
+
+    @Test
+    fun `Kalender anzeigen`() {
+        assertEquals(ResolvedIntent.ShowCalendar, resolver.resolve("zeig mir den kalender"))
+        assertEquals(ResolvedIntent.ShowCalendar, resolver.resolve("was sind meine nächsten termine"))
+    }
+
+    @Test
+    fun `Kalender verstecken`() {
+        assertEquals(ResolvedIntent.HideCalendar, resolver.resolve("verstecke den kalender"))
+    }
+
+    @Test
+    fun `Termine loeschen kollidiert nicht mit Erinnerungen loeschen`() {
+        assertEquals(ResolvedIntent.ClearCalendarEvents, resolver.resolve("lösche meine termine"))
+        assertEquals(ResolvedIntent.ClearReminders, resolver.resolve("lösche meine erinnerungen"))
     }
 
     // --------------------------------------------------------------- Stopp

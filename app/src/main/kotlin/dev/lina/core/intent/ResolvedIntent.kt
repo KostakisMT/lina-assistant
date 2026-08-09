@@ -15,6 +15,8 @@ sealed class ResolvedIntent {
     data object AudiobookInfo : ResolvedIntent()
     data object ListAudiobooks : ResolvedIntent()
     data class SearchAudiobook(val query: String) : ResolvedIntent()
+    /** Suche nach Thema/Genre statt Titel/Autor (LibriVox-Taxonomie, siehe LibrivoxGenres). */
+    data class SearchAudiobookByGenre(val topic: String) : ResolvedIntent()
     data object NextChapter : ResolvedIntent()
     data object PreviousChapter : ResolvedIntent()
     /** 1-basiert, wie gesprochen ("Kapitel drei"). */
@@ -44,6 +46,17 @@ sealed class ResolvedIntent {
     data object ImportSimContacts : ResolvedIntent()
     data object ImportVcardContacts : ResolvedIntent()
     data object Time : ResolvedIntent()
+    data object Date : ResolvedIntent()
+    data class SetCalendarEvent(val rawInput: String) : ResolvedIntent()
+    /** Von Claude aufgelöster Termin (ISO-Datum statt Rohtext). */
+    data class SetCalendarEventAt(
+        val title: String,
+        val isoDatum: String,
+        val isoZeit: String?,
+    ) : ResolvedIntent()
+    data object ShowCalendar : ResolvedIntent()
+    data object HideCalendar : ResolvedIntent()
+    data object ClearCalendarEvents : ResolvedIntent()
     data object Stop : ResolvedIntent()
     data class Unknown(val rawInput: String) : ResolvedIntent()
 }

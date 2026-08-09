@@ -5,6 +5,206 @@
 
 ---
 
+## [2026-08-04] Feature-Spike: Gemma-3n-Trainingspipeline (Mac) + ConversationEngine-Interface
+
+**Was:** Erste Umsetzung von ADR-032, ausgehend vom physisch verfügbaren
+Testtablet:
+- Neue Pipeline `training/llm/` (eigenes venv, MLX): `spike_check.py` prüft
+  ein Basis-Gemma-3n-E2B gegen 20 handgeschriebene deutsche Prompts (Tools,
+  STT-Verhörer, Raumgespräch, Persona) – 11/20 korrekt, bestätigt empirisch
+  die Finetuning-Gründe aus ADR-032. `gen_dialogue.py` erzeugt synthetische
+  deutsche Trainingsbeispiele über die bestehende Claude-API-Anbindung,
+  `build_dataset.py` baut daraus MLX-Chat-JSONL mit train/valid/test-Split
+  (Test-Split nie im Training verwendet). `eval.py` scored einen Adapter
+  gegen den gehaltenen Testsatz.
+- Erster LoRA-Finetuning-Versuch (`mlx_lm.lora`) deckte zwei reproduzierbare
+  Probleme in Gemma-3ns noch jungem `mlx-lm`-Support auf (Absturz durch
+  LoRA-Wrapping von Gemma3ns AltUp-Mechanismus, behoben; `self_attn.q_proj`
+  bekommt keinen Gradienten, ungelöst) – Details in `training/llm/README.md`
+  und im ADR-032-Nachtrag (DECISIONS.md). Der resultierende Adapter ist mit
+  nur 39 Trainingsbeispielen noch zu schwach für einen messbaren Effekt.
+- `core/llm/ConversationEngine.kt` neu: `LinaReply` aus `ClaudeConversation`
+  extrahiert, Interface (`ask`/`readDocument`/`reset`) definiert.
+  `ClaudeConversation` implementiert es jetzt, `LauncherActivity` hält das
+  Feld als Interface-Typ statt der konkreten Klasse – reiner Refactor, kein
+  Verhaltensunterschied, Andockpunkt für ein künftiges `GemmaConversation`.
+
+**Warum:** Der Nutzer hat das Testtablet jetzt vor Ort und will die nächsten
+Tage aktiv testen und finetunen (Anschluss an ADR-032).
+
+**Dateien:** Neu: `training/llm/` (README, `spike_check.py`,
+`gen_dialogue.py`, `build_dataset.py`, `eval.py`, `lora_config.yaml`,
+`prompts/`), `app/src/main/kotlin/dev/lina/core/llm/ConversationEngine.kt`.
+Geändert: `ClaudeConversation.kt` (implementiert Interface),
+`DocumentReadResult.kt` (Doc-Kommentar), `LauncherActivity.kt` (Feldtyp),
+`DECISIONS.md` (ADR-032-Nachtrag), `TODO.md`, `.gitignore`.
+
+**Verifiziert:** `./gradlew compileDebugKotlin` grün (`JAVA_HOME` musste auf
+den Homebrew-`openjdk@17`-Pfad gesetzt werden, war zuvor nicht gefunden).
+Trainingspipeline Ende-zu-Ende auf dem Mac gelaufen (Download, Generierung,
+Training, Eval) – noch kein Gerätetest, kein Build-Flavor, kein
+funktionierender Adapter.
+
+**Offen:** Datensatz auf mehrere hundert Beispiele skalieren, Lernrate
+senken (Divergenz bei 1e-4 beobachtet), `q_proj`-Gradienten-Befund klären
+(ggf. Upstream-Issue), danach erst Phase D (Gradle-Flavor,
+MediaPipe-Integration) und D.5 (Adapter-Formatkompatibilität fürs Gerät).
+
+---
+
+## [2026-08-04] Doku: ADR-032 – lokaler Gemma-3n-Pfad für NGO-Partner (Build-Flavor + Finetuning-Strategie)
+
+**Was:** Recherche und Architekturentscheidung dokumentiert: Gemma 3n
+(E2B/E4B) als eigener Build-Flavor neben der bestehenden Claude-API-Anbindung
+(ADR-017) – kein Ersatz, zwei parallele Pfade. Enthält Machbarkeitsprüfung
+fürs Zielgerät (TB336ZU, Dimensity 6300), eine Antwort auf die Frage, wie
+Konversationsqualität ohne fähiges Android-Testgerät überhaupt verifizierbar
+ist (Mac/MLX), sowie eine LoRA/QLoRA-Finetuning-Strategie analog zum
+bestehenden Wake-Word-Trainingsmuster.
+
+**Warum:** Blindenvereine/NGOs, die als mögliche zukünftige Tester in Frage
+kommen, lehnen eine Anthropic-Anbindung ab und fordern ein lokales Modell.
+
+**Dateien:** `DECISIONS.md` (neu: ADR-032), `TODO.md` (neue Sektion „Lokaler
+Gemma-3n-Pfad für NGO-Partner", zwei verstreute ältere Backlog-Zeilen dorthin
+konsolidiert).
+
+**Offen:** Reine Recherche/Dokumentation – kein Code. Websuche-/Vision-Ersatz
+im NGO-Flavor noch nicht entschieden, kein Mac/MLX-Spike durchgeführt.
+
+---
+
+## [2026-07-26] Feature: Kalender (Datum-Ansage, Termine + automatische Erinnerung, Dokument-Trigger, Familien-Wochenansicht)
+
+**Was:** Vier zusammenhängende Fähigkeiten:
+- **Datum-Ansage:** "Welches Datum haben wir heute?"/"Welcher Tag ist heute?"
+  → "Heute ist Sonntag, der 26. Juli." (`ResolvedIntent.Date`, mirrort `Time`).
+- **Termine mit automatischer Erinnerung:** "Trage einen Termin ein für
+  nächsten Montag: Zahnarzt" (Doppelpunkt trennt Datum von Titel, wie beim
+  SMS-Diktat). Neuer `GermanDateParser` versteht relative Tage
+  (heute/morgen/übermorgen, "in 3 Tagen", "in einer Woche"), Wochentag-relativ
+  ("nächsten Montag" – überspringt den heutigen Tag, falls heute bereits
+  Montag ist) und explizite Daten ("am 15. März", "15.3.", "15.03.2027").
+  Jeder Termin bekommt automatisch eine ganz normale, bestehende `Reminder`
+  darunter (Standardzeit 9 Uhr, falls keine Uhrzeit genannt wurde) – kein
+  zweites Scheduling-System, siehe ADR-031.
+- **Dokument-Trigger:** Beim Vorlesen eines Fotos erkennt Claude über ein neues,
+  ausschließlich für `readDocument()` registriertes Tool (`termin_erkannt`)
+  einen im Dokument stehenden konkreten Termin/eine Frist und bietet an, ihn
+  einzutragen ("Übrigens, im Dokument steht ein Termin: X am Y. Soll ich den
+  eintragen?") – eigener, komplett neuer Ja/Nein-Dialog
+  (`openDocCalendarFollowUp`/`handleDocCalendarFollowUp`), der die bestehende
+  "alles vorlesen?"-Logik unangetastet lässt.
+- **Familien-Wochenansicht:** "Zeig mir den Kalender"/"Was sind meine nächsten
+  Termine" macht ein neues `CalendarPanel` sichtbar (ersetzt den
+  Hörbuch-Player im selben rechten Spalten-Slot) – immer Wochenansicht
+  (heute..+6 Tage), große Schrift, Schwarz/Weiß/Gold wie das übrige UI.
+  "Verstecke den Kalender" blendet es wieder aus, eine Hörbuch-Aktion
+  (Play/Weiter) fordert die Spalte ebenfalls zurück.
+
+**Warum:** Nutzerwunsch – Uhrzeit funktionierte bereits gut, Datum/Termine
+fehlten komplett; Angehörige/Pflegepersonal sollen anstehende Termine auf
+einen Blick sehen können.
+
+**Dateien:**
+- Neu: `core/text/GermanCalendarNames.kt` (geteilter Wochentag-/Monatswortschatz,
+  vorher privat in `Reminder.kt` dupliziert), `feature/calendar/CalendarEvent.kt`,
+  `feature/calendar/CalendarStore.kt` (EncryptedSharedPreferences wie
+  `ReminderStore`), `feature/calendar/GermanDateParser.kt` (pure, unit-testbar),
+  `feature/calendar/CalendarManager.kt`, `ui/components/CalendarPanel.kt`,
+  `core/llm/DocumentReadResult.kt` (+ `SuggestedCalendarEvent`)
+- Geändert: `feature/reminder/Reminder.kt` (Wortschatz-Refactor, keine
+  Verhaltensänderung), `core/intent/ResolvedIntent.kt`,
+  `core/intent/LocalCommandResolver.kt` (`resolveCalendar()` läuft VOR
+  `resolveReminder()`; dessen `ClearReminders`/`ListReminders`-Regex verlieren
+  die `termine?`-Alternative, die früher fälschlich mitgriff),
+  `core/llm/ClaudeConversation.kt` (`termin_anlegen` in `TOOLS`, isoliertes
+  `termin_erkannt` nur in `readDocument()`, dessen Rückgabetyp jetzt
+  `DocumentReadResult` statt `LinaReply`), `ui/launcher/LauncherActivity.kt`
+  (Dispatch, Layout-Slot-Teilung Kalender/Player, Dokument-Folgefenster)
+
+**Verifiziert am Gerät:** Datum-Ansage korrekt ("Heute ist Sonntag, der 26.
+Juli."); Termin-Anlage legt sichtbar eine `Reminder` an (`ReminderScheduler`-Log
+bestätigt "morgen um 9 Uhr" für "nächsten Montag" an einem Sonntag);
+`CalendarPanel` zeigt die Wochenansicht korrekt inkl. des angelegten Termins;
+"verstecke den Kalender" blendet aus; `ClearCalendarEvents`/`ClearReminders`
+kollidieren nicht mehr; **unveränderter Dokument-Pfad ohne erkannten Termin
+zuerst gegengetestet** (Foto ohne lesbares Dokument → normale Fehlermeldung,
+`termin_erkannt=false` im Log, kein Absturz) – erst danach der Rest verifiziert.
+
+**Offen:** Der positive Dokument-Erkennungspfad (`termin_erkannt=true`) braucht
+ein reales Foto eines Dokuments mit konkretem Datum – nicht ohne physischen
+Zugriff auf das Testgerät simulierbar, nur der unveränderte Negativ-Pfad wurde
+live bestätigt.
+
+---
+
+## [2026-07-26] Feature: Hörbuch-Verfügbarkeit ansagen + LibriVox-Genre-Suche (ADR-030)
+
+**Was:** Zwei echte, live gegen die echte LibriVox-API verifizierte Bugs im
+bestehenden `LibrivoxRepository` gefunden und behoben, plus neue Genre-/
+Themen-Suche:
+
+1. **Parsing-Bug:** Der `fields={id,title,authors,...}`-Parameter lieferte
+   keine zusammengeführten JSON-Objekte, sondern mehrere aneinandergehängte
+   `{"books":[...]}`-Blöcke (einen je Feld) – `JSONObject(json)` parste nur
+   den ersten. Titel/Autor/Dauer/RSS-URL waren dadurch bei **jeder**
+   LibriVox-Suche bisher leer bzw. „Unbekannt". Fix: `fields=`-Parameter
+   weggelassen, die Standardantwort liefert alles in einem sauberen Objekt.
+2. **Sprachfilter-Bug:** Der `language`-Parameter wurde nie an die Such-URL
+   angehängt – „deutsche Inhalte" wurden also gar nicht gefiltert. Zusätzlich:
+   der Parameter wird von LibriVox serverseitig ignoriert (live geprüft:
+   `language=English` liefert trotzdem deutschsprachige Treffer mit). Fix:
+   client-seitiger Sprachfilter auf das von der API mitgelieferte
+   `language`-Feld, mit höherem `limit` angefragt (20 statt 5), um nach dem
+   Filtern noch genug Treffer übrig zu haben.
+
+**Neu:** Sprachbefehl "Hörbücher zum Thema X" / "gibt es Hörbücher über X"
+(neuer `ResolvedIntent.SearchAudiobookByGenre`, `LocalCommandResolver.
+resolveAudiobookGenreSearch()` – bewusst vor der bestehenden Titel-/
+Autorensuche in der Erkennungskette, sonst hätte deren Muster die Plural-Form
+mitgerissen). Neue `LibrivoxGenres.kt`: feste LibriVox-Taxonomie (live von
+librivox.org/search gescrapt, da die API keinen Genres-Endpunkt hat) + eine
+deutsche Synonymtabelle für die bekannten Interessen des Nutzers (Marxismus →
+"Political Science", Segeln → "Nautical & Marine Fiction", u.a.). Ein nicht
+in der Taxonomie enthaltener Genre-Name liefert von der API **HTTP 500** statt
+einer leeren Liste (live verifiziert) – deshalb ausschließlich validierte
+Taxonomie-Werte, nie Nutzer-Rohtext, an `?genre=` übergeben. Findet die
+Genre-Suche nichts, fällt `AudiobookLibrary.searchByTopic()` automatisch auf
+die normale Stichwortsuche zurück; Lina sagt an, was tatsächlich passiert ist
+("gefunden in der Kategorie X" vs. "stattdessen nach dem Stichwort gesucht").
+
+**"Was kann ich abspielen?" erweitert:** `AudiobookManager.listBooks()` weist
+jetzt immer darauf hin, dass LibriVox durchsucht werden kann; bei leerer oder
+sehr kleiner Bibliothek (≤2 Bücher) fragt Lina proaktiv per Sprache, ob sie
+suchen soll (Ja/Nein-Folgefenster nach dem Vorbild der SIM-Import-Nachfrage,
+`LauncherActivity.openLibrivoxSuggestionFollowUp()`/`handleLibrivoxSuggestionFollowUp()`).
+
+**Dateien:**
+- Neu: `feature/audiobook/LibrivoxGenres.kt`
+- Geändert: `feature/audiobook/LibrivoxRepository.kt` (Bugfixes, `searchByGenre()`,
+  `language`-Feld in `LibrivoxBook`), `feature/audiobook/AudiobookLibrary.kt`
+  (`searchByTopic()`), `feature/audiobook/AudiobookManager.kt` (`listBooks()`
+  erweitert, neue `searchByTopic()`-Methode), `core/intent/ResolvedIntent.kt`,
+  `core/intent/LocalCommandResolver.kt`, `ui/launcher/LauncherActivity.kt`
+  (neuer Dispatch-Zweig + Ja/Nein-Folgefenster), `app/build.gradle.kts`
+  (`org.json:json` als Test-Abhängigkeit – Android liefert dafür nur einen
+  Stub, der echte JVM-Tests der Parsing-Logik unmöglich machen würde)
+
+**Verifiziert am Gerät:** "Suche Hörbücher zum Thema Politik" → korrekt zu
+`Political Science` aufgelöst → echter Treffer *Manifest der Kommunistischen
+Partei* (Friedrich Engels, 4 Kapitel) mit korrekt befülltem Titel/Autor (der
+Parsing-Bug hätte hier leere Felder gezeigt). Regressionscheck der normalen
+Titel-/Autorensuche ("suche Tolstoi") weiterhin einwandfrei. `ListAudiobooks`
+ohne Absturz, kein Folgefenster ausgelöst (Bibliothek nicht dünn genug – korrekt).
+
+**Offen:** Der proaktive Ja/Nein-Vorschlag bei dünner Bibliothek konnte am
+Testgerät nicht auslösen (Bibliothek hat mehr als 2 Bücher) – Logik folgt
+1:1 dem bereits am Gerät verifizierten SIM-Import-Muster, aber nicht separat
+gegengetestet.
+
+---
+
 ## [2026-07-26] Doku: Gesamtüberholung + Prioritäten in TODO.md
 
 **Was:** Alle Projektdokumente gegen den tatsächlichen Code-Stand geprüft und

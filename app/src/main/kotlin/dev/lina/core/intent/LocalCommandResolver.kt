@@ -8,6 +8,8 @@ class LocalCommandResolver : IntentResolver {
         val normalized = input.trim().lowercase()
 
         return resolveTime(normalized)
+            ?: resolveDate(normalized)
+            ?: resolveCalendar(normalized)
             ?: resolveReminder(normalized)
             ?: resolveContactImport(normalized)
             ?: resolveCall(normalized)
@@ -40,18 +42,46 @@ class LocalCommandResolver : IntentResolver {
 
     /**
      * Erinnerungen. Steht vor resolveCall, weil "erinnere mich ... an Boris"
-     * sonst als Anruf-Muster missverstanden werden könnte.
+     * sonst als Anruf-Muster missverstanden werden könnte. "Termin(e)" gehört
+     * nicht mehr hierher (siehe resolveCalendar, das in der Kette zuerst
+     * geprüft wird) – die Regexe unten reagieren bewusst nur noch auf
+     * "Erinnerung(en)", damit "lösche meine Termine" nicht hier landet.
      */
     private fun resolveReminder(input: String): ResolvedIntent? = when {
-        input.matches(Regex(""".*(?:lösche|loesche|entferne).*(?:erinnerung|termine?).*""")) ->
+        input.matches(Regex(""".*(?:lösche|loesche|entferne).*erinnerung.*""")) ->
             ResolvedIntent.ClearReminders
         input.matches(
-            Regex(""".*(?:welche|meine|alle)\s+(?:erinnerungen|termine).*""")
+            Regex(""".*(?:welche|meine|alle)\s+erinnerungen.*""")
         ) || input.matches(Regex(""".*woran.*erinner.*""")) ->
             ResolvedIntent.ListReminders
         input.matches(Regex("""^(?:bitte\s+)?erinner\w*\s+mich\b.*""")) ||
             input.matches(Regex(""".*(?:stell|setz)\w*\s+(?:mir\s+)?(?:einen?\s+)?(?:wecker|erinnerung|timer)\b.*""")) ->
             ResolvedIntent.SetReminder(input)
+        else -> null
+    }
+
+    private fun resolveDate(input: String): ResolvedIntent? = when {
+        input.matches(
+            Regex(""".*(?:welches datum|welcher tag ist heute|der wievielte|was für ein tag|was fuer ein tag).*""")
+        ) -> ResolvedIntent.Date
+        else -> null
+    }
+
+    /**
+     * Termine (Kalender) – bewusst VOR resolveReminder in der Erkennungskette,
+     * damit "Termin(e)"-Wortschatz nicht vom Erinnerungs-Muster mitgerissen
+     * wird (das reagierte früher ebenfalls auf "termine?").
+     */
+    private fun resolveCalendar(input: String): ResolvedIntent? = when {
+        input.matches(Regex(""".*(?:lösche|loesche|entferne).*termine?.*""")) ->
+            ResolvedIntent.ClearCalendarEvents
+        input.matches(Regex(""".*versteck\w*.*kalender.*""")) ->
+            ResolvedIntent.HideCalendar
+        input.matches(Regex(""".*(?:zeig|zeige)\w*.*kalender.*""")) ||
+            input.matches(Regex(""".*(?:nächste|naechste|kommende)\w*\s+termine.*""")) ->
+            ResolvedIntent.ShowCalendar
+        input.matches(Regex(""".*\b(?:trag|eintrag|merk)\w*\s+.*\btermin.*""")) ->
+            ResolvedIntent.SetCalendarEvent(input)
         else -> null
     }
 
@@ -175,7 +205,35 @@ class LocalCommandResolver : IntentResolver {
             ResolvedIntent.AudiobookInfo
         input.matches(Regex(""".*(?:welche hörbücher|meine hörbücher|hörbuch(?:liste|er)|bibliothek).*""")) ->
             ResolvedIntent.ListAudiobooks
-        else -> resolveVolumeLevel(input) ?: resolveSleepTimer(input) ?: resolveAudiobookSearch(input)
+        else -> resolveVolumeLevel(input) ?: resolveSleepTimer(input) ?:
+            resolveAudiobookGenreSearch(input) ?: resolveAudiobookSearch(input)
+    }
+
+    /**
+     * Suche nach Thema/Genre statt Titel/Autor, z.B. "Hörbücher zum Thema
+     * Politik". Muss vor [resolveAudiobookSearch] geprüft werden: dessen
+     * `(?:such|suche|finde?)\s+(?:hörbuch\s+)?(.+)`-Muster würde
+     * "suche hörbücher zum Thema Segeln" sonst komplett als Titel-/Autoren-
+     * suche verschlucken (die Plural-Form "hörbuch**er**" passt nicht auf das
+     * optionale Singular-"hörbuch" davor). Bewusst nur Plural
+     * ("hörbücher"/"bücher") als Auslöser – die bestehende Singular-Form
+     * ("ein hörbuch über X") bleibt normale Titel-/Autorensuche.
+     */
+    private fun resolveAudiobookGenreSearch(input: String): ResolvedIntent? {
+        val patterns = listOf(
+            Regex("""hörbücher?\s+zum\s+thema\s+(.+)"""),
+            Regex("""(?:hörbücher|bücher)\s+(?:über|zu)\s+(?:das\s+thema\s+)?(.+)"""),
+            Regex("""(?:gibt es|hast du)\s+hörbücher\s+(?:über|zu)\s+(.+?)\??$"""),
+        )
+        for (pattern in patterns) {
+            pattern.find(input)?.let { match ->
+                val topic = match.groupValues[1].trim()
+                if (topic.isNotBlank()) {
+                    return ResolvedIntent.SearchAudiobookByGenre(topic)
+                }
+            }
+        }
+        return null
     }
 
     /**

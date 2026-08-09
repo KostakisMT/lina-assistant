@@ -22,7 +22,12 @@ rng = np.random.default_rng(7)
 fp = FeaturePipeline()
 
 MUSAN = sorted(glob.glob("data/musan/*/*/*.wav"))
-print(f"musan files: {len(MUSAN)}")
+# Sprache (librivox/us-gov) ist mit ~21% der Dateien deutlich unterrepräsentiert,
+# obwohl echte Sprache (Fernsehen/YouTube im Wohnzimmer) genau der beobachtete
+# Fehlalarm-Fall war. Eigener Pool + gewichtete Auswahl in random_noise().
+MUSAN_SPEECH = sorted(glob.glob("data/musan/speech/*/*.wav"))
+MUSAN_OTHER = sorted(glob.glob("data/musan/music/*/*.wav") + glob.glob("data/musan/noise/*/*.wav"))
+print(f"musan files: {len(MUSAN)} (speech: {len(MUSAN_SPEECH)}, other: {len(MUSAN_OTHER)})")
 
 
 def load_wav(path):
@@ -37,8 +42,12 @@ def load_wav(path):
 def random_noise(n):
     if not MUSAN:
         return np.zeros(n, dtype=np.float32)
+    # 60% Sprache statt der natürlichen ~21% im Datensatz – echte Sprache
+    # (TV/YouTube) ist der Fall, der in der Praxis Fehlalarme ausgelöst hat.
+    use_speech = MUSAN_SPEECH and (not MUSAN_OTHER or rng.random() < 0.6)
+    pool = MUSAN_SPEECH if use_speech else (MUSAN_OTHER or MUSAN)
     for _ in range(10):
-        path = MUSAN[rng.integers(len(MUSAN))]
+        path = pool[rng.integers(len(pool))]
         try:
             audio = load_wav(path)
         except Exception:

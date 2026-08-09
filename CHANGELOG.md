@@ -5,6 +5,53 @@
 
 ---
 
+## [2026-08-09] Echte UI-Screenshots (Emulator) + README/GitHub-Page aktualisiert, Emoji aus beiden entfernt
+
+**Was:**
+- Debug-APK auf dem lokal vorhandenen Android-Emulator (`LinaTablet`, API 33,
+  `/opt/homebrew/share/android-commandlinetools`) installiert und über den
+  bestehenden Debug-Broadcast (`dev.lina.DEBUG_INPUT`, Extra `text`) durch
+  drei UI-Zustände gesteuert, dann per `adb exec-out screencap` fotografiert
+  und mit `ffmpeg` auf den reinen App-Inhalt zugeschnitten (System-Statusleiste/
+  Taskbar entfernt): Grundzustand (`docs/screenshots/idle.png`),
+  Kalender-Wochenansicht mit einem Testtermin (`docs/screenshots/calendar.png`)
+  und Hörbuch-Player mit einem echten LibriVox-Stream
+  (`docs/screenshots/audiobook-player.png`, per „Spiel Hörbuch ab" nach
+  Platzieren einer Testdatei unter `/sdcard/Music/Audiobooks/`).
+  Ersteinrichtung wurde für den Testlauf per direkt geschriebener
+  SharedPreferences-XML übersprungen (nur Emulator-State, nicht committet).
+- README.md (beide Sprachversionen) um die Screenshots ergänzt sowie um die
+  bislang fehlenden Funktionen **Erinnerungen** und **Kalender** in der
+  Feature-Liste (waren nur in `docs/index.html` dokumentiert, nicht im
+  README). `docs/index.html` (GitHub Pages) um denselben Kalender-Punkt und
+  einen neuen Abschnitt „So sieht das aus" mit derselben Screenshot-Galerie
+  ergänzt (responsives Grid, passend zum Schwarz/Gold-Kontrastdesign).
+- Auf Nutzerwunsch alle Emoji aus README.md entfernt (dekorative Icons vor
+  den Feature-Punkten sowie die ✅/❌-Spalte der Technik-Tabelle, letztere
+  durch „Yes"/„No" ersetzt). `docs/index.html` enthielt bereits keine Emoji.
+  Bewusst **nicht** angefasst: CLAUDE.md/CHANGELOG.md/TODO.md/DECISIONS.md,
+  dort sind ✅/❌/🟣/🟡/⚠️ funktionale Marker (Status, Priorität, Warnhinweis),
+  keine Dekoration – Entscheidung explizit mit dem Nutzer abgestimmt.
+
+**Warum:** README und GitHub-Page waren seit dem Kalender-Feature (siehe
+Eintrag 2026-07-26 unten) nicht mehr synchron mit dem tatsächlichen
+Funktionsumfang; beide hatten außerdem nie echte Screenshots, nur Text.
+
+**Dateien:** `README.md`, `docs/index.html`, neu:
+`docs/screenshots/{idle,calendar,audiobook-player}.png`.
+
+**Verifiziert:** GitHub Page lokal im Browser prüft (Layout, Bilder,
+Responsive-Grid). README-Bildpfade sind repo-relativ, wie von GitHubs
+Markdown-Renderer erwartet.
+
+**Offen:** Speaking-Zustand der Statuskugel weiterhin nicht per Screenshot
+festgehalten (Logik aber identisch/mitgetestet über `isSpeaking()`-Polling,
+siehe Ambiente-UI-Sektion unten). Screenshots stammen vom Emulator, nicht
+vom echten Lenovo-Testtablet – bei Gelegenheit durch echte Gerätefotos
+ersetzen oder ergänzen.
+
+---
+
 ## [2026-08-04] Feature-Spike: Gemma-3n-Trainingspipeline (Mac) + ConversationEngine-Interface
 
 **Was:** Erste Umsetzung von ADR-032, ausgehend vom physisch verfügbaren

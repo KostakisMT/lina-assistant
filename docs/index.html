@@ -59,6 +59,28 @@
       border-radius: 0.5rem;
       font-size: 1.25rem;
     }
+    .screenshots {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .screenshots figure {
+      margin: 0;
+      background: #0d0d0d;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+    .screenshots img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .screenshots figcaption {
+      padding: 0.6rem 0.9rem;
+      font-size: 1.05rem;
+    }
     footer {
       border-top: 1px solid var(--fg);
       margin-top: 3rem;
@@ -91,6 +113,7 @@
       <li><strong>Anrufe:</strong> Kontakte anrufen, eingehende Anrufe annehmen oder ablehnen – nur mit der Stimme.</li>
       <li><strong>Nachrichten schreiben und vorlesen:</strong> SMS senden, empfangene Nachrichten vorlesen lassen, direkt antworten.</li>
       <li><strong>Erinnerungen und Wecker:</strong> „Erinnere mich morgen um zehn an den Arzt" – auch täglich wiederkehrend, für Medikamente und Termine. Läuft ohne Internet.</li>
+      <li><strong>Kalender:</strong> „Trage einen Termin ein für nächsten Montag: Zahnarzt" legt automatisch auch eine Erinnerung an. „Zeig mir den Kalender" öffnet eine Wochenansicht – gut lesbar für sehende Angehörige.</li>
       <li><strong>Post und Briefe vorlesen:</strong> Das Dokument liegt in einem festen Rahmen vor dem Tablet, Lina fotografiert es auf Zuruf und sagt zuerst, worum es geht und von wem – auf Wunsch dann den ganzen Text.</li>
       <li><strong>Zeitung hören:</strong> Nachrichten aus vertrauten Quellen – erst die Zusammenfassung, auf Wunsch der ganze Artikel.</li>
       <li><strong>Hörbücher:</strong> Eigene Bibliothek, kostenlose LibriVox-Aufnahmen und <strong>DAISY</strong> – das Format der Blindenhörbüchereien. Mit Kapitelnavigation („Kapitel drei") und Schlaf-Timer.</li>
@@ -103,6 +126,31 @@
     <p class="beispiel">„Hey Lina, spiel mein Hörbuch weiter." – „Weiter geht's bei Kapitel vier."</p>
     <p class="beispiel">„Hey Lina, lies mir die Post vor." – „Ein Brief von der Krankenkasse. Es geht um deinen Antrag vom März …"</p>
     <p class="beispiel">„Hey Lina, erinnere mich jeden Tag um acht an die Tabletten." – „Jeden Tag um acht Uhr. Ist notiert."</p>
+
+    <h2>So sieht das aus</h2>
+    <p>
+      Lina selbst braucht kein Display – die Oberfläche ist für sehende
+      Angehörige und Besucher gedacht, die sehen wollen, was gerade passiert,
+      oder ein laufendes Hörbuch bedienen möchten.
+    </p>
+    <div class="screenshots">
+      <figure>
+        <img src="screenshots/idle.png" alt="Grundzustand: die animierte Statuskugel und der Text „Lina bereit – sag Hey Lina" auf schwarzem Hintergrund" loading="lazy">
+        <figcaption>Grundzustand, wartet auf das Weckwort</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/calendar.png" alt="Kalender-Wochenansicht mit den Tagen von heute bis in sechs Tagen, ein Termin „Zahnarzt" ist morgen eingetragen" loading="lazy">
+        <figcaption>Kalender-Wochenansicht</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/audiobook-player.png" alt="Hörbuch-Player-Panel mit Titel, Autor und den Bedienknöpfen Zurück, -30s, Weiter, Vor, Leiser, Lauter" loading="lazy">
+        <figcaption>Hörbuch-Player</figcaption>
+      </figure>
+    </div>
+    <p style="font-size: 0.95rem; opacity: 0.85;">
+      Aufgenommen auf einem tablet-großen Android-Emulator (API 33) mit einem
+      unveränderten Debug-Build.
+    </p>
 
     <h2>Warum noch eine Assistentin?</h2>
     <p>

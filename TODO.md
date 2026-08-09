@@ -370,7 +370,8 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [x] Querformat: `screenOrientation="sensorLandscape"` + Layout als `Row` (Kugel+Status links, Player rechts) (2026-07-26)
 - [x] **Bugfix:** `labelLarge`-Textstil hatte fest Gold hinterlegt → Button-Beschriftungen auf goldenen Buttons unsichtbar (Gold auf Gold), behoben (2026-07-26)
 - [x] Am Gerät verifiziert: Idle/Thinking/Listening sichtbar unterscheidbar, Player erscheint bei geladenem Buch, alle Buttons per Touch funktionsfähig, Querformat füllt Bildschirm ohne Letterboxing (2026-07-26)
-- [ ] Speaking-Zustand der Kugel noch nicht per Screenshot festgehalten (Logik aber identisch/mitgetestet über `isSpeaking()`-Polling)
+- [x] Idle-, Kalender- und Hörbuch-Player-Zustand per Screenshot festgehalten (Emulator API 33) und in README.md + docs/index.html eingebaut (2026-08-09)
+- [ ] Speaking-Zustand der Kugel weiterhin nicht per Screenshot festgehalten (Logik aber identisch/mitgetestet über `isSpeaking()`-Polling); Screenshots bislang vom Emulator, nicht vom echten Testtablet
 - [ ] Performance-Check unter Dauerlast (Kugel-Animation + Piper-Synthese gleichzeitig) nicht gesondert gemessen
 
 ---

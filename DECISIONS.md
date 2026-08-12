@@ -927,3 +927,76 @@ für `PackageManager` unsichtbar).
   `shortcuts.xml`/App-Actions-Definition hin zu inspizieren – keine
   Sicherheitsumgehung, nur eine öffentliche Ressourcen-Datei lesen, aber
   bisher nicht gemacht.
+
+---
+
+## ADR-034: Gradle-Build-Flavor-Grundgerüst für ADR-032 (Phase D)
+**Datum:** 2026-08-12 | **Status:** Akzeptiert – reine Scaffolding, kein lokaler LLM-Pfad
+
+**Kontext:** ADR-032 legt die Zwei-Flavor-Architektur konzeptionell fest
+(`standard` mit Claude API, `ngo` ohne), aber ohne konkrete Gradle-Umsetzung.
+Diese ADR hält die tatsächlich gewählte Struktur fest – noch **ohne**
+`GemmaConversation` oder sonstigen lokalen Konversations-Code (das bleibt
+eine spätere Phase, abhängig vom Stand des Llama-3.2-3B-Finetunings).
+
+**Entscheidung:**
+
+1. **Flavor-Dimension `"distribution"`** mit `standard` (Default-Verhalten,
+   kein Suffix – bestehende `dev.lina`-Installationen bei Testnutzer:innen
+   dürfen nicht brechen) und `ngo` (`applicationIdSuffix = ".ngo"`,
+   `versionNameSuffix = "-ngo"` – beide Varianten können nebeneinander auf
+   einem Testgerät installiert sein).
+2. **`CLAUDE_API_KEY` wandert vom `defaultConfig` in die Flavor-Blöcke.**
+   `standard` liest ihn wie bisher aus `local.properties`. `ngo` setzt ihn
+   **hart auf `""`**, unabhängig vom Inhalt von `local.properties` – ein in
+   der Dev-Umgebung für den `standard`-Flavor gesetzter Key darf niemals
+   versehentlich in einen NGO-Build durchsickern.
+3. **Anthropic-SDK-Dependency nur `standardImplementation`.** Damit
+   `ClaudeConversation.kt` (einzige Datei mit `com.anthropic.*`-Imports) für
+   den `ngo`-Flavor nicht mehr auf dem Klassenpfad ist, zieht sie aus
+   `src/main/kotlin/` nach `src/standard/kotlin/` um (Kotlin-Android-Plugin
+   erkennt `src/<flavorName>/kotlin/` automatisch als zusätzliches
+   Source-Set, keine weitere Gradle-Konfiguration nötig).
+4. **`ConversationEngineProvider` als Flavor-Seam.** `LauncherActivity`
+   (geteilter Code) darf `ClaudeConversation` nicht mehr direkt referenzieren
+   – das würde die `ngo`-Kompilierung brechen. Stattdessen ruft sie
+   `ConversationEngineProvider.create(...)` auf; **dieselbe** Funktion
+   existiert wortgleich als `object` einmal in `src/standard/` (baut
+   `ClaudeConversation`) und einmal in `src/ngo/` (liefert immer `null`).
+   Beim Kompilieren einer Variante wird `src/main/` mit genau einem der
+   beiden Flavor-Source-Sets gemerged – der Compiler sieht pro Variante nur
+   eine Implementierung. Kein gemeinsames Interface in `src/main/` nötig,
+   nur identische Signatur.
+5. **Kein neuer Laufzeit-Zweig.** Der `ngo`-Flavor braucht keine einzige
+   Änderung an `LauncherActivity`s Verhalten: `claude == null` ist bereits
+   der gehärtete Pfad für "kein API-Key konfiguriert" (z.B. beim
+   Dokument-Vorlesen: "Zum Vorlesen von Dokumenten brauche ich eine
+   Internetverbindung..."). Der `ngo`-Flavor erzwingt über
+   `ConversationEngineProvider` lediglich strukturell denselben Zustand, statt
+   sich auf eine leere `local.properties` zu verlassen.
+
+**Verifiziert:** `./gradlew testStandardDebugUnitTest testNgoDebugUnitTest`
+und `./gradlew assembleDebug` (Aggregat-Task, baut beide Varianten) grün.
+APK-Vergleich bestätigt die Trennung: `app-standard-debug.apk` enthält
+`com/anthropic`-Referenzen in 5 dex-Dateien (~20MB in zwei zusätzlichen
+dex-Dateien), `app-ngo-debug.apk` enthält keine einzige – kein Fall von
+"Key leer, Code trotzdem mitgeschleppt".
+
+**Konsequenzen:**
+- `./gradlew testDebugUnitTest` (flavor-los) existiert nicht mehr – CLAUDE.md
+  und `.github/workflows/build.yml` aktualisiert auf
+  `testStandardDebugUnitTest`/`testNgoDebugUnitTest`. `assembleDebug` und
+  `lint<Flavor>Debug` bleiben/wurden entsprechend angepasst.
+- CI baut und testet ab jetzt **beide** Flavors bei jedem PR – ein
+  versehentlicher Anthropic-Import in geteiltem Code (`src/main/`) fällt
+  sofort als Kompilierfehler im `ngo`-Zweig auf, nicht erst beim NGO-Release.
+- **Weiterhin offen (aus ADR-032 übernommen, hier nicht entschieden):**
+  Websuche/Nachrichten (ADR-024) hat im `ngo`-Flavor keine Entsprechung –
+  aktuell fällt "was gibt es Neues" dort auf die generische
+  "Das habe ich nicht verstanden"-Meldung zurück (kein Absturz, aber
+  irreführend). Dokument-Vision hat im `ngo`-Flavor ebenfalls keine
+  Entsprechung (identisch zum bereits vorhandenen "kein Internet"-Text).
+  Beides bewusst nicht in dieser Phase gelöst – siehe TODO.md.
+- Kein `GemmaConversation` in dieser Phase: `ConversationEngineProvider` im
+  `ngo`-Flavor ist ein reiner Platzhalter (`create(...) = null`). Das ist der
+  Anschlusspunkt für Phase E, sobald ein finegetunter On-Device-Pfad steht.

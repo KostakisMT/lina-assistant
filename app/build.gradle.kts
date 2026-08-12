@@ -17,19 +17,50 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        // Claude API Key aus local.properties (nicht im Git); leer = Ebene 2 aus
-        val localProps = Properties().apply {
-            val f = rootProject.file("local.properties")
-            if (f.exists()) f.inputStream().use { load(it) }
-        }
-        buildConfigField(
-            "String",
-            "CLAUDE_API_KEY",
-            "\"${localProps.getProperty("CLAUDE_API_KEY") ?: ""}\"",
-        )
-
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    // Zwei Build-Flavors statt Laufzeit-Fallback (ADR-032/034): die
+    // Modell-Assets eines künftigen lokalen LLM-Pfads sind mit mehreren GB
+    // zu groß, um beide Wege in einer APK auszuliefern – und NGO-Partner
+    // lehnen eine Anthropic-Anbindung im Prinzip ab (nicht nur "kein Key
+    // gesetzt"), siehe ADR-032-Kontext.
+    flavorDimensions += "distribution"
+    productFlavors {
+        // Bisheriges Verhalten unverändert: applicationId bleibt "dev.lina"
+        // (kein Suffix), damit bestehende Installationen bei Testnutzer:innen
+        // nicht brechen.
+        create("standard") {
+            dimension = "distribution"
+
+            // Claude API Key aus local.properties (nicht im Git); leer = Ebene 2 aus
+            val localProps = Properties().apply {
+                val f = rootProject.file("local.properties")
+                if (f.exists()) f.inputStream().use { load(it) }
+            }
+            buildConfigField(
+                "String",
+                "CLAUDE_API_KEY",
+                "\"${localProps.getProperty("CLAUDE_API_KEY") ?: ""}\"",
+            )
+        }
+        // Kein CLAUDE_API_KEY, kein Anthropic-SDK, kein Proxy, kein
+        // Kostenkontingent – ADR-020/021/022 entfallen für diesen Flavor
+        // komplett. Ebene 2 (freie Konversation, Dokument-Vision) bleibt
+        // dadurch aus – das ist der bestehende, bereits gehärtete
+        // `claude == null`-Pfad in LauncherActivity, kein Sonderfall.
+        create("ngo") {
+            dimension = "distribution"
+            applicationIdSuffix = ".ngo"
+            versionNameSuffix = "-ngo"
+
+            // Bewusst IMMER leer, unabhängig vom Inhalt von local.properties:
+            // der NGO-Flavor darf unter keinen Umständen einen Claude-API-Key
+            // mitbekommen, auch nicht versehentlich durch eine Dev-Umgebung,
+            // in der lokal ein Key für den standard-Flavor gesetzt ist.
+            buildConfigField("String", "CLAUDE_API_KEY", "\"\"")
         }
     }
 
@@ -97,8 +128,10 @@ dependencies {
     // STT – Vosk (offline, Deutsch)
     implementation("com.alphacephei:vosk-android:0.3.47")
 
-    // Claude API – freie Konversation (Ebene 2, siehe CLAUDE.md Vision)
-    implementation("com.anthropic:anthropic-java:2.34.0")
+    // Claude API – freie Konversation (Ebene 2, siehe CLAUDE.md Vision).
+    // Nur im standard-Flavor (ADR-032/034): der NGO-Flavor verzichtet bewusst
+    // auf jede Anthropic-Anbindung im Build, nicht nur auf den API-Key.
+    "standardImplementation"("com.anthropic:anthropic-java:2.34.0")
 
     // WorkManager (Background Sync)
     implementation("androidx.work:work-runtime-ktx:2.10.0")

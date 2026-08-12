@@ -244,6 +244,15 @@ Ohne AccessibilityService kein zuverlässiger eingehender Anruf per Sprache.
 
 ## Modulstruktur
 
+> Seit ADR-034 gibt es zwei Gradle-Build-Flavors (`standard`/`ngo`, ADR-032).
+> Alles unten liegt in `src/main/` und ist geteilter Code für beide Flavors.
+> Die Claude-API-Anbindung ist die einzige Ausnahme: `ClaudeConversation.kt`
+> liegt in `app/src/standard/kotlin/dev/lina/core/llm/` (nicht `src/main/`),
+> daneben in `app/src/ngo/kotlin/dev/lina/core/llm/` ein
+> `ConversationEngineProvider`-Gegenstück ohne Cloud-Anbindung. Ein künftiges
+> `GemmaConversation` (ADR-032, noch nicht gebaut) gehört ebenfalls unter
+> `src/ngo/`.
+
 ```
 app/src/main/kotlin/dev/lina/
 ├── core/
@@ -568,10 +577,13 @@ und der nebenbei das Gerät bedient und im Alltag unterstützt.
 ## Docs-Regeln für Claude Code
 
 **Tests:** Reine JVM-Tests liegen in `app/src/test/` und laufen mit
-`./gradlew testDebugUnitTest` – die CI führt sie bei jedem PR aus. Parser und
-Intent-Erkennung gehören dorthin: Sie entscheiden, was Lina tut, und die
-Muster-Reihenfolge im `LocalCommandResolver` ist regressionsanfällig. Alles,
-was `Context` braucht, bleibt vorerst ungetestet (kein Robolectric im Projekt).
+`./gradlew testStandardDebugUnitTest testNgoDebugUnitTest` – seit den
+Build-Flavors (ADR-034) gibt es kein flavor-loses `testDebugUnitTest` mehr,
+die CI führt beide bei jedem PR aus. Parser und Intent-Erkennung gehören
+dorthin: Sie entscheiden, was Lina tut, und die Muster-Reihenfolge im
+`LocalCommandResolver` ist regressionsanfällig. Alles, was `Context` braucht,
+bleibt vorerst ungetestet (kein Robolectric im Projekt). `./gradlew
+assembleDebug` bleibt dagegen gültig (Aggregat-Task für beide Flavors).
 
 **Nach JEDER abgeschlossenen Task** (alle drei liegen im Repo-Root, nicht in `docs/`):
 1. `CHANGELOG.md` → Was wurde gebaut/geändert?

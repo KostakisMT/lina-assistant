@@ -330,14 +330,25 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
   hat mit `onnxruntime-android` bereits eine ONNX-Runtime-Abhängigkeit;
   unterstützt Llama/Gemma/Qwen/Phi mit int4 fürs Mobile, dokumentierter
   LoRA-Adapter-Deploy-Weg über Olive) – noch keine Entscheidung
-- [ ] Build-Flavor-Grundgerüst (Gradle): NGO-Flavor ohne `CLAUDE_API_KEY`,
-  Proxy, Kostenkontingent – `ConversationEngine`-Interface dafür bereits
-  vorbereitet (`core/llm/ConversationEngine.kt`, 2026-08-04, reiner Refactor,
-  `ClaudeConversation` unverändertes Verhalten)
+- [x] Build-Flavor-Grundgerüst (Gradle, ADR-034, 2026-08-12): Flavor-Dimension
+  `distribution` mit `standard` (`dev.lina`, Claude API wie bisher) und `ngo`
+  (`dev.lina.ngo`, `CLAUDE_API_KEY` hart leer, Anthropic-SDK nur
+  `standardImplementation`). `ClaudeConversation.kt` nach `src/standard/`
+  verschoben; `ConversationEngineProvider` (identische Funktion, pro Flavor
+  eigener Rumpf) ist der einzige Andockpunkt in `LauncherActivity` – kein
+  direkter `ClaudeConversation`-Zugriff mehr im geteilten Code. Kein
+  `GemmaConversation` in dieser Phase, reine Scaffolding. Verifiziert:
+  `testStandardDebugUnitTest`+`testNgoDebugUnitTest`+`assembleDebug` grün,
+  APK-Vergleich bestätigt `com/anthropic` fehlt komplett im ngo-APK.
+  CI (`.github/workflows/build.yml`) und CLAUDE.md-Testbefehl angepasst
+  (`testDebugUnitTest` gibt es flavor-los nicht mehr).
 - [ ] Entscheidung Websuche-/Vision-Ersatz im NGO-Flavor (RSS-Fallback
   reaktivieren vs. Feature weglassen; Gemma-3n-Vision fürs Dokument-Vorlesen
   gegen Sonnet 5 prüfen – Risiko für eine Zielgruppe, die nicht gegenlesen
-  kann)
+  kann) – **weiterhin offen nach Phase D**: "was gibt es Neues" landet im
+  ngo-Flavor aktuell auf der generischen "nicht verstanden"-Meldung statt
+  einer klaren Erklärung, das war schon vor ADR-034 so und ist bewusst nicht
+  mitgelöst worden
 - [ ] Lizenz-Weitergabepflicht (Gemma Terms of Use) gegenüber dem
   NGO-Betreiber klären, bevor ein Gerät ausgeliefert wird
 - [ ] Gezielter Gerätetest (Latenz/Akku/Thermik) auf Dimensity-6300-Klasse –

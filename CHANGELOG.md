@@ -5,6 +5,53 @@
 
 ---
 
+## [2026-08-12] Phase D: Gradle-Build-Flavor-Grundgerüst standard/ngo (ADR-034)
+
+**Was:** Neue Gradle-Flavor-Dimension `distribution` mit `standard`
+(bisheriges Verhalten, `dev.lina`, Claude API aus `local.properties`) und
+`ngo` (`dev.lina.ngo`, `CLAUDE_API_KEY` hart auf `""`, Anthropic-SDK nur
+noch `standardImplementation`). `ClaudeConversation.kt` – die einzige Datei
+mit `com.anthropic.*`-Imports – von `src/main/kotlin/` nach
+`src/standard/kotlin/` verschoben. Neuer `ConversationEngineProvider`
+(identische Funktionssignatur, pro Flavor eigener Rumpf in `src/standard/`
+bzw. `src/ngo/`) ist jetzt der einzige Ort, an dem `LauncherActivity`
+(geteilter Code) die Ebene-2-Engine erzeugt – kein direkter
+`ClaudeConversation`-Zugriff mehr außerhalb des `standard`-Flavors möglich.
+Reine Scaffolding: kein `GemmaConversation`, kein lokaler LLM-Code in dieser
+Phase.
+
+**Warum:** Setzt ADR-032 (Zwei-Flavor-Architektur für NGO-Partner, die eine
+Anthropic-Anbindung grundsätzlich ablehnen) konkret in Gradle um. Der
+bisherige `claude == null`-Pfad (leerer API-Key) reichte für "kein
+Cloud-Zugriff" schon aus, aber nicht dafür, den Anthropic-Code komplett aus
+dem NGO-Build fernzuhalten – ein Audit der NGO-APK sollte keine
+Anthropic-Referenzen mehr finden.
+
+**Dateien:** `app/build.gradle.kts` (Flavor-Dimension, verschobener
+`buildConfigField`, `standardImplementation` für das Anthropic-SDK),
+`core/llm/ClaudeConversation.kt` (verschoben nach `src/standard/`),
+`core/llm/ConversationEngineProvider.kt` (neu, je einmal in `src/standard/`
+und `src/ngo/`), `ui/launcher/LauncherActivity.kt` (nutzt den Provider statt
+`ClaudeConversation` direkt), `.github/workflows/build.yml` (Task-Namen
+`testDebugUnitTest`→`testStandardDebugUnitTest`+`testNgoDebugUnitTest`,
+`lintDebug`→`lintStandardDebug`+`lintNgoDebug`, Report-Pfade angepasst),
+`CLAUDE.md` (Testbefehl, Modulstruktur-Hinweis), `DECISIONS.md` (ADR-034),
+`TODO.md`.
+
+**Verifiziert:** `./gradlew testStandardDebugUnitTest testNgoDebugUnitTest`
+und `./gradlew assembleDebug` (baut beide Varianten) grün.
+`unzip`+dex-Grep bestätigt: `app-standard-debug.apk` enthält
+`com/anthropic`-Referenzen (in 5 dex-Dateien, zwei davon ~10MB nur dafür),
+`app-ngo-debug.apk` enthält keine einzige.
+
+**Offen:** Websuche/Nachrichten (ADR-024) und Dokument-Vision (ADR-018) haben
+im `ngo`-Flavor weiterhin keine Entsprechung – bewusst nicht in dieser Phase
+gelöst (siehe TODO.md, war schon vorher als offene Frage in ADR-032
+vermerkt). `GemmaConversation` selbst ist eine spätere Phase, abhängig vom
+Stand des Llama-3.2-3B-Finetunings.
+
+---
+
 ## [2026-08-12] Feature: Helfer-Anruf per Be My Eyes (ADR-033)
 
 **Was:** Neuer Sprachbefehl ("ruf einen Helfer an", "Be My Eyes", "hilfe

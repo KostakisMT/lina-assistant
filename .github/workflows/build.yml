@@ -37,23 +37,27 @@ jobs:
       - name: AAR laden (ohne Sprachmodelle)
         run: ./scripts/download-models.sh --libs-only
 
-      - name: Bauen
+      # assembleDebug bleibt trotz Build-Flavors (ADR-034) gültig – es ist
+      # ein Aggregat-Task, der beide Varianten baut (standardDebug + ngoDebug).
+      - name: Bauen (standard + ngo)
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # Reine JVM-Tests (Parser, Intent-Erkennung) – kein Emulator nötig
-      - name: Unit-Tests
-        run: ./gradlew testDebugUnitTest --no-daemon
+      # Reine JVM-Tests (Parser, Intent-Erkennung) – kein Emulator nötig.
+      # Beide Flavors einzeln, damit ein Bruch der Flavor-Trennung (z.B.
+      # versehentlich ein Anthropic-Import in geteiltem Code) sofort auffällt.
+      - name: Unit-Tests (standard + ngo)
+        run: ./gradlew testStandardDebugUnitTest testNgoDebugUnitTest --no-daemon
 
       - name: Testbericht sichern
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-bericht
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: app/build/reports/tests/test*DebugUnitTest/
           if-no-files-found: ignore
 
-      - name: Android-Lint
-        run: ./gradlew lintDebug --no-daemon
+      - name: Android-Lint (standard + ngo)
+        run: ./gradlew lintStandardDebug lintNgoDebug --no-daemon
         continue-on-error: true
 
       - name: Lint-Bericht sichern
@@ -61,5 +65,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: lint-bericht
-          path: app/build/reports/lint-results-debug.html
+          path: app/build/reports/lint-results-*.html
           if-no-files-found: ignore

@@ -48,8 +48,8 @@ import dev.lina.core.contacts.FuzzyContactMatcher
 import dev.lina.BuildConfig
 import dev.lina.core.intent.LocalCommandResolver
 import dev.lina.core.intent.ResolvedIntent
-import dev.lina.core.llm.ClaudeConversation
 import dev.lina.core.llm.ConversationEngine
+import dev.lina.core.llm.ConversationEngineProvider
 import dev.lina.core.llm.DocumentReadResult
 import dev.lina.core.llm.LinaReply
 import dev.lina.core.llm.SuggestedCalendarEvent
@@ -583,7 +583,7 @@ class LauncherActivity : ComponentActivity() {
             emptyList()
         }
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        claude = ClaudeConversation(
+        claude = ConversationEngineProvider.create(
             BuildConfig.CLAUDE_API_KEY,
             contactNames = names,
             interests = prefs.getString(PREF_INTERESTS, "") ?: "",

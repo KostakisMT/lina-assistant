@@ -35,6 +35,13 @@ War hier mit Priorität hoch gelistet. Vollständig offline über `AlarmManager`
 deutsches Zeitparsing, Claude-Fallback für verstümmelte Eingaben. Kleinere
 Restpunkte (Löschen einzelner Erinnerungen per Sprache) siehe TODO.md.
 
+### ~~Helfer-Anruf (Be My Eyes)~~ ✅ 2026-08-12 (ADR-033)
+Live-Videoanruf zu einem sehenden Freiwilligen für alles, was das
+Dokument-Vorlesen nicht abdeckt (Objekte, Umgebung, Rückfragen in Echtzeit).
+Be My Eyes hat keine offene Anruf-API – `HelperCallLauncher` öffnet
+stattdessen nur die App (App-Handoff), ein Tap auf „Call a Volunteer" bleibt
+bei der Nutzer:in. Restpunkt: Gerätetest, siehe TODO.md.
+
 ---
 
 ## Geplant

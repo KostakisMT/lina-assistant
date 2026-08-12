@@ -12,6 +12,7 @@ class LocalCommandResolver : IntentResolver {
             ?: resolveCalendar(normalized)
             ?: resolveReminder(normalized)
             ?: resolveContactImport(normalized)
+            ?: resolveHelperCall(normalized)
             ?: resolveCall(normalized)
             ?: resolveSms(normalized)
             ?: resolveDocument(normalized)
@@ -100,6 +101,25 @@ class LocalCommandResolver : IntentResolver {
         input.matches(Regex(""".*kontakte.*(?:aus einer|aus der)\s+datei\s+(?:importieren|laden).*""")) ||
             input.matches(Regex(""".*vcard.*(?:importieren|laden).*""")) ->
             ResolvedIntent.ImportVcardContacts
+        else -> null
+    }
+
+    /**
+     * Menschliche Sehhilfe per Be My Eyes (ADR-033). Steht VOR resolveCall,
+     * sonst würde "ruf einen Helfer an" dessen Kontaktname-Muster treffen
+     * (Kontaktsuche nach "einen Helfer"). Lina kann den Anruf nicht selbst
+     * absetzen – Be My Eyes hat keine offene API dafür (nur das umgekehrte
+     * "Specialized Help"-Programm für Unternehmen) – sondern öffnet nur die
+     * App; der letzte Tap auf "Call a Volunteer" bleibt bei der Nutzer:in.
+     */
+    private fun resolveHelperCall(input: String): ResolvedIntent? = when {
+        input.matches(Regex(""".*\bbe my eyes\b.*""")) ||
+            input.matches(
+                Regex(""".*\b(?:ruf|rufe|hol|öffne|starte)\w*\b.*\b(?:helfer\w*|freiwilligen)\b.*""")
+            ) ||
+            input.matches(Regex(""".*\bhilfe\s+beim\s+sehen\b.*""")) ||
+            input.matches(Regex(""".*\bsehende\s+hilfe\b.*""")) ->
+            ResolvedIntent.CallHelper
         else -> null
     }
 

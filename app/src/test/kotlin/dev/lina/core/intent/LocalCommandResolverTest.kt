@@ -28,6 +28,26 @@ class LocalCommandResolverTest {
         assertEquals(ResolvedIntent.Call("arundhati"), resolver.resolve("ruf mal arundhati an"))
     }
 
+    // ------------------------------------------------- Helfer-Anruf (ADR-033)
+
+    @Test
+    fun `Helfer-Anruf per Be My Eyes`() {
+        assertEquals(ResolvedIntent.CallHelper, resolver.resolve("ruf einen helfer an"))
+        assertEquals(ResolvedIntent.CallHelper, resolver.resolve("ruf einen freiwilligen an"))
+        assertEquals(ResolvedIntent.CallHelper, resolver.resolve("hol be my eyes"))
+        assertEquals(ResolvedIntent.CallHelper, resolver.resolve("ich brauche hilfe beim sehen"))
+        assertEquals(ResolvedIntent.CallHelper, resolver.resolve("sehende hilfe"))
+    }
+
+    @Test
+    fun `Helfer-Anruf schlaegt normalen Kontaktanruf`() {
+        // Abgrenzung: "ruf einen Helfer an" darf nicht als Kontaktsuche nach
+        // dem Namen "einen Helfer" landen (resolveHelperCall steht vor
+        // resolveCall in der Kette).
+        assertEquals(ResolvedIntent.CallHelper, resolver.resolve("ruf einen helfer an"))
+        assertEquals(ResolvedIntent.Call("boris"), resolver.resolve("ruf boris an"))
+    }
+
     @Test
     fun `Anrufsteuerung`() {
         assertEquals(ResolvedIntent.AcceptCall, resolver.resolve("annehmen"))

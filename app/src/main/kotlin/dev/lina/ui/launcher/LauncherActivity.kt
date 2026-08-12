@@ -74,6 +74,7 @@ import dev.lina.feature.news.NewsSyncWorker
 import dev.lina.feature.sms.SmsReader
 import dev.lina.feature.sms.SmsSender
 import dev.lina.feature.document.DocumentCamera
+import dev.lina.feature.helper.HelperCallLauncher
 import dev.lina.core.text.GermanCalendarNames
 import dev.lina.feature.calendar.CalendarManager
 import dev.lina.feature.reminder.ReminderManager
@@ -95,6 +96,7 @@ class LauncherActivity : ComponentActivity() {
     private var piperEngine: PiperTtsEngine? = null
     private var claude: ConversationEngine? = null
     private var documentCamera: DocumentCamera? = null
+    private var helperCallLauncher: HelperCallLauncher? = null
     /** Nur während des Dokument-Folgefensters im RAM – wird danach verworfen. */
     private var lastDocumentImage: ByteArray? = null
     /** Im Dokument erkannter Termin, während auf die Ja/Nein-Antwort gewartet wird. */
@@ -1779,6 +1781,10 @@ class LauncherActivity : ComponentActivity() {
             audiobookManager?.listChapters()
             "Kapitel werden aufgelistet…"
         }
+        is ResolvedIntent.CallHelper -> {
+            val launcher = helperCallLauncher ?: HelperCallLauncher(this).also { helperCallLauncher = it }
+            launcher.open().spokenMessage
+        }
         is ResolvedIntent.ReadDocument -> {
             readDocumentAloud()
             "" // Ansagen macht readDocumentAloud selbst
@@ -1904,6 +1910,7 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.AcceptCall -> "AcceptCall"
         is ResolvedIntent.RejectCall -> "RejectCall"
         is ResolvedIntent.HangUp -> "HangUp"
+        is ResolvedIntent.CallHelper -> "CallHelper"
         is ResolvedIntent.ReadDocument -> "ReadDocument"
         is ResolvedIntent.SetReminder -> "SetReminder"
         is ResolvedIntent.SetReminderAt -> "SetReminderAt(${intent.isoZeit})"

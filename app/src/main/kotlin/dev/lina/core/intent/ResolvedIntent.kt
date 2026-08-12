@@ -31,6 +31,8 @@ sealed class ResolvedIntent {
     data object RejectCall : ResolvedIntent()
     data object HangUp : ResolvedIntent()
     data object ReadDocument : ResolvedIntent()
+    /** Menschliche Sehhilfe per Be My Eyes (ADR-033) – öffnet nur die App, Lina kann den Anruf nicht selbst absetzen. */
+    data object CallHelper : ResolvedIntent()
     data class SetReminder(val rawInput: String) : ResolvedIntent()
     /** Von Claude aufgelöste Erinnerung (ISO-Zeitpunkt statt Rohtext). */
     data class SetReminderAt(

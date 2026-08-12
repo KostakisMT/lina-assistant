@@ -300,6 +300,8 @@ app/src/main/kotlin/dev/lina/
 │   │   └── PlaybackStateStore.kt    # Fortschritt persistent (inkl. Kapitel)
 │   ├── document/
 │   │   └── DocumentCamera.kt        # CameraX Rückkamera, eigener Lifecycle
+│   ├── helper/
+│   │   └── HelperCallLauncher.kt    # Öffnet Be My Eyes (App-Handoff, ADR-033)
 │   ├── contactimport/
 │   │   ├── ContactImportManager.kt  # Orchestriert SIM-/vCard-Import (Dedup+Write)
 │   │   └── ContactImportStore.kt    # EncryptedSharedPreferences: SIM-Fingerabdruck
@@ -403,6 +405,24 @@ Dokument liegt im festen Rahmen vor dem Tablet (Rückkamera).
 > Das Bild verlässt das Gerät (Cloud-Vision) und wird **nicht** gespeichert –
 > nur transient im RAM. Einwilligung siehe WARTUNG.md.
 
+### Helfer-Anruf per Be My Eyes (ADR-033)
+Ergänzt das Dokument-Vorlesen um alles, was ein einzelnes Foto nicht abdeckt
+(Objekte, Umgebung, Rückfragen in Echtzeit) – per Live-Videoanruf zu einem
+sehenden Freiwilligen.
+
+| Befehl | Aktion |
+|---|---|
+| "Ruf einen Helfer an" / "Be My Eyes" / "Hilfe beim Sehen" | Öffnet die App Be My Eyes |
+
+> Be My Eyes hat **keine offene API**, um einen Anruf ins Freiwilligennetzwerk
+> auszulösen (nur das umgekehrte "Specialized Help"-Programm für
+> Unternehmen). Lina öffnet daher nur die App (App-Handoff) – der letzte Tap
+> auf "Call a Volunteer" bleibt bei der Nutzer:in, was zu Leitprinzip 1 passt
+> (Be My Eyes ist selbst TalkBack-optimiert). Fehlt die App, öffnet Lina
+> stattdessen die Play-Store-Seite statt selbst zu installieren. Externe
+> Abhängigkeit – muss vor der Übergabe separat installiert sein. Einwilligung
+> (Live-Video an eine anonyme Person) siehe WARTUNG.md.
+
 ### Schlafmodus
 | Befehl | Aktion |
 |---|---|
@@ -465,6 +485,7 @@ bleibt für den Nutzer selbst die einzige Schnittstelle.
 - Dauerbetrieb über mehrere Stunden/über Nacht verifizieren (Lenovo/ZUI Battery-Killer)
 - STT-Robustheit bei Raumdistanz verbessern (Whisper-Verhörer bei Befehlen)
 - Dokument-Termin-Erkennung mit einem echten Dokument (Datum/Frist) am Gerät verifizieren – bisher nur der unveränderte Negativ-Pfad bestätigt
+- Helfer-Anruf (ADR-033) am Gerät verifizieren: Be My Eyes installieren, "ruf einen Helfer an" testen, Fallback-Pfad ohne installierte App prüfen
 
 ## Vision (Nordstern – bestimmt die Priorisierung von Phase 2+)
 

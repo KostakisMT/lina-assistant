@@ -5,6 +5,37 @@
 
 ---
 
+## [2026-08-12] Feature: Helfer-Anruf per Be My Eyes (ADR-033)
+
+**Was:** Neuer Sprachbefehl ("ruf einen Helfer an", "Be My Eyes", "hilfe
+beim sehen" u.ä.) öffnet die Be-My-Eyes-App, damit die Nutzer:in dort per
+Videoanruf einen sehenden Freiwilligen erreicht. Vorher recherchiert: Be My
+Eyes hat keine offene API, um einen Anruf ins Freiwilligennetzwerk
+auszulösen (nur das umgekehrte "Specialized Help"-Partnerprogramm für
+Unternehmen) – umgesetzt wurde deshalb ein reiner App-Handoff
+(`PackageManager.getLaunchIntentForPackage`), der letzte Tap auf "Call a
+Volunteer" bleibt bei der Nutzer:in. Fehlt die App, öffnet Lina stattdessen
+die Play-Store-Seite statt selbst zu installieren.
+
+**Warum:** Sinnvolle Ergänzung zum Dokument-Vorlesen (ADR-018) für alles,
+was ein einzelnes Foto nicht abdeckt (Objekte, Umgebung, Rückfragen in
+Echtzeit) – auf Nutzerwunsch vor Phase D (Gradle-Build-Flavor) vorgezogen.
+
+**Dateien:** `feature/helper/HelperCallLauncher.kt` (neu),
+`core/intent/ResolvedIntent.kt` (+`CallHelper`),
+`core/intent/LocalCommandResolver.kt` (+`resolveHelperCall()`, steht vor
+`resolveCall`), `ui/launcher/LauncherActivity.kt` (Verdrahtung),
+`AndroidManifest.xml` (`<queries>` für Paketsichtbarkeit ab Android 11),
+`test/kotlin/dev/lina/core/intent/LocalCommandResolverTest.kt` (neue Tests),
+`DECISIONS.md` (ADR-033), `TODO.md`, `CLAUDE.md`, `WARTUNG.md`, `IDEEN.md`.
+
+**Offen:** Am echten Gerät noch nicht getestet (weder der Erfolgs- noch der
+"App fehlt"-Pfad). Stufe 2 (Deep-Link ohne Tap, über dieselbe Route wie
+Google Assistants App Action) bleibt ein mögliches Upgrade, sobald jemand
+die BME-APK auf ihre `shortcuts.xml` hin inspiziert hat.
+
+---
+
 ## [2026-08-04] Neuer Bestwert 94,4% (Llama-3.2-3B auf 361-Beispiele-Datensatz); Datensatz-Skalierung an ihrer Grenze
 
 **Was:** Neu trainiert auf dem durch lokale Generierung gewachsenen

@@ -40,6 +40,16 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
    (nicht nur flüchtig wie das bisherige Vorlesen der Kontaktnamen). Die
    Nutzer:in sollte wissen, dass „Ja" auf diese Nachfrage echte Kontakte
    hinzufügt – ein Rückgängig gibt es nur manuell in der Kontakte-App.
+7. **Helfer-Anruf (seit 2026-08-12, ADR-033):** Sagt die Nutzer:in „ruf einen
+   Helfer an" (oder ähnlich), öffnet Lina die App **Be My Eyes**, damit dort
+   ein Videoanruf zu einer sehenden, freiwilligen und für Lina/den Entwickler
+   **nicht einsehbaren** Person startet. Anders als beim Dokument-Vorlesen
+   ist das kein einzelnes Foto, sondern ein **Live-Video** aus der Wohnung an
+   eine fremde Person – das sollte vorab besonders klar sein. Be My Eyes
+   selbst ist eine separate, kostenlose App (Fremdanbieter, spendenfinanziert)
+   und muss vor der Übergabe installiert sein; Lina öffnet ohne sie nur die
+   Play-Store-Seite. Lina selbst sieht, hört oder speichert vom eigentlichen
+   Anruf nichts – der läuft komplett innerhalb von Be My Eyes.
 
 Am besten kurz und einfach erklären und die Zustimmung schriftlich oder als
 Sprachnotiz festhalten.

@@ -419,6 +419,31 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 
 ---
 
+## 🤝 Helfer-Anruf per Be My Eyes (ADR-033) — P2 Mittel (Restpunkte)
+
+- [x] Recherche: keine offene Anruf-API bei Be My Eyes, nur umgekehrtes
+  "Specialized Help"-Partnerprogramm – App-Handoff (Stufe 1) statt
+  Deep-Link/AccessibilityService gewählt (2026-08-12)
+- [x] `feature/helper/HelperCallLauncher.kt`: öffnet Be My Eyes per
+  Launch-Intent, Play-Store-Seite als Fallback bei fehlender Installation
+  (2026-08-12)
+- [x] `ResolvedIntent.CallHelper` + `LocalCommandResolver.resolveHelperCall()`
+  (steht vor `resolveCall`, sonst frisst dessen Kontaktname-Muster "ruf
+  einen Helfer an") (2026-08-12)
+- [x] `<queries>`-Eintrag in AndroidManifest.xml für Paketsichtbarkeit ab
+  Android 11 (2026-08-12)
+- [x] Unit-Tests (Trigger-Erkennung + Abgrenzung zu normalem Kontaktanruf),
+  `./gradlew testDebugUnitTest` + `assembleDebug` grün (2026-08-12)
+- [x] WARTUNG.md-Einwilligung ergänzt (Live-Video an eine anonyme Person)
+  (2026-08-12)
+- [ ] Am Gerät verifiziert: Be My Eyes installiert, "ruf einen Helfer an"
+  öffnet die App tatsächlich; Fallback-Pfad (App fehlt) noch nicht getestet
+- [ ] Stufe 2 (Deep-Link ohne Tap): BME-APK auf `shortcuts.xml`/App-Actions
+  hin inspizieren, sobald Zeit ist – kein Sicherheitsthema, nur eine
+  öffentliche Ressourcen-Datei lesen
+
+---
+
 ## 🟢 Ambiente-UI für Angehörige/Besucher + Querformat — P3 Niedrig (Restpunkte)
 
 - [x] `TtsEngine.isSpeaking()` im Interface + `AndroidTtsEngine`-Implementierung (2026-07-26)

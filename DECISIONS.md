@@ -862,3 +862,68 @@ MediaPipe. Noch keine Entscheidung, nur als Alternative vermerkt.
 - Frühere ADR-032-Annahme "ein Gemma-3n-Adapter reicht" ist überholt; die
   Finetuning-Strategie oben (Trainingsdaten-Generator, Eval-Aufbau) bleibt
   inhaltlich gültig, nur das Zielmodell hat sich geändert.
+
+---
+
+## ADR-033: Helfer-Anruf per Be My Eyes – App-Handoff statt Anruf-API
+**Datum:** 2026-08-12 | **Status:** Akzeptiert
+
+**Kontext:** Be My Eyes verbindet blinde/sehbehinderte Menschen per
+Live-Videoanruf mit sehenden Freiwilligen – eine sinnvolle Ergänzung zum
+Dokument-Vorlesen (ADR-018) für alles, was ein einzelnes Foto nicht abdeckt
+(Objekte, Umgebung, Rückfragen in Echtzeit). Recherche vor der Umsetzung:
+Be My Eyes hat **keine offene API**, mit der eine Drittanbieter-App einen
+Anruf ins Freiwilligennetzwerk auslösen kann. Das einzige öffentliche
+API-Programm ("Specialized Help") läuft umgekehrt – Unternehmen wie
+Microsoft/Google werden von BME-Nutzer:innen angerufen, nicht der andere
+Weg. Be My Eyes bewirbt aber eine Google-Assistant-Integration ("Ok Google,
+ruf einen Freiwilligen") als "no button-pressing required" – dahinter steckt
+vermutlich ein Android App Action/Deep-Link, dessen genaue Intent-Struktur
+aber nicht öffentlich dokumentiert und nur durch Inspektion der BME-APK zu
+ermitteln wäre.
+
+**Entscheidung:** Drei denkbare Integrationsstufen abgewogen –
+(1) App-Handoff per `PackageManager.getLaunchIntentForPackage`, ein Tap der
+Nutzer:in bleibt; (2) denselben Deep-Link feuern, den Assistants App Action
+auslöst, sobald dessen Struktur bekannt ist; (3) `LinaAccessibilityService`
+den "Call a Volunteer"-Button selbst suchen und antippen lassen, wie für
+Wolt/Rewe/Picnic vorgesehen (CLAUDE.md, noch nicht gebaut). Umgesetzt wird
+**Stufe 1**. Begründung: Be My Eyes ist selbst für blinde Nutzer:innen
+bedienbar (TalkBack-optimiert), der verbleibende eine Tap ist explizit durch
+Leitprinzip 1 gedeckt ("Voice-First, nicht Voice-Only – Touch ist optionaler
+Fallback"). Ein Live-Videoanruf zu einer unbekannten Person ist zudem
+folgenreicher als ein einzelnes Foto an Claude Vision – dass die Nutzer:in
+den Anruf selbst noch bestätigt, ist hier ein Feature, kein Kompromiss.
+Stufe 2 bleibt ein mögliches Upgrade (kein Tap mehr nötig), sobald die
+Deep-Link-Struktur aus der APK bekannt ist. Stufe 3 nur falls 1/2 nicht
+ausreichen – `LinaAccessibilityService` liest bislang nur Notifications,
+UI-Automation fremder Apps wäre hier Neuland und würde bei jedem
+BME-Update brechen können.
+
+**Umsetzung:** `feature/helper/HelperCallLauncher.kt` – öffnet Be My Eyes
+(`com.bemyeyes.bemyeyes`) per Launch-Intent, öffnet bei fehlender
+Installation stattdessen die Play-Store-Seite (kein automatischer Download).
+Neuer Ebene-1-Intent `ResolvedIntent.CallHelper` in `LocalCommandResolver`
+(Trigger u.a. "ruf einen Helfer an", "Be My Eyes", "hilfe beim sehen") –
+steht bewusst vor `resolveCall`, sonst würde "ruf einen Helfer an" als
+Kontaktname-Suche fehlinterpretiert. `AndroidManifest.xml` bekommt einen
+`<queries>`-Eintrag für `com.bemyeyes.bemyeyes` (ab Android 11/API 30 sonst
+für `PackageManager` unsichtbar).
+
+**Konsequenzen:**
+- Be My Eyes ist eine **externe Abhängigkeit**, die – anders als
+  Whisper/Piper/OpenWakeWord – nicht gebündelt werden kann. Muss vor der
+  Übergabe separat installiert sein (ONBOARDING.md/WARTUNG.md).
+- Kein neues Berechtigungs-/Kostenrisiko: keine neue `uses-permission`, kein
+  API-Key, keine Internetkosten für Lina selbst (der Videoanruf läuft
+  komplett innerhalb der BME-App).
+- Datenschutzlich eigenständig zu nennen (WARTUNG.md-Einwilligung ergänzt):
+  Live-Video aus der Wohnung an eine anonyme Person ist folgenreicher als
+  ein einzelnes Foto (ADR-018) – Lina selbst sieht oder speichert davon
+  nichts, das läuft vollständig innerhalb von Be My Eyes.
+- Kostenlos für die Nutzer:in (BME ist spendenfinanziert) – passt zum
+  Prinzip "dauerhaft kostenlos" ohne Zahlungsdaten in der App.
+- Offen: Stufe 2 (Deep-Link ohne Tap) erfordert, die BME-APK einmal auf die
+  `shortcuts.xml`/App-Actions-Definition hin zu inspizieren – keine
+  Sicherheitsumgehung, nur eine öffentliche Ressourcen-Datei lesen, aber
+  bisher nicht gemacht.

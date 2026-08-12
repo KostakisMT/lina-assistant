@@ -628,7 +628,7 @@ hatte diese Session bereits zwei ernsthafte Hänger-Bugs (beide behoben) – jed
 ---
 
 ## ADR-032: Lokaler Gemma-3n-Pfad als eigener Build-Flavor neben Claude API (nicht Ersatz); Finetuning-Strategie
-**Datum:** 2026-08-04 | **Status:** Teilweise umgesetzt (Mac-Pipeline steht, kein nutzbarer Adapter, kein Android-Code)
+**Datum:** 2026-08-04 | **Status:** Modellwahl korrigiert (Llama-3.2-3B statt Gemma-Familie), funktionierender Adapter liegt vor – kein Android-Code
 
 **Kontext:** Blindenvereine/NGOs, die als mögliche zukünftige Tester/Partner
 in Frage kommen (ADR-023 hält Kandidaten bewusst offen und unbenannt), lehnen
@@ -797,3 +797,68 @@ die Stelle, an der ein künftiges `GemmaConversation` andockt (Phase D).
 Phase D.5 (Formatkompatibilität eines Adapters fürs Gerät über MediaPipe/
 `ai-edge-torch`) bleibt unangetastet – ohne einen überhaupt wirksamen
 Adapter aus Phase C ist diese Frage noch nicht handlungsrelevant.
+
+**Update vom selben Tag – Modellwechsel, Durchbruch:**
+
+Der oben beschriebene erste Finetuning-Versuch (Gemma 3n) und ein Fallback-
+Versuch mit Gemma-3-270M (kleines, architektonisch normales Modell fürs
+Tool-Routing, Gemma 3n selbst nur prompt-basiert für freie Konversation)
+scheiterten beide: **neun** Trainingsläufe über zwei Modelle, jede
+Einzelvariable systematisch durchprobiert (LoRA-Keys, `scale`, Lernrate über
+vier Größenordnungen, `--mask-prompt`, Batch-Größe, Datensatzgröße, sogar
+4bit- vs. bf16-Basis) – alle divergierten im selben Muster. Code-Lektüre von
+`mlx_lm/tuner/trainer.py`/`datasets.py` ergab keinen Bug in der Maskierung.
+
+Tiefenrecherche (siehe TODO.md/README.md für Details) ergab: Llama-3.2-3B-
+Instruct ist die mit Abstand am breitesten unterstützte Architektur in
+mlx-lm (keine Gemma-Familien-Eigenheiten wie AltUp), wird von mehreren
+Quellen explizit als aktuell bestes Modell seiner Klasse für On-Device-
+Tool-Calling genannt, und hat Deutsch offiziell als eine von acht
+Kernsprachen trainiert (nicht nur inzidentell wie bei Gemma 3n). Ein
+bezahlter Cloud-GPU-Weg (RunPod + Axolotl/Unsloth, ~1-5 USD, hätte das
+Stabilitätsproblem wahrscheinlich am zuverlässigsten gelöst) wurde vom
+Nutzer explizit abgelehnt – **kostenlos/lokal bleibt die Vorgabe.**
+
+**Entscheidung (korrigiert obige Modellwahl):** Statt Gemma 3n selbst zu
+finetunen, wird **Llama-3.2-3B-Instruct als Router-Modell finegetuned**
+(Tool-Aufruf / Raumgespräch-Stille / `frei_gespraech()` = Weiterleitung),
+mit derselben mlx-lm-Pipeline, demselben Datensatz, denselben
+Trainingsparametern wie bei den gescheiterten Gemma-Versuchen – einzige
+Änderung war das Modell. Ergebnis: sauberere Konvergenz (Val Loss 3,01 →
+0,096 über 100 Iterationen), dann Divergenz durch Overfitting (klassisches
+Adam-Muster nach sehr niedrigem Loss, nicht dasselbe Phänomen wie bei den
+Gemma-Läufen) – behoben durch Early Stopping auf den Iter-100-Checkpoint.
+**Ergebnis gegen den gehaltenen Testsatz: 46/52 (88,5 %) korrekt**, gegenüber
+Nullwirkung (Adapter = Basismodell) bei jedem Gemma-Versuch.
+
+Gemma 3n bleibt wie ursprünglich vorgesehen unfinetuned/prompt-basiert für
+die freie Konversation (dort lag die Zero-Shot-Qualität im Mac-Spike schon
+bei 5/5) – nur die Rolle "Tool-Routing/Raumgespräch" wandert zu einem
+zweiten, kleineren, finegetunten Modell (Llama-3.2-3B). Das ist eine
+Zwei-Modell-Architektur auf dem Gerät statt der ursprünglich geplanten
+Ein-Modell-Lösung – Konsequenz unten.
+
+Nebenbefund für Phase D/E: ONNX Runtime GenAI (unterstützt Llama-2/3, Qwen,
+Gemma, Phi mit int4-Quantisierung fürs Mobile, fertige vorkonvertierte
+Pakete, dokumentierter separater LoRA-Adapter-Deploy-Weg über Olive) ist ein
+ernsthafter Kandidat gegenüber MediaPipe/LiteRT – Lina hat mit
+`onnxruntime-android` (Wake Word) bereits eine ONNX-Runtime-Abhängigkeit;
+eine Erweiterung wäre keine vierte native ML-Runtime im Projekt, anders als
+MediaPipe. Noch keine Entscheidung, nur als Alternative vermerkt.
+
+**Konsequenzen des Modellwechsels:**
+- Zwei lokale Modelle statt einem: Llama-3.2-3B (finegetuned, Tool-Routing)
+  + Gemma-3n-E2B/E4B (unfinetuned, freie Konversation) – mehr Speicherplatz
+  auf dem Gerät als ursprünglich geplant, aber Llama-3.2-3B-4bit ist mit
+  ~2GB RAM-Bedarf noch im Rahmen des 4GB-Zielgeräts, in Summe mit Gemma 3n
+  E2B (~2GB) knapp für 4GB-Geräte – **Speicherbudget für 4GB-Geräte muss in
+  Phase D/E genau geprüft werden**, war vorher (ein Modell) unkritischer.
+- Der halluzinierte-Werkzeug-Fall (`wetter_vorlesen()` für eine
+  Wetter-Erwähnung) zeigt: die Router-Ausgabe muss serverseitig/Kotlin-
+  seitig gegen die bekannte Tool-Liste validiert werden, nicht blind
+  ausgeführt – ein unbekannter Funktionsname muss sicher auf
+  `gespraech_beenden()`-artiges Verhalten zurückfallen, nie auf einen
+  Absturz oder eine Ausnahme laufen.
+- Frühere ADR-032-Annahme "ein Gemma-3n-Adapter reicht" ist überholt; die
+  Finetuning-Strategie oben (Trainingsdaten-Generator, Eval-Aufbau) bleibt
+  inhaltlich gültig, nur das Zielmodell hat sich geändert.

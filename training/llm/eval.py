@@ -6,7 +6,7 @@ Test-Zeile eine Antwort und vergleicht sie mit der ueber die gleiche
 classify()-Heuristik wie spike_check.py klassifizierten Zielantwort.
 
 Aufruf:
-    venv/bin/python eval.py [--adapter-path adapters/v1] [--model REPO_ID]
+    venv/bin/python eval.py [--adapter-path adapters/v1] [--model REPO_ID] [--data data]
 """
 
 import argparse
@@ -25,9 +25,10 @@ def main() -> None:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--adapter-path", default=None)
     parser.add_argument("--max-tokens", type=int, default=80)
+    parser.add_argument("--data", default="data", help="Verzeichnis mit test.jsonl")
     args = parser.parse_args()
 
-    test_path = HERE / "data" / "test.jsonl"
+    test_path = HERE / args.data / "test.jsonl"
     rows = [json.loads(line) for line in test_path.read_text().splitlines() if line.strip()]
 
     print(f"Lade {args.model} (adapter={args.adapter_path or '-'}) ...")

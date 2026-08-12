@@ -34,18 +34,21 @@ TOOL_NAMES = {
     "dokument_vorlesen",
     "stopp",
     "gespraech_beenden",
+    "frei_gespraech",
 }
 
 TOOL_CALL_RE = re.compile(r"^\s*([a-z_]+)\(([^)]*)\)\s*$")
 
 
 def classify(output: str) -> tuple[str, str | None]:
-    """Grobe Klassifikation: (typ, werkzeugname) mit typ in tool/silence/say."""
+    """Grobe Klassifikation: (typ, werkzeugname), typ in tool/silence/handoff/say."""
     match = TOOL_CALL_RE.match(output.strip())
     if match and match.group(1) in TOOL_NAMES:
         tool = match.group(1)
         if tool == "gespraech_beenden":
             return "silence", tool
+        if tool == "frei_gespraech":
+            return "handoff", tool
         return "tool", tool
     return "say", None
 

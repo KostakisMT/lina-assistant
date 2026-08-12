@@ -262,14 +262,74 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [x] Synthetischer Trainingsdaten-Generator (`training/llm/gen_dialogue.py`
   + `build_dataset.py`, Bootstrap über Claude API) – erste Testcharge 52
   Rohbeispiele erzeugt und in train/valid/test gesplittet (2026-08-04)
-- [~] LoRA-Finetuning-Durchlauf @claude – erster Versuch mit 39 Beispielen
-  lief durch (nach Fix für einen Gemma3n-AltUp-Absturz), aber der Adapter
-  ist noch zu schwach für einen messbaren Effekt; ein reproduzierbares
-  Problem bleibt offen (`self_attn.q_proj` bekommt keinen Gradienten, siehe
-  `training/llm/README.md`/ADR-032-Nachtrag). Nächster Schritt: Datensatz
-  auf mehrere hundert Beispiele skalieren, Lernrate senken (Divergenz bei
-  1e-4 auf diesem kleinen Datensatz beobachtet), ggf. `q_proj`-Befund als
-  Upstream-Issue bei `ml-explore/mlx-lm` melden
+- [x] LoRA-Finetuning-Durchlauf – neun Versuche mit Gemma 3n und Gemma-3-
+  270M divergierten alle (Details `training/llm/README.md`); Tiefenrecherche
+  ergab Modellwechsel als Ausweg. **Llama-3.2-3B-Instruct** (statt Gemma-
+  Familie) mit identischer Pipeline + Early Stopping (Iter 100): sauberer
+  Konvergenz, **46/52 (88,5 %) korrekt** gegen den gehaltenen Testsatz
+  (2026-08-04, ADR-032-Nachtrag „Durchbruch"). Modellwahl damit korrigiert:
+  Llama-3.2-3B als Router (Tool-Aufruf/Raumgespräch/Weiterleitung), Gemma 3n
+  bleibt unfinetuned für freie Konversation – Zwei-Modell-Architektur statt
+  einem Modell, siehe Konsequenzen im ADR.
+- [x] Feineres Early-Stopping untersucht (`--save-every 20`, neues
+  `sweep_checkpoints.py`) – ergab einen wichtigeren Befund als erhofft:
+  **Lauf-zu-Lauf-Varianz.** Ein zweiter Lauf mit identischer Konfiguration
+  (`llama_router_v2`) konvergierte klar schlechter (bestes Ergebnis 31/52,
+  59,6 %) als der erste (46/52, 88,5 %) – `mlx_lm.lora` setzt standardmäßig
+  keinen `--seed`. Zusätzlich: Val-Loss fiel in v2 durchgehend monoton,
+  während die Trefferquote zwischenzeitlich auf 0/20 einbrach (Iter 40-120)
+  – Loss ist für diese Aufgabe kein verlässlicher Stellvertreter für
+  Ausgabegenauigkeit. `adapters/llama_router_v1_iter100` bleibt der beste
+  Adapter (2026-08-04, Details `training/llm/README.md`).
+- [x] `gen_dialogue.py` auf lokale Generierung umgestellt (`--backend local`,
+  Standard, Llama-3.2-3B, kein API-Key noetig) – `--backend claude` bleibt
+  als Option. Dabei drei echte Bugs behoben (Endlosschleife ohne
+  Terminierungs-Limit, JSON-Array-Format zu fehleranfaellig fuer ein
+  3B-Modell → EINGABE:/AUSGABE:-Zeilenformat, woertliches Kopieren von
+  Platzhaltertext aus der Prompt-Beschreibung), Validierung verschaerft
+  (`re.fullmatch` statt `findall`, Dublettenprüfung), neues `--append`-Flag
+  fuer inkrementelles Anhaeufen ueber mehrere Laeufe (2026-08-04, Details
+  `training/llm/README.md`).
+- [x] Datensatz-Skalierung per lokaler `--append`-Generierung an ihre
+  praktische Grenze gefahren: erster Lauf +18 Beispiele (345 → 363), ein
+  zweiter Lauf danach ergab **0 neue Beispiele in jeder einzelnen Kategorie**
+  (0/5 bei allen 9 Werkzeugen, 0/15 Negative, 0/15 Persona) – der bestehende
+  Datensatz deckt praktisch alles ab, was ein 3B-Modell fuer diese engen
+  Kategorien natuerlicherweise produziert. Endgueltig bestaetigt: lokale
+  Generierung kann diesen 361er-Datensatz nicht weiter vergroessern, egal
+  wie das Versuchslimit oder der Prompt eingestellt sind (2026-08-04, Details
+  `training/llm/README.md`). Fuer weiteres Wachstum: Claude
+  (`--backend claude`, sobald wieder Guthaben vorhanden) oder manuell
+  geschriebene Beispiele (z.B. echte STT-Verhörer aus der Praxis).
+- [x] Neu trainiert auf dem 363er-Datensatz mit `--seed 0` (Empfehlung
+  befolgt) + `--save-every 20`: Val Loss diesmal durchgehend stabil (keine
+  Divergenz), Checkpoint-Sweep zeigt flaches Plateau 18/20 von Iter 20-300.
+  Volle Auswertung (Iter 200, 54er-Testsatz): **51/54 (94,4 %) korrekt** –
+  neuer Bestwert, löst `llama_router_v1_iter100` (88,5 %) ab. Dabei zwei
+  falsch beschriftete Trainingsbeispiele aus dem lokalen `--append`-Batch
+  gefunden und entfernt (Begrüßungen fälschlich als `sms_vorlesen()`/
+  `stopp()` gelabelt – `valid_tool_call()` prüft nur AUSGABE-Syntax, nicht
+  Input/Output-Konsistenz; 363 → 361 Rohbeispiele) (2026-08-04, Details
+  `training/llm/README.md`).
+- [x] Input/Output-Konsistenz-Check ergaenzt: erster Ansatz (Router-Prompt
+  selbst zur Klassifikation befragen) verworfen – Zirkelschluss, das
+  unfinetunte Basismodell ist beim Router-Task selbst schwach, Ertragsrate
+  brach von 94% auf 12% ein, weil GUTE Beispiele massenhaft abgelehnt wurden.
+  Ersetzt durch `is_generic_smalltalk()` – billiger Regex-Filter ohne
+  zusaetzlichen Modellaufruf, trifft gezielt den beobachteten Fehlerfall
+  (2026-08-04, Details `training/llm/README.md`).
+- [ ] Halluzinierte-Werkzeug-Fälle (z.B. erfundenes `wetter_vorlesen()`)
+  durch mehr Negativbeispiele adressieren, sobald die Datensatz-Skalierung
+  entblockt ist
+- [ ] Router-Ausgabe muss Kotlin-seitig gegen die bekannte Tool-Liste
+  validiert werden (unbekannter Funktionsname → sicherer Fallback, nie
+  Absturz) – Konsequenz aus dem Halluzinations-Fund oben
+- [ ] Speicherbudget für 4GB-Zielgeräte mit zwei Modellen (Llama-3.2-3B
+  ~2GB + Gemma-3n-E2B ~2GB RAM) prüfen – war mit einem Modell unkritischer
+- [ ] ONNX Runtime GenAI als Alternative zu MediaPipe/LiteRT prüfen (Lina
+  hat mit `onnxruntime-android` bereits eine ONNX-Runtime-Abhängigkeit;
+  unterstützt Llama/Gemma/Qwen/Phi mit int4 fürs Mobile, dokumentierter
+  LoRA-Adapter-Deploy-Weg über Olive) – noch keine Entscheidung
 - [ ] Build-Flavor-Grundgerüst (Gradle): NGO-Flavor ohne `CLAUDE_API_KEY`,
   Proxy, Kostenkontingent – `ConversationEngine`-Interface dafür bereits
   vorbereitet (`core/llm/ConversationEngine.kt`, 2026-08-04, reiner Refactor,

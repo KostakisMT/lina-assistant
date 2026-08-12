@@ -17,8 +17,14 @@
 #    Kandidat: eine Query-Normalisierung/-Skalierung ausserhalb des
 #    autodiff-getrackten Pfads, aehnlich dem direkten .weight-Zugriff bei
 #    AltUp). Deshalb hier bewusst nur v_proj - das trainiert nachweislich.
+# 3. Vier Trainingslaeufe (39 und 345 Beispiele, LR 1e-4 und 2e-5, mit und
+#    ohne --mask-prompt) divergierten alle im selben Muster: Loss faellt bis
+#    ca. Iter 40-80, steigt danach dauerhaft ueber den Ausgangswert. `scale`
+#    stand dabei immer auf mlx_lm's Default 20.0 - deutlich ueber der
+#    ueblichen LoRA-Praxis (effektiv eher 0,5-2, siehe mlx-lm-Issues zum
+#    scale-Parameter). Deshalb hier gesenkt auf 2.0.
 lora_parameters:
   rank: 8
   dropout: 0.0
-  scale: 20.0
+  scale: 2.0
   keys: ["self_attn.v_proj"]

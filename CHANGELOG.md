@@ -5,6 +5,171 @@
 
 ---
 
+## [2026-08-04] Neuer Bestwert 94,4% (Llama-3.2-3B auf 361-Beispiele-Datensatz); Datensatz-Skalierung an ihrer Grenze
+
+**Was:** Neu trainiert auf dem durch lokale Generierung gewachsenen
+Datensatz, diesmal mit `--seed 0` und `--save-every 20` von Anfang an: Val
+Loss durchgehend stabil (3,48 → 0,175 bei Iter 20, danach flach bis Iter
+300), Checkpoint-Sweep zeigt ein Plateau von 18/20 ueber fast den gesamten
+Lauf. Volle Auswertung (Iter 200, 54er-Testsatz): **51/54 (94,4 %) korrekt**
+– neuer Bestwert, loest den vorherigen (46/52, 88,5 %) ab, diesmal ueber das
+gesamte Training hinweg reproduzierbar statt nur an einem Iterationspunkt.
+Dabei zwei falsch beschriftete Trainingsbeispiele gefunden (Begruessungen
+faelschlich als `sms_vorlesen()`/`stopp()` gelabelt) und entfernt (363 → 361).
+
+Auf Nutzerwunsch einen automatisierten Input/Output-Konsistenz-Check
+ergaenzt. Erster Ansatz (den Router-Prompt selbst zur unabhaengigen
+Klassifikation befragen) live getestet und wieder verworfen: Zirkelschluss,
+das dabei genutzte unfinetunte Basismodell ist beim Router-Task selbst
+schwach (11/20 zero-shot) und lehnte deshalb massenhaft gute Beispiele ab
+(Ertragsrate 94% → 12%). Ersetzt durch `is_generic_smalltalk()` – ein
+billiger Regex-Filter ohne zusaetzlichen Modellaufruf, der gezielt den
+beobachteten Fehlerfall trifft.
+
+Ein weiterer `--append`-Lauf gegen den gewachsenen Datensatz ergab **0 neue
+Beispiele in jeder einzelnen Kategorie** – die endgueltige Bestaetigung,
+dass lokale Generierung diesen Datensatz aktuell nicht weiter vergroessern
+kann, unabhaengig von Versuchslimit oder Prompt.
+
+**Warum:** Fortsetzung des Router-Finetunings; Nutzerwunsch, den
+Konsistenz-Check zu ergaenzen, nachdem die zwei Fehlbeschriftungen gefunden
+wurden.
+
+**Dateien:** `training/llm/gen_dialogue.py` (Konsistenz-Check-Versuch +
+Ersatz), `training/llm/README.md`, `TODO.md`, `data/raw/dialogue_raw.json`
+(363 → 361, zwei Beispiele entfernt, gitignored).
+
+**Verifiziert:** `eval.py` gegen den vollen 54er-Testsatz (51/54).
+`sweep_checkpoints.py` gegen alle 15 gespeicherten Zwischenstaende.
+
+**Offen:** Datensatz-Skalierung braucht jetzt Claude (`--backend claude`,
+sobald wieder Guthaben vorhanden) oder manuell geschriebene Beispiele –
+lokale Generierung ist an dieser Stelle ausgereizt.
+
+---
+
+## [2026-08-04] `gen_dialogue.py` auf lokale Datengenerierung umgestellt (kein Anthropic-Guthaben mehr nötig)
+
+**Was:** `training/llm/gen_dialogue.py` generiert Trainingsdaten jetzt
+standardmäßig lokal über Llama-3.2-3B (`--backend local`, kein API-Key
+nötig) statt über die Claude API. `--backend claude` bleibt als Option für
+später. Dabei drei echte Bugs gefunden und behoben: (1) die
+Sammel-Schleife hatte kein Terminierungs-Limit – bei einem Modell, das
+durchgängig ungültig antwortet, lief das Skript endlos ohne sichtbare
+Ausgabe (stdout-Blockpufferung beim Umleiten in eine Datei ließ es wie
+einen Hänger aussehen); jetzt bricht `collect()` garantiert nach
+`n * MAX_ATTEMPTS_PER_EXAMPLE` Versuchen ab. (2) Mehrere Beispiele als
+JSON-Liste pro Antwort war für ein 3B-Modell zu fehleranfällig (unescapte
+Anführungszeichen, abgeschnittene Arrays) – umgestellt auf ein Beispiel pro
+Antwort im einfachen `EINGABE:`/`AUSGABE:`-Zeilenformat. (3) Das Modell
+kopierte Platzhaltertext aus der Werkzeug-Signatur-Beschreibung wörtlich in
+generierte Beispiele – Signaturen umformuliert (keine `key="Platzhalter"`-
+Optik mehr), konkretes Vollbeispiel mit passender Argumentform ergänzt.
+Validierung verschärft (`re.fullmatch` statt `findall`, damit ein
+unvalidierter Rest wie ein nackter Positionsparameter nicht mehr
+durchrutscht) und Dublettenprüfung ergänzt. Neues `--append`-Flag häuft
+Ergebnisse über mehrere kleine Läufe an, statt sie zu ersetzen.
+
+**Warum:** Das Anthropic-Konto hatte kein API-Guthaben mehr – die einzige
+verbliebene Cloud-Abhängigkeit im sonst komplett lokalen Trainings-Pfad.
+Nutzerwunsch: vollständig lokal/kostenlos.
+
+**Dateien:** `training/llm/gen_dialogue.py` (grundlegend überarbeitet),
+`training/llm/README.md`, `TODO.md`.
+
+**Verifiziert:** Mehrere Testläufe mit steigendem `n`; bei kleinem `n`
+(~3/Werkzeug) 90-95% Trefferquote, bei großem `n` (~15) fällt sie auf
+10-15% – eine echte, dauerhafte Diversitätsgrenze eines 3B-Modells für ein
+enges Themenfeld, kein Bug. Ein `--append`-Lauf mit moderatem `n` fügte 18
+neue, echte Beispiele zum bestehenden Datensatz hinzu (345 → 363).
+
+**Offen:** Für einen deutlichen Sprung auf mehrere hundert neue Beispiele
+bleibt Claude das geeignetere Werkzeug, sobald wieder Guthaben verfügbar
+ist – lokale Generierung eignet sich für kleine, wiederholte Ergänzungen,
+nicht für eine große Einzelskalierung.
+
+---
+
+## [2026-08-04] Lauf-zu-Lauf-Varianz beim Router-Finetuning entdeckt; Datensatz-Skalierung blockiert
+
+**Was:** Versuch, den Early-Stopping-Punkt für den Llama-3.2-3B-Router
+genauer zu finden (`--save-every 20` statt 100, neues
+`training/llm/sweep_checkpoints.py` zum Durchtesten aller Zwischenstände).
+Datensatz-Skalierung auf ~540 Beispiele schlug fehl: das Anthropic-Konto hat
+kein API-Guthaben mehr (`credit balance is too low`) – dabei nebenbei einen
+echten Bug in `gen_dialogue.py`s JSON-Extraktion gefunden und behoben (der
+gierige Regex `\[.*\]` griff bei manchen Antworten über das eigentliche
+Array hinaus; jetzt `json.JSONDecoder.raw_decode` ab der ersten `[`, stoppt
+exakt an der echten schließenden Klammer). Der zweite Trainingslauf mit dem
+bestehenden 345er-Datensatz (identische Konfiguration wie der erfolgreiche
+erste Lauf) konvergierte klar schlechter (bestes Ergebnis 31/52 statt 46/52)
+– `mlx_lm.lora` setzt ohne `--seed` keinen festen Zufallssamen, zwei Läufe
+mit identischen Hyperparametern durchlaufen unterschiedliche Trainingspfade.
+Zusätzlicher Befund: Val-Loss fiel in diesem Lauf durchgehend, während die
+Testgenauigkeit zwischenzeitlich auf 0/20 einbrach – Loss ist für diese
+Aufgabe kein verlässlicher Stellvertreter für die tatsächliche
+Ausgabegenauigkeit.
+
+**Warum:** Fortsetzung des Llama-3.2-3B-Durchbruchs vom selben Tag –
+Nutzerwunsch, Datensatz zu skalieren und den Stopp-Punkt zu verfeinern.
+
+**Dateien:** `training/llm/sweep_checkpoints.py` (neu), `gen_dialogue.py`
+(JSON-Extraktion robuster, `--limit`-Fix in Aufrufen), `README.md`,
+`DECISIONS.md` (nicht geändert diesmal – Befund ist Ergänzung zum
+bestehenden ADR-032-Nachtrag, nicht architekturrelevant), `TODO.md`.
+
+**Verifiziert:** `eval.py` gegen den vollen 52er-Testsatz für beide Läufe.
+
+**Offen:** Datensatz-Skalierung bleibt blockiert bis das Anthropic-Konto
+wieder Guthaben hat. `adapters/llama_router_v1_iter100` (88,5 %) bleibt der
+beste verfügbare Adapter – künftige Läufe brauchen ein festes `--seed` für
+faire Vergleiche.
+
+---
+
+## [2026-08-04] Durchbruch: Llama-3.2-3B statt Gemma-Familie fürs lokale Tool-Routing (ADR-032)
+
+**Was:** Neun LoRA-Finetuning-Läufe mit Gemma 3n und Gemma-3-270M (auf Mac/
+MLX) divergierten alle systematisch – jede Einzelvariable durchprobiert
+(LoRA-Keys, `scale`, Lernrate über vier Größenordnungen, Prompt-Masking,
+Batch-Größe, 4bit vs. bf16), Code der Maskierung/des Loss gelesen (kein
+Bug). Tiefenrecherche ergab: Llama-3.2-3B-Instruct ist die am besten
+unterstützte Architektur in mlx-lm und aktuell das empfohlene Modell für
+On-Device-Tool-Calling. Mit identischer Pipeline (gleicher Datensatz, gleiche
+Parameter) konvergierte Llama-3.2-3B sauber (Val Loss 3,01→0,096 über 100
+Iterationen); Early Stopping auf den Iter-100-Checkpoint ergab **46/52
+(88,5 %) korrekt** gegen den gehaltenen Testsatz – gegenüber Nullwirkung bei
+jedem Gemma-Versuch. Architektur damit korrigiert: Llama-3.2-3B als
+finegetuntes Router-Modell (Tool-Aufruf/Raumgespräch/Weiterleitung an freie
+Konversation), Gemma 3n bleibt wie geplant unfinetuned für die eigentliche
+Konversation – zwei Modelle statt einem.
+
+**Warum:** Fortsetzung von ADR-032 nach neun gescheiterten Trainingsläufen;
+Nutzer lehnte bezahlte Cloud-GPU-Lösung ab (kostenlos/lokal blieb Vorgabe),
+erlaubte aber ausdrücklich einen Modellwechsel.
+
+**Dateien:** `training/llm/build_router_dataset.py` (neu, Router-Datensatz:
+`persona`-Kategorie → `frei_gespraech()`-Weiterleitung statt eigener
+Antwort), `training/llm/prompts/system_prompt_router_de.txt` (neu),
+`training/llm/lora_config_router.yaml` (neu, Warmup-Experiment),
+`training/llm/eval.py` (`--data`-Parameter ergänzt, generalisiert für
+mehrere Datensätze), `training/llm/spike_check.py` (`classify()` um
+`handoff`-Typ für `frei_gespraech()` ergänzt), `training/llm/README.md`
+(vollständige Dokumentation aller neun gescheiterten + des erfolgreichen
+Laufs), `DECISIONS.md` (ADR-032-Nachtrag „Durchbruch"), `TODO.md`.
+
+**Verifiziert:** `eval.py` gegen 52 nie im Training gesehene Testbeispiele,
+46/52 korrekt. Kein Gerätetest (weiterhin nur Mac).
+
+**Offen:** Genauerer Early-Stopping-Punkt, größerer Datensatz, ein
+beobachteter Fall von Werkzeug-Halluzination (`wetter_vorlesen()` erfunden)
+– braucht serverseitige Validierung der Router-Ausgabe gegen die bekannte
+Tool-Liste, bevor das produktiv läuft. Speicherbudget für 4GB-Zielgeräte mit
+zwei Modellen ungeprüft. ONNX Runtime GenAI als Alternative zu MediaPipe
+vermerkt, keine Entscheidung.
+
+---
+
 ## [2026-08-09] Echte UI-Screenshots (Emulator) + README/GitHub-Page aktualisiert, Emoji aus beiden entfernt
 
 **Was:**

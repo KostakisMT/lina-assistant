@@ -1,0 +1,15 @@
+# Fuer den Router-Finetune (Gemma-3-270M, siehe README "Pivot"). Acht
+# vorherige Trainingslaeufe (zwei Modelle, 4bit und bf16, LR 1e-4 bis 1e-5,
+# scale 20 und 2, mit/ohne --mask-prompt) divergierten alle. Code-Lektuere
+# von mlx_lm/tuner/trainer.py + datasets.py ergab keinen Bug - die Maskierung
+# ist Standard-korrekt. Wahrscheinlichste Erklaerung: unsere Zielsequenzen
+# sind extrem kurz (z.B. "stopp()"), mit --mask-prompt zaehlen nur diese
+# wenigen Tokens fuer den Loss - hohe Varianz pro Batch, die Adam bei jeder
+# bisher versuchten konstanten Lernrate instabil macht. Gegenmittel hier:
+# Warmup (sanfter Start statt sofort voller Schrittgroesse) + separat beim
+# Aufruf ein groesserer Batch (--batch-size 32 statt 4-8, mittelt Ausreisser).
+lr_schedule:
+  name: cosine_decay
+  warmup: 40
+  warmup_init: 1.0e-7
+  arguments: [5.0e-5, 400, 1.0e-5]

@@ -240,6 +240,7 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [ ] Kontaktadresse für Sicherheitsmeldungen im Repository hinterlegen
 
 ### Rechtlich & Finanzierung (ADR-021) — P4 Backlog
+- [x] Konkurrenzanalyse für Positionierung/Förderanträge – lokal, nicht im Repo – 2026-08-13
 - [ ] Steuerberater: Zweckbetrieb §68 Nr. 4 AO, Umsatzsteuer bei 1:1-Weitergabe
 - [ ] PSP-Auswahl; Zahlungseinrichtung barrierefrei über Vertrauensperson
 - [ ] AGB und Widerrufsbelehrung barrierefrei (kein reines PDF)

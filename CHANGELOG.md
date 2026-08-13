@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-08-13] Interne Konkurrenzanalyse, Ergebnis in Präsentation eingeflossen
+
+**Was:** Lokale Konkurrenzanalyse durchgeführt (nicht im Repo, siehe
+`.gitignore`). Kernaussage daraus in das Artifact „Lina – Präsentation für
+Vereine und Förderer" übernommen: neue Folie „Die Lücke, die Lina schließt"
+sowie eine ergänzte Zeile „Kosten für Nutzer:innen" in der Vergleichstabelle.
+
+**Warum:** Positionierung für Förderer schärfen, vor dem nächsten
+Förderantrags-Anlauf (`foerderantrag/`).
+
+**Dateien:** `Lina Praesentation.html` (lokale Quelle, deckungsgleich mit
+dem veröffentlichten Artifact).
+
+---
+
 ## [2026-08-12] Phase D: Gradle-Build-Flavor-Grundgerüst standard/ngo (ADR-034)
 
 **Was:** Neue Gradle-Flavor-Dimension `distribution` mit `standard`

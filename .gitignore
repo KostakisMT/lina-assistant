@@ -40,3 +40,11 @@ tablet-data/
 
 # Debug-Fotos vom Gerät (Dokument-Ausrichtung) – lokal
 docphotos/
+
+# Förderer-Präsentation – nur lokale Quelle zum Bau des Claude-Artifacts
+/Lina Praesentation.html
+deck-stage.js
+_ds/
+
+# intimr – gehört zu einer anderen Firma, nicht zu diesem Repo
+intimr-betriebskonzept-v0.3.docx

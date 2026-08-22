@@ -288,11 +288,19 @@ class LauncherActivity : ComponentActivity() {
             IntentFilter(WakeWordService.ACTION_WAKE_WORD_DETECTED),
             RECEIVER_NOT_EXPORTED,
         )
-        registerReceiver(
-            debugReceiver,
-            IntentFilter("dev.lina.DEBUG_INPUT"),
-            RECEIVER_EXPORTED,
-        )
+        // Nur in Debug-Builds registriert: erlaubt Text-Injektion ohne echtes
+        // Mikrofon (adb shell am broadcast -a dev.lina.DEBUG_INPUT --es text
+        // "..."). War zuvor unconditional exportiert (RECEIVER_EXPORTED, keine
+        // Permission) – jede App auf dem Gerät konnte darüber echte Anrufe/SMS
+        // auslösen (CallHandler/SmsSender haben keinen eigenen Schutz). Gefunden
+        // 2026-08-22, siehe TODO.md „Risiken & Showstopper".
+        if (BuildConfig.DEBUG) {
+            registerReceiver(
+                debugReceiver,
+                IntentFilter("dev.lina.DEBUG_INPUT"),
+                RECEIVER_EXPORTED,
+            )
+        }
         registerReceiver(
             accessibilityReceiver,
             IntentFilter().apply {

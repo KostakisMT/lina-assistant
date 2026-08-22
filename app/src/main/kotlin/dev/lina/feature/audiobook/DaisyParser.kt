@@ -1,11 +1,10 @@
 package dev.lina.feature.audiobook
 
+import dev.lina.core.xml.SecureXml
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import org.xml.sax.InputSource
 import java.io.StringReader
-import javax.xml.parsers.DocumentBuilder
-import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Parser für DAISY 2.02 – das Format der Blindenhörbüchereien.
@@ -157,28 +156,11 @@ object DaisyParser {
         return s
     }
 
+    // Nichts aus dem Netz nachladen – das Tablet ist ggf. offline und externe
+    // Entities wären zudem ein Einfallstor (XXE). Härtung liegt zentral in
+    // [SecureXml], damit sie nicht mit LibrivoxRepository auseinanderläuft.
     private fun parseXml(raw: String): org.w3c.dom.Document =
-        newBuilder().parse(InputSource(StringReader(sanitizeXhtml(raw))))
-
-    private fun newBuilder(): DocumentBuilder {
-        val factory = DocumentBuilderFactory.newInstance()
-        factory.isNamespaceAware = false
-        // Nichts aus dem Netz nachladen – das Tablet ist ggf. offline und
-        // externe Entities wären zudem ein Einfallstor (XXE).
-        runCatching {
-            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-        }
-        runCatching { factory.setFeature("http://xml.org/sax/features/external-general-entities", false) }
-        runCatching { factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
-        factory.isValidating = false
-        factory.isExpandEntityReferences = false
-
-        return factory.newDocumentBuilder().apply {
-            setEntityResolver { _, _ -> InputSource(StringReader("")) }
-            // Fehler nicht auf stderr ausgeben, wir behandeln sie selbst
-            setErrorHandler(null)
-        }
-    }
+        SecureXml.newDocumentBuilder().parse(InputSource(StringReader(sanitizeXhtml(raw))))
 
     private fun firstDescendant(root: Element, tag: String): Element? {
         val list = root.getElementsByTagName(tag)

@@ -155,7 +155,7 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [x] `GermanSpellingTest` – Buchstabiertafel für den Pairing-Code (2026-07-21)
 - [x] **Bugfix:** `PiperTtsEngine` synthetisierte lange Texte (Dokument-Vorlesen, ausführliche Antworten) in einem einzigen `generate()`-Aufruf – blockierte minutenlang und fror die komplette Sprachschleife ein (kein Weckwort-Neustart, kein Fehler). Fix: Chunking an Satzgrenzen (`splitIntoChunks`, ≤240 Zeichen) + `stopRequested`-Flag für sofortigen Abbruch – 2026-07-25
 - [x] Entscheidung `RssFeedRepository`: **behalten** als Offline-Fallback (2026-07-25) – totes Gewicht im Normalbetrieb (Nachrichten laufen über Claude, CHANGELOG 2026-07-25), aber für den Fall ohne Internet/API-Key aufgehoben
-- [ ] `RssFeedRepository` Testaufbau: `XmlPullParser` → `DocumentBuilder`-Umbau wie bei `DaisyParser` (ADR-019), damit JVM-Tests möglich werden – weiterhin offen, kein Code seit der Behalten-Entscheidung geändert
+- [ ] `RssFeedRepository` Testaufbau: `XmlPullParser` → `DocumentBuilder`-Umbau wie bei `DaisyParser` (ADR-019), damit JVM-Tests möglich werden – weiterhin offen, kein Code seit der Behalten-Entscheidung geändert. **Falls umgebaut: zwingend über `SecureXml.newDocumentBuilder()` (ADR-035)** – `XmlPullParser` lädt nichts extern nach, ein roher `DocumentBuilder` schon (XXE)
 - [x] **Bugfix:** Mehrdeutigkeit "weiter" (Hörbuch vs. freie Konversation) – `.*weiter.*` traf ohne Wortgrenzen auch "lass uns weiterreden" und startete versehentlich das Hörbuch statt an Claude zu gehen. Fix: `\b`-Wortgrenzen in `LocalCommandResolver.resolveAudiobook`, Test ergänzt, am Gerät verifiziert – 2026-07-25
 - [x] Sicherheits-Timeout für die Poll-Schleifen: gemeinsamer Helfer `waitForSilenceThenRun()` in `LauncherActivity.kt`, bricht nach 45s ab statt endlos auf `isBusySpeaking()==false` zu warten; `openFollowUpWindow`/`openDocFollowUp` darauf umgestellt, am Gerät regressionsgetestet – 2026-07-25
 
@@ -238,6 +238,18 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 ### Sicherheit (siehe SICHERHEIT.md, dort die vollständige Liste) — P2 Mittel
 - [x] `EncryptedSharedPreferences` für Erinnerungen: `ReminderStore.kt` auf `androidx.security.crypto` (AES256-GCM/SIV) umgestellt, einmalige Migration alter Klartext-Einträge + Löschung des alten Speichers, am Gerät verifiziert (Klartext nicht mehr lesbar, Erinnerung feuert weiterhin korrekt) – 2026-07-25
 - [x] Automatische Löschung für Einrichtungs-Sprachaufnahmen und `testfoto`-Bilder: `cleanupOldDebugFiles()` in `LauncherActivity.kt`, läuft im Hintergrund bei jedem App-Start, löscht `onboarding/`- und `docphotos/`-Einträge älter als 7 Tage. Logik isoliert verifiziert (Python-Äquivalent); Live-Gerätetest an adb/run-as-Rechten im externen App-Ordner gescheitert (Testinfrastruktur, nicht Code) – 2026-07-25/26
+- [x] **Sicherheitslücke gefunden UND behoben (2026-08-23):** XXE in
+  `LibrivoxRepository.parseRssChapters()` – der über das Netz geladene
+  LibriVox-RSS-Feed wurde mit einem unkonfigurierten `DocumentBuilderFactory`
+  geparst, externe Entities also aktiv (`<!ENTITY xxe SYSTEM "file:///...">`
+  → lokale Dateien auslesen; Entity-Expansion → App hängt). Die Härtung gab es
+  bis dahin nur in `DaisyParser`. **Fix:** gemeinsamer
+  `SecureXml.newDocumentBuilder()` in `core/xml/`, beide Parser gehen jetzt
+  darüber; zusätzlich `disallow-doctype-decl=true` + `isXIncludeAware=false`.
+  Verifiziert per Gegenprobe: mit dem alten Parser schlägt der neue
+  XXE-Regressionstest fehl, mit `SecureXml` ist er grün (168/168 in beiden
+  Flavors). Gefunden bei einem Review eines anderen Projekts, das die Datei
+  portiert hatte.
 - [ ] Kontaktadresse für Sicherheitsmeldungen im Repository hinterlegen
 
 ### Rechtlich & Finanzierung (ADR-021) — P4 Backlog

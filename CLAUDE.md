@@ -281,6 +281,8 @@ app/src/main/kotlin/dev/lina/
 │   │   ├── ContactWriter.kt         # Batch-Insert neuer Kontakte
 │   │   ├── ContactDedup.kt          # + PhoneNumberNormalizer.kt: Duplikat-Erkennung
 │   │   └── VCardParser.kt           # vCard 2.1/3.0, pure/unit-testbar
+│   ├── xml/
+│   │   └── SecureXml.kt             # Einziger erlaubter DocumentBuilder (XXE-Härtung, ADR-035)
 │   ├── sim/
 │   │   ├── SimIdentity.kt           # Best-Effort-Fingerabdruck (ADR-029)
 │   │   ├── SimIdentityReader.kt     # SubscriptionManager/TelephonyManager
@@ -594,6 +596,8 @@ assembleDebug` bleibt dagegen gültig (Aggregat-Task für beide Flavors).
 - Vosk direkt aufrufen – immer über `SttEngine`
 - Android TTS direkt aufrufen – immer über `TtsEngine`
 - ONNX-Modelle ins Git committen – immer per `scripts/download-models.sh` laden
+- `DocumentBuilderFactory.newInstance()` direkt aufrufen – immer über
+  `SecureXml.newDocumentBuilder()` (XXE-Härtung, ADR-035)
 - `when`-Block als vollständigen Intent-Parser verwenden
 - Feature bauen ohne TTS-Feedback von Lina
 - `git clean -x`/`-xd`/`-xdf` im Repo-Root ausführen, ohne vorher

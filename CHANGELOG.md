@@ -5,6 +5,55 @@
 
 ---
 
+## [2026-08-23] Fix: XXE-Lücke im LibriVox-RSS-Parser – XML-Härtung zentralisiert
+
+**Was:** `LibrivoxRepository.parseRssChapters()` parste den über das Netz
+geladenen LibriVox-RSS-Feed mit einem **unkonfigurierten**
+`DocumentBuilderFactory` – externe Entities waren aktiv. Die Härtung existierte
+im Repo nur in `DaisyParser.newBuilder()`. Beide Stellen gehen jetzt durch den
+neuen gemeinsamen `SecureXml.newDocumentBuilder()` (`core/xml/`), damit sie
+nicht wieder auseinanderlaufen. Die Härtung ist gegenüber der DaisyParser-
+Vorlage zusätzlich um `disallow-doctype-decl=true` und `isXIncludeAware=false`
+erweitert – ohne DOCTYPE gibt es weder externe Entities noch Entity-Expansion.
+
+Gegenprobe gemacht: mit dem alten, unkonfigurierten Parser **schlägt** der neue
+Test `LibrivoxRssChapterTest.praeparierter Feed liest keine lokale Datei aus`
+fehl (der Dateiinhalt landete tatsächlich im Kapiteltitel), mit `SecureXml` ist
+er grün. Der Test ist also kein Selbstläufer.
+
+`RssFeedRepository` (Nachrichten-Feeds) ist **nicht** betroffen: es nutzt
+`XmlPullParser`, der nichts extern nachlädt. Der dort offene Umbau auf
+`DocumentBuilder` (TODO-Zeile zur JVM-Testbarkeit) muss dann aber über
+`SecureXml` gehen.
+
+**Warum:** Ein präparierter oder manipulierter Feed hätte über
+`<!ENTITY xxe SYSTEM "file:///...">` lokale Dateien der App auslesen (XXE) oder
+sie per Entity-Expansion ("Billion Laughs") aufhängen können. Der Feed kommt
+aus dem Netz von einer fremden Quelle und wird ohne Nutzerinteraktion geparst.
+
+**Gefunden:** 2026-08-23 bei einem Review eines anderen Projekts, das diese
+Datei portiert hatte.
+
+**Dateien:** `app/src/main/kotlin/dev/lina/core/xml/SecureXml.kt` (neu),
+`app/src/main/kotlin/dev/lina/feature/audiobook/LibrivoxRepository.kt`,
+`app/src/main/kotlin/dev/lina/feature/audiobook/DaisyParser.kt`,
+`app/src/test/kotlin/dev/lina/core/xml/SecureXmlTest.kt` (neu),
+`app/src/test/kotlin/dev/lina/feature/audiobook/LibrivoxRssChapterTest.kt` (neu),
+`SICHERHEIT.md`, `DECISIONS.md` (ADR-035), `CLAUDE.md`
+
+**Tests:** `./gradlew testStandardDebugUnitTest testNgoDebugUnitTest` → 168/168
+grün in beiden Flavors (vorher 163, +5 neue: 3× `SecureXmlTest`, 2×
+`LibrivoxRssChapterTest`).
+
+**Offen:** Nur JVM-getestet (Xerces). Androids Expat-Parser kennt nicht alle
+Feature-URIs – die `setFeature`-Aufrufe sind deshalb einzeln in `runCatching`
+gekapselt, und der `setEntityResolver` greift als letzte Instanz
+parser-unabhängig. Am Gerät noch nicht gegengeprüft, dass ein echter
+LibriVox-Feed weiterhin sauber in Kapitel zerfällt (steht auf der
+Hörbuch-Geräteliste ohnehin schon offen).
+
+---
+
 ## [2026-08-22] Fix: Debug-Input-Broadcast nicht mehr in Release exportiert
 
 **Was:** `LauncherActivity` registrierte `dev.lina.DEBUG_INPUT`

@@ -208,6 +208,32 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 
 ---
 
+## 🔴 Robustheit vor Release — Factsheet-Review (2026-08-22) — P1/P2 gemischt
+
+> Entstanden aus einer Durchsicht des technischen Factsheets (Artifact) neben
+> den bereits bekannten P1-Punkten (Anrufe/SMS-Gerätetest, Release-Keystore,
+> Dauerbetrieb). Ergänzt die bestehenden Sektionen, ersetzt sie nicht.
+
+- [ ] **P1** Fehler-/Offline-Pfade akustisch abdecken: definieren + verifizieren,
+  was Lina sagt, wenn STT/TTS/WakeWord-Init scheitert oder Internet fehlt
+  (Claude-Konversation, Dokument-Vision, LibriVox) – Leitprinzip 6 verlangt
+  TTS-Feedback für jede Aktion, aber Fallback-Ansagen für diese Fälle sind
+  bisher nicht systematisch geprüft; ohne sie sitzt der Nutzer ohne
+  Rückmeldung in Stille
+- [ ] **P2** Fuzzy-Matching der schwierigen Namen am echten Gerät mit echten
+  Kontakten verifizieren (Arundhati, Eßfeld u.a.) – bisher nur unit-getestet
+  (`FuzzyContactMatcherTest`, 2026-07-21), noch nicht am Tablet mit realer
+  Spracheingabe
+- [ ] **P2** Einwilligungs-Dialoge tatsächlich als Sprachdialog durchklicken:
+  Dokument-Vision (Bild verlässt das Gerät) und Be My Eyes (Live-Video an
+  eine anonyme Person) referenzieren eine Einwilligung in WARTUNG.md – prüfen,
+  ob sie im echten Onboarding auch gesprochen ankommt, nicht nur als Text
+- [ ] **P2** Testnutzer-Feedback aus dem vorhandenen Netzwerk (2 Personen im
+  engeren Umfeld, Blindentennis-Verein, Olympiakader Blindensport) gezielt zu
+  den vier Punkten oben einholen, sobald sie am Gerät verifiziert sind
+
+---
+
 ## 🟠 Verteilung: Zugang, Kosten, Finanzierung (ADR-020 bis ADR-022) — P4 Backlog
 
 > Voraussetzung dafür, dass Lina über den einzelnen Testnutzer hinauskommt.

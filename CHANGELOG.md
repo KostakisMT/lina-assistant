@@ -5,6 +5,35 @@
 
 ---
 
+## [2026-08-22] Doku: Technisches Factsheet (Artifact) + Robustheits-Review
+
+**Was:**
+- Interaktives technisches Factsheet zu Lina als Artifact erstellt und auf
+  Nutzerwunsch überarbeitet (ansprechender, interaktiver, technisch tiefer):
+  klickbarer Grundfluss mit Detailkarten, eigener Abschnitt zum lokalen LLM
+  (Ebene-2-Intent-Resolver, Kandidaten Phi-3 mini / Gemma 2B GGUF, Status
+  explizit als Phase-2-Stub markiert), Kotlin-Interface-Tabs (`SttEngine`,
+  `TtsEngine`, `IntentResolver`, `WakeWordEngine`), aufklappbare
+  Modulstruktur, 10 ausgewählte ADRs als Akkordeon. Inhaltlich vollständig
+  aus CLAUDE.md abgeleitet, nichts erfunden.
+- Im Anschluss an eine Review-Anfrage ("was würdest du sonst noch angehen")
+  vier zusätzliche Robustheits-Punkte identifiziert und in TODO.md
+  aufgenommen (siehe neue Sektion „Robustheit vor Release – Factsheet-Review"):
+  akustische Fehler-/Offline-Pfade, Fuzzy-Matching-Verifikation am Gerät,
+  Einwilligungs-Dialoge als gesprochener Flow, gezieltes Testnutzer-Feedback.
+
+**Warum:** Factsheet dient als schneller technischer Überblick (Artifact,
+noch nicht veröffentlicht – Nutzer plant späteren Release). Die
+Review-Anfrage ergab konkrete, bisher nicht erfasste Lücken.
+
+**Dateien:** `TODO.md` (neue Sektion), `CHANGELOG.md`. Das Factsheet selbst
+liegt außerhalb des Repos als Artifact (Quelle: CLAUDE.md).
+
+**Offen:** Alle vier Robustheits-Punkte sind bisher nur benannt, nicht
+bearbeitet.
+
+---
+
 ## [2026-08-22] Fix: Debug-Input-Broadcast nicht mehr in Release exportiert
 
 **Was:** `LauncherActivity` registrierte `dev.lina.DEBUG_INPUT`

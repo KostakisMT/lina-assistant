@@ -5,6 +5,91 @@
 
 ---
 
+## [2026-08-22] Doku: Technisches Factsheet (Artifact) + Robustheits-Review
+
+**Was:**
+- Interaktives technisches Factsheet zu Lina als Artifact erstellt und auf
+  Nutzerwunsch überarbeitet (ansprechender, interaktiver, technisch tiefer):
+  klickbarer Grundfluss mit Detailkarten, eigener Abschnitt zum lokalen LLM
+  (Ebene-2-Intent-Resolver, Kandidaten Phi-3 mini / Gemma 2B GGUF, Status
+  explizit als Phase-2-Stub markiert), Kotlin-Interface-Tabs (`SttEngine`,
+  `TtsEngine`, `IntentResolver`, `WakeWordEngine`), aufklappbare
+  Modulstruktur, 10 ausgewählte ADRs als Akkordeon. Inhaltlich vollständig
+  aus CLAUDE.md abgeleitet, nichts erfunden.
+- Im Anschluss an eine Review-Anfrage ("was würdest du sonst noch angehen")
+  vier zusätzliche Robustheits-Punkte identifiziert und in TODO.md
+  aufgenommen (siehe neue Sektion „Robustheit vor Release – Factsheet-Review"):
+  akustische Fehler-/Offline-Pfade, Fuzzy-Matching-Verifikation am Gerät,
+  Einwilligungs-Dialoge als gesprochener Flow, gezieltes Testnutzer-Feedback.
+
+**Warum:** Factsheet dient als schneller technischer Überblick (Artifact,
+noch nicht veröffentlicht – Nutzer plant späteren Release). Die
+Review-Anfrage ergab konkrete, bisher nicht erfasste Lücken.
+
+**Dateien:** `TODO.md` (neue Sektion), `CHANGELOG.md`. Das Factsheet selbst
+liegt außerhalb des Repos als Artifact (Quelle: CLAUDE.md).
+
+**Offen:** Alle vier Robustheits-Punkte sind bisher nur benannt, nicht
+bearbeitet.
+
+---
+
+## [2026-08-22] Fix: Debug-Input-Broadcast nicht mehr in Release exportiert
+
+**Was:** `LauncherActivity` registrierte `dev.lina.DEBUG_INPUT`
+(`RECEIVER_EXPORTED`, ungated, keine Permission) unconditional – Fund aus dem
+Testrun am selben Tag (siehe Eintrag unten). Registrierung jetzt hinter
+`if (BuildConfig.DEBUG)` gezogen. Verifiziert per generierter
+`BuildConfig.java` für `standardRelease`: `DEBUG = false` → Receiver
+registriert sich in Release-Builds nicht mehr. Debug-Build (Testtablet)
+weiterhin per `adb shell am broadcast -a dev.lina.DEBUG_INPUT -p dev.lina
+--es text '...'` ansprechbar, am Gerät nach dem Fix erneut bestätigt.
+
+**Warum:** Ungeschützter, exportierter Receiver hätte in einem echten Release
+jeder beliebigen App auf dem Gerät erlaubt, ohne Berechtigung echte Anrufe
+(`ACTION_CALL`) oder SMS (`SmsManager`) über Lina auszulösen.
+
+**Dateien:** `app/src/main/kotlin/dev/lina/ui/launcher/LauncherActivity.kt`
+
+**Offen:** –
+
+---
+
+## [2026-08-22] Kompletter Build+Deploy+Testrun auf dem Lenovo-Testtablet
+
+**Was:** Aktuellen Codestand (`standard`-Flavor, ADR-034) gebaut und auf dem
+verbundenen Lenovo Idea Tab (TB336ZU, kein SIM) installiert. JVM-Unit-Tests
+für beide Flavors grün (163/163). Live-Smoke-Test: Wake-Word-Erkennung
+(OpenWakeWord, Scores 0.98–0.99), Whisper-STT und Ebene-1-Intents (Anrufe,
+SMS, Kalender, Schlafmodus, Hörbuch) über den bestehenden Debug-Broadcast
+(`dev.lina.DEBUG_INPUT`) einzeln durchgespielt und per Logcat verifiziert –
+alle korrekt aufgelöst, kein Crash. `CallHandler`/`SmsSender` real bis zum
+`ACTION_CALL`/`SmsManager`-Aufruf durchgetestet (scheitert erwartungsgemäß
+nur an "Mobilfunknetz nicht verfügbar", da kein SIM).
+
+**Gefunden:** Der lokale `CLAUDE_API_KEY` in `local.properties` war ungültig
+(401 Unauthorized) – Ebene 2 (freie Konversation) war dadurch komplett
+ausgefallen, Fehlerbehandlung selbst griff korrekt ("Mein Sprachdienst meldet
+ein Problem..."). Nutzer hat neuen Key bereitgestellt, `local.properties`
+aktualisiert, neu gebaut/installiert – Ebene 2 danach verifiziert wieder
+funktionsfähig (Testantwort inkl. Websuche zu "Segelboote").
+
+Außerdem eine **Sicherheitslücke** gefunden: der o.g. Debug-Broadcast ist in
+`LauncherActivity` unconditional exportiert (kein `BuildConfig.DEBUG`-Gate,
+keine Permission) – siehe TODO.md „Risiken & Showstopper" für Details und
+Fix-Vorschlag.
+
+**Warum:** Nutzer wollte das Tablet auf den neuesten Stand bringen und einen
+vollständigen Testlauf sehen.
+
+**Dateien:** `local.properties` (Key-Rotation, nicht im Git), keine
+Quelländerungen. `TODO.md` aktualisiert.
+
+**Offen:** Debug-Broadcast-Lücke vor Release schließen; echter Anruf-/SMS-Test
+braucht SIM-fähiges Gerät.
+
+---
+
 ## [2026-08-13] Interne Konkurrenzanalyse, Ergebnis in Präsentation eingeflossen
 
 **Was:** Lokale Konkurrenzanalyse durchgeführt (nicht im Repo, siehe

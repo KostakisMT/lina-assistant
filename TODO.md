@@ -179,8 +179,8 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [x] Onboarding durchlaufen (Interessen/Region/Name gesetzt, aus SharedPreferences bestätigt) – 2026-07-25
 - [x] Wake Word getestet – "Hey Lina" (Custom-Modell v2 mit Nutzeraufnahmen): 5/5 erkannt (2026-07-04)
 - [x] STT (Whisper, nicht Vosk): "wie spät ist es", "lies meine Post" korrekt erkannt (2026-07-25)
-- [!] Anrufe: ausgehend + eingehend annehmen/ablehnen – **blockiert:** aktuelles Testtablet hat keine SIM (`gsm.sim.state=ABSENT`, 2026-07-26 verifiziert), braucht ein SIM-fähiges Testgerät
-- [!] SMS: senden + lesen – gleiche Blockade (kein SIM/keine Mobilfunkverbindung im Testtablet)
+- [!] Anrufe: ausgehend + eingehend annehmen/ablehnen – **blockiert:** aktuelles Testtablet hat keine SIM (`gsm.sim.state=ABSENT`, 2026-07-26 verifiziert), braucht ein SIM-fähiges Testgerät. Intent-Pfad selbst am 2026-08-22 per Debug-Broadcast verifiziert: "Ruf Boris an" → Fuzzy-Match → `CallHandler.dialContact()` → echter `ACTION_CALL`, Dialer öffnet InCallActivity korrekt, scheitert nur an "Mobilfunknetz nicht verfügbar" (kein SIM)
+- [!] SMS: senden + lesen – gleiche Blockade (kein SIM/keine Mobilfunkverbindung im Testtablet). `SendSms`/`ReadSms`-Intents am 2026-08-22 ebenfalls per Debug-Broadcast bis zum `SmsManager`-Aufruf verifiziert
 - [x] ~~Nachrichten: RSS-Sync + Vorlesen~~ – Feature auf Claude+Websuche umgestellt (siehe CHANGELOG 2026-07-25), am Gerät getestet und für gut befunden
 - [x] Hörbücher: LibriVox-Suche + Wiedergabe + Pause/Weiter/Zurückspulen/Kapitel getestet (2026-07-25); Schlaf-Timer (Hörbuch-Fade-Out, nicht zu verwechseln mit dem neuen Schlafmodus) am Gerät getestet (2026-07-26)
 - [x] **Bugfix:** Weckwort-Erkennung ignorierte Hörbuch-Wiedergabe nicht (nur Linas eigene Stimme) – Erzählstimme konnte Weckwort auslösen und Buchtext an Claude schicken. Duck/Resume in `AudiobookManager`/`LauncherActivity` behebt die Folgen; akustische Ursache (echtes AEC) bleibt offen – 2026-07-25
@@ -204,6 +204,33 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [ ] TTS-Lautstärke über Tablet-Lautsprecher ausreichend?
 - [ ] RSS-Feeds erreichbar? (Junge Welt Paywall?)
 - [ ] JAVA_HOME muss gesetzt sein für Builds (`openjdk@17` via Homebrew)
+- [x] **Sicherheitslücke gefunden UND behoben (2026-08-22):** `LauncherActivity` registrierte einen `BroadcastReceiver` für Action `dev.lina.DEBUG_INPUT` (`RECEIVER_EXPORTED`, kein `BuildConfig.DEBUG`-Gate, keine Permission). Jede App auf dem Gerät (oder `adb shell`) konnte darüber beliebigen Text direkt in `processDebugInput()` einspeisen – denselben Pfad wie echte STT-Ergebnisse, inkl. `CallHandler.dialContact()` (`ACTION_CALL`, kein SIM-State-Check) und `SmsSender` (`SmsManager.sendTextMessage`, kein Guard). Reproduziert mit `adb shell am broadcast -a dev.lina.DEBUG_INPUT -p dev.lina --es text '...'`. **Fix:** Registrierung in `onCreate()` hinter `if (BuildConfig.DEBUG)` gezogen (`LauncherActivity.kt:291`). Verifiziert: generierte `BuildConfig.java` für `standardRelease` hat `DEBUG = false` → Receiver registriert sich in Release-Builds gar nicht mehr; im Debug-Build (Testtablet) funktioniert der Kanal unverändert für Entwicklungszwecke.
+
+---
+
+## 🔴 Robustheit vor Release — Factsheet-Review (2026-08-22) — P1/P2 gemischt
+
+> Entstanden aus einer Durchsicht des technischen Factsheets (Artifact) neben
+> den bereits bekannten P1-Punkten (Anrufe/SMS-Gerätetest, Release-Keystore,
+> Dauerbetrieb). Ergänzt die bestehenden Sektionen, ersetzt sie nicht.
+
+- [ ] **P1** Fehler-/Offline-Pfade akustisch abdecken: definieren + verifizieren,
+  was Lina sagt, wenn STT/TTS/WakeWord-Init scheitert oder Internet fehlt
+  (Claude-Konversation, Dokument-Vision, LibriVox) – Leitprinzip 6 verlangt
+  TTS-Feedback für jede Aktion, aber Fallback-Ansagen für diese Fälle sind
+  bisher nicht systematisch geprüft; ohne sie sitzt der Nutzer ohne
+  Rückmeldung in Stille
+- [ ] **P2** Fuzzy-Matching der schwierigen Namen am echten Gerät mit echten
+  Kontakten verifizieren (Arundhati, Eßfeld u.a.) – bisher nur unit-getestet
+  (`FuzzyContactMatcherTest`, 2026-07-21), noch nicht am Tablet mit realer
+  Spracheingabe
+- [ ] **P2** Einwilligungs-Dialoge tatsächlich als Sprachdialog durchklicken:
+  Dokument-Vision (Bild verlässt das Gerät) und Be My Eyes (Live-Video an
+  eine anonyme Person) referenzieren eine Einwilligung in WARTUNG.md – prüfen,
+  ob sie im echten Onboarding auch gesprochen ankommt, nicht nur als Text
+- [ ] **P2** Testnutzer-Feedback aus dem vorhandenen Netzwerk (2 Personen im
+  engeren Umfeld, Blindentennis-Verein, Olympiakader Blindensport) gezielt zu
+  den vier Punkten oben einholen, sobald sie am Gerät verifiziert sind
 
 ---
 

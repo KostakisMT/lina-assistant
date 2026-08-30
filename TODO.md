@@ -229,6 +229,31 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 
 ---
 
+- [x] **Behoben (2026-08-30) – Lina meldete SMS-Erfolg, ohne es zu wissen.**
+      `SmsSender` übergab an `sendTextMessage()` für `sentIntent` und
+      `deliveryIntent` jeweils `null` und sagte direkt danach bedingungslos
+      „SMS gesendet." Da die Methode asynchron arbeitet und bei Netzfehlern
+      keine Exception wirft, konnte Lina den Ausgang gar nicht kennen.
+      **Am Gerät belegt:** vier Testnachrichten scheiterten sämtlich mit
+      `RESULT_ERROR_GENERIC_FAILURE` (Android: „Persist SMS into FAILED"),
+      Lina meldete viermal Erfolg, beim Empfänger kam nichts an. Jetzt wird
+      ein `sentIntent` ausgewertet und das echte Ergebnis gesprochen, mit
+      alltagssprachlicher Begründung je Fehlercode.
+- [ ] **P1 offen – die SIM sendet keine SMS.** Vier Versuche, über IWLAN **und**
+      über LTE, immer `RESULT_ERROR_GENERIC_FAILURE`. Empfang ist gut
+      (LTE, rsrp -96, level 4/4, eingebucht bei vodafone.de), das Problem liegt
+      also nicht am Funk. Verdacht: **Daten-SIM ohne SMS-Freischaltung** – der
+      SIM-Adressspeicher enthielt ausschließlich Vodafone-Diensteinträge, wie
+      bei einer frisch ausgelieferten Tablet-/Daten-SIM.
+      **Nächster Schritt zur Abgrenzung:** eine SMS direkt aus Google Messages
+      von Hand verschicken. Schlägt auch das fehl, liegt es an der Karte und
+      nicht an Lina. Dann beim Anbieter SMS freischalten lassen oder eine
+      SIM mit SMS-Option verwenden.
+- [ ] **P2 – Anruf-Erfolgsmeldung hat dasselbe Problem.** `dialContact()` sagt
+      „Ich rufe … an", bevor feststeht, ob eine Verbindung zustande kommt.
+      Gleiche Klasse wie der SMS-Fehler oben, gleiche Konsequenz für einen
+      Nutzer, der das Ergebnis nicht sehen kann.
+
 ## 🟠 Benachrichtigungen — Befunde 2026-08-30 — P1/P2
 
 > Begriffsklärung, weil „Nachrichten" im Deutschen dreierlei meint:

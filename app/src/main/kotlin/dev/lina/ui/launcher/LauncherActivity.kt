@@ -572,7 +572,7 @@ class LauncherActivity : ComponentActivity() {
         callHandler = CallHandler(this, tts, matcher)
         val reader = SmsReader(this, tts)
         smsReader = reader
-        smsSender = SmsSender(tts, matcher, reader)
+        smsSender = SmsSender(this, tts, matcher, reader)
         newsReader = NewsReader(this, tts)
         audiobookManager = AudiobookManager(this, tts)
         reminderManager = ReminderManager(this, tts)

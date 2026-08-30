@@ -81,13 +81,28 @@ class SpeechDetectorTest {
         assertTrue("400ms muessen reichen", d.hasEnoughSpeech())
     }
 
-    /** Einrasten allein genügt nicht – der Clip braucht auch Substanz. */
+    /**
+     * Wer eingerastet ist, gilt als gesprochen. Vorher verlangte
+     * hasEnoughSpeech() 400ms und verwarf damit kurze, leise Äußerungen NACH
+     * dem Einrasten – am Gerät am 2026-08-30 als "Zu wenig Sprachenergie
+     * (300ms)" beobachtet, während der Nutzer vor dem Tablet stand und
+     * antwortete. Kurze Bestätigungen müssen durchkommen.
+     */
     @Test
-    fun `Klacken mit Nachhall rastet ein hat aber zu wenig Sprachenergie`() {
+    fun `Einrasten genuegt als Sprachenergie`() {
         val d = detector()
         repeat(3) { d.offer(loud, frameMs) } // exakt die Einrast-Schwelle, 300ms
         assertTrue(d.speechStarted)
-        assertFalse("300ms sind zu wenig fuer eine Aeusserung", d.hasEnoughSpeech())
+        assertTrue("wer einrastet, hat gesprochen", d.hasEnoughSpeech())
+    }
+
+    /** Ohne Einrasten bleibt der Clip aussen vor, egal wie lang er ist. */
+    @Test
+    fun `ohne Einrasten keine Sprachenergie`() {
+        val d = detector()
+        repeat(2) { d.offer(loud, frameMs) } // 200ms, unter der Schwelle
+        assertFalse(d.speechStarted)
+        assertFalse(d.hasEnoughSpeech())
     }
 
     @Test

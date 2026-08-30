@@ -98,14 +98,38 @@ class SpeechDetector(
     fun hasEnoughSpeech(): Boolean = speechMs >= MIN_SPEECH_MS
 
     companion object {
-        /** ~ -30 dBFS. Unverändert aus der Vorfassung übernommen. */
-        const val SPEECH_AMP_THRESHOLD = 1000
+        /**
+         * ~ -36 dBFS. Am 2026-08-30 von 1000 (-30 dBFS) gesenkt: bei
+         * Raumdistanz lag die Stimme des Nutzers regelmäßig darunter, das
+         * Einrasten blieb aus und die Aufnahme wurde als "nie gesprochen"
+         * verworfen – obwohl das Weckwort sauber mit Score 0.99 gefeuert
+         * hatte. Am Gerät beobachtet: dreimal in Folge "Ja?" von Lina, dann
+         * Stille, weil die Antwort weggefiltert wurde.
+         */
+        const val SPEECH_AMP_THRESHOLD = 500
 
-        /** So lange muss es am Stück laut sein, damit "Sprache" einrastet. */
+        /**
+         * So lange muss es am Stück laut sein, damit "Sprache" einrastet.
+         * Das ist die eigentliche Absicherung gegen einzelne Störgeräusche –
+         * ein Klacken ist ein Frame, nicht drei am Stück.
+         */
         const val SPEECH_ONSET_MS = 300
 
-        /** So viel Sprachenergie muss ein Clip insgesamt haben. */
-        const val MIN_SPEECH_MS = 400
+        /**
+         * Mindest-Sprachenergie im fertigen Clip. Bewusst gleich
+         * [SPEECH_ONSET_MS]: wer eingerastet ist, hat die Schwelle damit
+         * automatisch erreicht.
+         *
+         * Vorher 400ms – das verwarf kurze, leise Äußerungen NACH dem
+         * Einrasten, am Gerät als "Zu wenig Sprachenergie (300ms)" gesehen.
+         * Kurze Bestätigungen ("Ja", "Nein", "Stopp") tragen den SIM-Import
+         * und die Rückfragen; sie zu verschlucken ist schlimmer als ein
+         * gelegentliches Artefakt, das ohnehin noch durch
+         * [TranscriptPlausibility] muss. Die Messung vom selben Tag zeigt,
+         * dass die Geister-Abwehr fast vollständig am Einrasten hängt:
+         * 9 von 10 wurden abgefangen, weil gar nichts einrastete.
+         */
+        const val MIN_SPEECH_MS = 300
 
         /** Ohne Sprachbeginn nach dieser Zeit abbrechen. */
         const val NO_SPEECH_TIMEOUT_MS = 5000

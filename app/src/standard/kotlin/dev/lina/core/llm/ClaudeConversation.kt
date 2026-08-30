@@ -304,6 +304,18 @@ class ClaudeConversation(
             }
             "sms_vorlesen" -> ResolvedIntent.ReadSms
             "hoerbuch_abspielen" -> ResolvedIntent.PlayAudiobook
+            "hoerbuecher_auflisten" -> ResolvedIntent.ListAudiobooks
+            "hoerbuch_suchen" -> arg("suchbegriff")?.let { ResolvedIntent.SearchAudiobook(it) }
+            "hoerbuch_thema_suchen" -> arg("thema")?.let { ResolvedIntent.SearchAudiobookByGenre(it) }
+            "hoerbuch_pausieren" -> ResolvedIntent.PauseAudiobook
+            "hoerbuch_fortsetzen" -> ResolvedIntent.ResumeAudiobook
+            "hoerbuch_info" -> ResolvedIntent.AudiobookInfo
+            "hoerbuch_zurueckspulen" ->
+                ResolvedIntent.RewindAudiobook(arg("sekunden")?.toIntOrNull() ?: 30)
+            "kapitel_naechstes" -> ResolvedIntent.NextChapter
+            "kapitel_vorheriges" -> ResolvedIntent.PreviousChapter
+            "kapitel_springen" -> arg("nummer")?.toIntOrNull()?.let { ResolvedIntent.GoToChapter(it) }
+            "kapitel_auflisten" -> ResolvedIntent.ListChapters
             "dokument_vorlesen" -> ResolvedIntent.ReadDocument
             "erinnerung_anlegen" -> {
                 // Claude liefert die aufgelöste Zeit; der lokale Parser bleibt
@@ -427,6 +439,14 @@ class ClaudeConversation(
               wie ein Gerätebefehl aussieht (anrufen, SMS, Nachrichten, Hörbuch),
               nutze das passende Werkzeug statt zu antworten.
             - Wenn du etwas nicht weißt oder nicht kannst, sag es ehrlich und kurz.
+            - Hörbücher gehören ausdrücklich zu dem, was du KANNST: aufzählen,
+              nach Titel, Autor oder Thema suchen (lokal und bei LibriVox),
+              abspielen, pausieren, fortsetzen, zurückspulen, Kapitel wechseln
+              und auflisten. Sag niemals, du könntest das nicht oder hättest
+              keinen Zugriff darauf – nimm das passende Werkzeug. Verstümmelte
+              Titel und Namen korrigierst du dabei stillschweigend, ohne den
+              Nutzer darauf hinzuweisen ("Teustol" ist Tolstoi, "Privaks" ist
+              LibriVox, "führbuch" ist Hörbuch).
             - Wichtig: Das Mikrofon hört nach deinen Antworten automatisch weiter.
               Nicht alles, was du hörst, ist an dich gerichtet! Wirkt die Eingabe
               wie ein Gespräch im Raum, eine Antwort an eine andere Person oder
@@ -459,6 +479,70 @@ class ClaudeConversation(
             ),
             tool("sms_vorlesen", "Liest die neuesten SMS vor.", emptyMap(), emptyList()),
             tool("hoerbuch_abspielen", "Spielt das aktuelle Hörbuch ab.", emptyMap(), emptyList()),
+            tool(
+                "hoerbuecher_auflisten",
+                "Zählt auf, welche Hörbücher der Nutzer hat. Nutze dies bei " +
+                    "Fragen wie \"welche Hörbücher habe ich\", \"was kann ich " +
+                    "heute hören\", \"was gibt es zu hören\" – auch wenn die " +
+                    "Spracherkennung sie verstümmelt hat.",
+                emptyMap(),
+                emptyList(),
+            ),
+            tool(
+                "hoerbuch_suchen",
+                "Sucht ein Hörbuch nach Titel oder Autor, in der lokalen " +
+                    "Bibliothek und bei LibriVox. Nutze dies bei \"such mir etwas " +
+                    "von Tolstoi\" oder \"gibt es Herr und Knecht\". Titel und " +
+                    "Namen kommen aus der Spracherkennung oft verstümmelt an – " +
+                    "gib sie korrigiert weiter, in richtiger Schreibweise.",
+                mapOf(
+                    "suchbegriff" to "Titel oder Autor, korrekt geschrieben, " +
+                        "z.B. \"Tolstoi\" oder \"Herr und Knecht\"",
+                ),
+                listOf("suchbegriff"),
+            ),
+            tool(
+                "hoerbuch_thema_suchen",
+                "Sucht Hörbücher zu einem Thema oder Genre bei LibriVox, etwa " +
+                    "Politik, Abenteuer oder Geschichte. Nutze dies statt " +
+                    "hoerbuch_suchen, wenn der Nutzer ein Thema nennt und keinen " +
+                    "bestimmten Titel oder Autor.",
+                mapOf("thema" to "Das gewünschte Thema, z.B. \"Politik\""),
+                listOf("thema"),
+            ),
+            tool("hoerbuch_pausieren", "Hält das laufende Hörbuch an.", emptyMap(), emptyList()),
+            tool(
+                "hoerbuch_fortsetzen",
+                "Setzt ein angehaltenes Hörbuch fort.",
+                emptyMap(),
+                emptyList(),
+            ),
+            tool(
+                "hoerbuch_info",
+                "Sagt an, welches Buch und welches Kapitel gerade läuft.",
+                emptyMap(),
+                emptyList(),
+            ),
+            tool(
+                "hoerbuch_zurueckspulen",
+                "Spult im laufenden Hörbuch zurück, z.B. \"dreißig Sekunden zurück\".",
+                mapOf("sekunden" to "Anzahl Sekunden, Standard 30"),
+                emptyList(),
+            ),
+            tool("kapitel_naechstes", "Springt zum nächsten Kapitel.", emptyMap(), emptyList()),
+            tool("kapitel_vorheriges", "Springt zum vorherigen Kapitel.", emptyMap(), emptyList()),
+            tool(
+                "kapitel_springen",
+                "Springt zu einem bestimmten Kapitel, z.B. \"Kapitel drei\".",
+                mapOf("nummer" to "Kapitelnummer als Zahl, z.B. \"3\""),
+                listOf("nummer"),
+            ),
+            tool(
+                "kapitel_auflisten",
+                "Zählt die Kapitel des gerade geladenen Buches auf.",
+                emptyMap(),
+                emptyList(),
+            ),
             tool(
                 "erinnerung_anlegen",
                 "Legt eine Erinnerung an. Nutze dies bei Wünschen wie \"erinnere " +

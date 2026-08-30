@@ -49,6 +49,7 @@ import dev.lina.core.contacts.FuzzyContactMatcher
 import dev.lina.BuildConfig
 import dev.lina.core.intent.LocalCommandResolver
 import dev.lina.core.intent.ResolvedIntent
+import dev.lina.core.intent.RoomSpeechFilter
 import dev.lina.core.llm.ConversationEngine
 import dev.lina.core.llm.ConversationEngineProvider
 import dev.lina.core.llm.DocumentReadResult
@@ -831,6 +832,30 @@ class LauncherActivity : ComponentActivity() {
             resolved is ResolvedIntent.SleepModeOff
         ) {
             ttsEngine?.speak(handleIntent(resolved))
+            resumeWakeWordListening()
+            return
+        }
+        // Lokale Vorfilterung, BEVOR etwas das Gerät verlässt.
+        //
+        // Das Folgefenster hört ohne Weckwort mit; alles, was im Raum
+        // gesprochen wird, landet hier. Die Prüfung "war das an mich
+        // gerichtet" gab es bisher nur in Claudes Systemprompt
+        // (gespraech_beenden) – also erst NACH dem Versand. Am 2026-08-30 am
+        // Gerät beobachtet: eine Passage aus einem Videotelefonat im Zimmer
+        // ging an die API.
+        //
+        // Steht bewusst NACH Stopp/Schlafmodus (die müssen immer wirken und
+        // bleiben ohnehin lokal) und VOR askClaude().
+        val adresse = RoomSpeechFilter.evaluate(text)
+        if (!adresse.verdict.mayReachCloud()) {
+            android.util.Log.d(
+                "LinaLauncher",
+                "Nicht an Lina gerichtet (${adresse.verdict}, Punkte ${adresse.score}, " +
+                    "${adresse.signals.joinToString(", ")}) – bleibt lokal: \"$text\"",
+            )
+            // Still schließen, genau wie das News-Folgefenster es schon tut:
+            // eine Rückfrage ("meintest du mich?") würde erst recht in fremde
+            // Gespräche hineinreden.
             resumeWakeWordListening()
             return
         }

@@ -5,6 +5,62 @@
 
 ---
 
+## [2026-08-30] Lokale Vorfilterung: Raumgespräche verlassen das Gerät nicht mehr
+
+**Was:** Neu `core/intent/RoomSpeechFilter.kt` – entscheidet **auf dem Gerät**,
+ob eine Äußerung an Lina gerichtet war, und sitzt in
+`handleFollowUpResult()` **vor** `askClaude()`.
+
+**Warum:** Das Folgefenster hört nach jeder Antwort kurz ohne Weckwort mit.
+Bis jetzt ging alles, was dabei ankam, an die Claude-API. Die Prüfung „war das
+überhaupt an mich gerichtet" stand zwar im Systemprompt (`gespraech_beenden`),
+aber damit **erst, nachdem die Äußerung das Gerät verlassen hatte**. Am Gerät
+beobachtet: Während im Zimmer ein Videotelefonat lief, nahm Lina eine Passage
+daraus auf und schickte sie an die API. Betroffen ist auch **Besuch**, der dem
+nie zugestimmt hat.
+
+**Wie:** Gewichtete Indizien statt einer einzelnen Regel.
+- Positiv: Modalfragen („kannst du"), Anknüpfungen („erzähl mehr", „die
+  zweite"), Fragewort am Satzanfang, Imperative, Fragezeichen.
+- Negativ: dritte Person („er hat gesagt"), Absprachen („bis dann", „ich ruf
+  dich an"), das allgemeine Muster „ich <verb> dir/dich", Füllwörter („mhm",
+  „ach so"), bloßes Ja/Nein, Länge ohne jeden Bezug.
+- Abkürzung: die direkte Anrede „Lina" ist immer adressiert.
+
+**Zwei Entscheidungen, die den Entwurf tragen:**
+
+1. **Im Zweifel blockieren.** `UNCERTAIN` wird behandelt wie Raumgespräch. Eine
+   fälschlich verworfene Frage kostet eine Wiederholung mit Weckwort; eine
+   fälschlich gesendete Passage aus einem fremden Gespräch ist nicht
+   zurückholbar und fällt niemandem auf. Das Folgefenster ist Bequemlichkeit,
+   das Weckwort ist die Garantie.
+2. **Der lokale Resolver ist ausdrücklich KEIN Freifahrtschein.** Naheliegend
+   wäre, einen Regex-Treffer als „ist ein Befehl, also an Lina gerichtet" zu
+   werten. Beim Verdrahten fiel auf, dass das genau falsch herum wäre:
+   „ich ruf dich später an" trifft `resolveCall` und ist die klassische
+   Absprache unter Menschen. Die zunächst eingebaute Hintertür wurde wieder
+   entfernt und durch einen Regressionstest ersetzt.
+
+Blockiertes wird **still** verworfen – eine Rückfrage („meintest du mich?")
+würde erst recht in fremde Gespräche hineinreden. Die Begründung landet mit
+allen ausschlaggebenden Signalen im Log, damit sich die Schwellen im Betrieb
+nachjustieren lassen.
+
+**Dateien:** `core/intent/RoomSpeechFilter.kt` (neu),
+`core/intent/RoomSpeechFilterTest.kt` (neu, 14 Tests),
+`ui/launcher/LauncherActivity.kt`. 215 Tests grün.
+
+**Offen:** Die Verdrahtung ist am Gerät **nicht** verifiziert. Der
+Debug-Broadcast läuft über `processDebugInput()` und erreicht das
+Folgefenster gar nicht; im Testlauf war der Raum still, sodass schon die
+akustische Ebene alles abfing. Zu prüfen bleibt mit echter Stimme: ein
+Folgefenster öffnen und einen Satz wie „ja ich ruf dich später an"
+sprechen – erwartet wird die Logzeile `Nicht an Lina gerichtet` und **kein**
+API-Aufruf. Ebenso die Gegenrichtung, damit der Filter keine echten
+Folgefragen verschluckt.
+
+---
+
 ## [2026-08-30] Anruf-Schutz für Premium- und Kurzwahlnummern
 
 **Was:** Lina fragt vor dem Wählen einer Sondernummer nach, statt sie

@@ -270,20 +270,17 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
       alte Erfolgsmeldung spricht. **Beide Pfade am Gerät verifiziert:**
       Flugmodus → Fehlermeldung nach 8s; echter Anruf → `state=2` (OFFHOOK)
       nach 1,5s, keine Fehlermeldung.
-- [ ] **P1 NEU (2026-08-30) – Raumgespräche erreichen die Claude-API.**
-      Am Gerät beobachtet: Während im Zimmer ein Discord-Gespräch lief, nahm
-      Lina im Folgefenster eine Passage daraus auf, verhörte sie und schickte
-      sie an die API. Der „Raumgespräch"-Filter existiert – aber er sitzt
-      **bei Claude** (`gespraech_beenden` im Systemprompt), also erst
-      **nachdem** die Äußerung das Gerät verlassen hat. Lokal filtert nur das
-      News-Folgefenster, das Gesprächsfenster reicht alles weiter.
-      Konsequenz für die Einwilligung: WARTUNG.md sagt zu, dass *freie Fragen*
-      an einen Internetdienst gehen. Dass im Folgefenster auch **mitgehörte
-      Gespräche Dritter** dorthin gelangen können, steht dort nicht – und
-      Besucher der Wohnung haben dem ohnehin nie zugestimmt.
-      Denkbare Richtungen: lokale Vorfilterung, bevor gesendet wird
-      (der lokale Router aus ADR-032 wäre genau dafür der richtige Ort);
-      kürzeres Folgefenster; Sprachprofil-Erkennung.
+- [x] **Behoben (2026-08-30) – Raumgespräche erreichen die Claude-API.**
+      Neu `RoomSpeechFilter`: entscheidet lokal, ob eine Äußerung an Lina
+      gerichtet war, und sitzt in `handleFollowUpResult()` vor `askClaude()`.
+      Gewichtete Indizien, im Zweifel wird blockiert (das Weckwort bleibt der
+      verlässliche Weg). Der lokale Resolver dient ausdrücklich NICHT als
+      Freifahrtschein – „ich ruf dich später an" trifft `resolveCall` und ist
+      trotzdem eine Absprache unter Menschen. 14 Unit-Tests.
+      **Am Gerät noch nicht verifiziert:** der Debug-Broadcast erreicht das
+      Folgefenster nicht, im Testlauf war der Raum still. Mit echter Stimme
+      nachholen – Erwartung: Logzeile `Nicht an Lina gerichtet`, kein
+      API-Aufruf; und in der Gegenrichtung, dass echte Folgefragen durchkommen.
 - [ ] **P2 (2026-08-30) – Zuhören während eines aktiven Telefonats.** Davon
       unabhängig, aber offen: Solange der Telefoniezustand nicht
       `CALL_STATE_IDLE` ist, sollten Weckwort und STT pausieren, damit Lina

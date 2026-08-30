@@ -426,4 +426,41 @@ class LocalCommandResolverTest {
         assertTrue(resolver.resolve("suche tolstoi") is ResolvedIntent.SearchAudiobook)
     }
 
+    /**
+     * Regression 2026-08-30, am Gerät belegt: der SMS-Text wurde aus der
+     * kleingeschriebenen Eingabe geschnitten und so auch versendet. Aus
+     * "schreib mike: Testnachricht von Lina" wurde die reale SMS
+     * "testnachricht von lina". Der Text geht wortwörtlich an eine andere
+     * Person, und der blinde Absender kann das Ergebnis nicht prüfen.
+     */
+    @Test
+    fun `SMS-Text behaelt Gross- und Kleinschreibung`() {
+        val intent = resolver.resolve("schreib Mike: Testnachricht von Lina")
+        assertEquals(ResolvedIntent.SendSms("Mike", "Testnachricht von Lina"), intent)
+    }
+
+    @Test
+    fun `SMS wird auch bei grossgeschriebenem Befehl erkannt`() {
+        val intent = resolver.resolve("Schreib Ulla: Bin gleich da, bis später!")
+        assertEquals(ResolvedIntent.SendSms("Ulla", "Bin gleich da, bis später!"), intent)
+    }
+
+    @Test
+    fun `Antwort behaelt Gross- und Kleinschreibung`() {
+        assertEquals(
+            ResolvedIntent.ReplySms("Ja gerne, bis Montag"),
+            resolver.resolve("Antwort: Ja gerne, bis Montag"),
+        )
+    }
+
+    /** Satzzeichen und Umlaute im Nachrichtentext dürfen nicht verlorengehen. */
+    @Test
+    fun `Satzzeichen und Umlaute im SMS-Text bleiben erhalten`() {
+        val intent = resolver.resolve("schreib Dirk: Grüße an Käthe – wir sehen uns um 18:30!")
+        assertEquals(
+            ResolvedIntent.SendSms("Dirk", "Grüße an Käthe – wir sehen uns um 18:30!"),
+            intent,
+        )
+    }
+
 }

@@ -26,6 +26,11 @@ Zwei Fehler, die an diesem Tag gemacht wurden – bitte nicht wiederholen:
      – wieder etwas anderes; nur Anruf- und SMS-Notifications überleben den
      Filter, alles übrige fällt still weg. Siehe eigenen Abschnitt in TODO.md.
 
+   Zur Standard-SMS-App: `settings get secure sms_default_application` ist auf
+   modernem Android auch bei korrekter Konfiguration `null`. Maßgeblich ist
+   `cmd role get-role-holders android.app.role.SMS`. Eine daraus abgeleitete
+   Fehlermeldung war am 2026-08-30 ein Fehlalarm.
+
    In `LocalCommandResolverTest` standen beide Bedeutungen bis 2026-08-30 unter
    demselben Wort direkt untereinander. Die Tests heißen jetzt `SMS vorlesen`,
    `SMS schlagen Dokument` bzw. `News gehen komplett an Ebene 2`. Wer hier

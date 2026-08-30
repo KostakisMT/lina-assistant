@@ -14,7 +14,8 @@ class LocalCommandResolver : IntentResolver {
             ?: resolveContactImport(normalized)
             ?: resolveHelperCall(normalized)
             ?: resolveCall(normalized)
-            ?: resolveSms(normalized)
+            // Originaltext, damit der SMS-Inhalt seine Groß-/Kleinschreibung behält
+            ?: resolveSms(input.trim())
             ?: resolveDocument(normalized)
             ?: resolveCallControl(normalized)
             ?: resolveSleepMode(normalized)
@@ -149,10 +150,26 @@ class LocalCommandResolver : IntentResolver {
         return null
     }
 
+    /**
+     * SMS. Bekommt als einzige Regel den **Originaltext** statt der
+     * kleingeschriebenen Fassung und matcht dafür case-insensitiv.
+     *
+     * Grund (am Gerät belegt, 2026-08-30): der Nachrichtentext wird hier als
+     * Slot herausgeschnitten und **wortwörtlich an eine andere Person
+     * verschickt**. Aus der kleingeschriebenen Fassung wurde
+     * "schreib mike: Testnachricht von Lina" zu der real versendeten SMS
+     * "testnachricht von lina" – im Deutschen mit seiner
+     * Substantivgroßschreibung liest sich das für den Empfänger wie kaputt,
+     * und der blinde Absender kann es nicht sehen.
+     *
+     * Der Empfängername (Gruppe 1) geht ohnehin ins Fuzzy-Matching, dem die
+     * Groß-/Kleinschreibung egal ist.
+     */
     private fun resolveSms(input: String): ResolvedIntent? {
+        val ci = setOf(RegexOption.IGNORE_CASE)
         val sendPatterns = listOf(
-            Regex("""(?:schreib|schreibe|sende|send)\s+(.+?)[\s:]+(.+)"""),
-            Regex("""(?:sms|nachricht)\s+an\s+(.+?)[\s:]+(.+)"""),
+            Regex("""(?:schreib|schreibe|sende|send)\s+(.+?)[\s:]+(.+)""", ci),
+            Regex("""(?:sms|nachricht)\s+an\s+(.+?)[\s:]+(.+)""", ci),
         )
         for (pattern in sendPatterns) {
             pattern.find(input)?.let { match ->
@@ -163,11 +180,14 @@ class LocalCommandResolver : IntentResolver {
             }
         }
 
-        if (input.matches(Regex(""".*(?:lies|lese|liest|zeig).*(?:nachricht|sms|nachrichten).*"""))) {
+        if (input.matches(
+                Regex(""".*(?:lies|lese|liest|zeig).*(?:nachricht|sms|nachrichten).*""", ci)
+            )
+        ) {
             return ResolvedIntent.ReadSms
         }
 
-        Regex("""(?:antwort|antworte)[\s:]+(.+)""").find(input)?.let { match ->
+        Regex("""(?:antwort|antworte)[\s:]+(.+)""", ci).find(input)?.let { match ->
             return ResolvedIntent.ReplySms(match.groupValues[1].trim())
         }
 

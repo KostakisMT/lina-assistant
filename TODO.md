@@ -237,13 +237,24 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 > **Benachrichtigungen** (Android-Notifications, `LinaAccessibilityService`).
 > Dieser Abschnitt betrifft ausschließlich die dritte Bedeutung.
 
-- [ ] **P1 – Keine Standard-SMS-App auf dem Testtablet gesetzt.**
-      `settings get secure sms_default_application` liefert `null`. Google
-      Messages ist installiert, aber nicht als Standard eingetragen. Ohne
-      Standard-SMS-App ist unklar, ob eingehende SMS im System-Provider landen
-      und wer die Benachrichtigung postet – beides braucht Lina
-      (`SmsReader` + `LinaAccessibilityService`). Erklärt möglicherweise, warum
-      SMS nie am Gerät verifiziert werden konnte. **Vor jedem SMS-Test setzen.**
+- [x] **Behoben (2026-08-30) – SMS wurden kleingeschrieben versendet.**
+      `resolve()` reicht `input.trim().lowercase()` an alle Regeln weiter, und
+      `resolveSms` schnitt den Nachrichtentext daraus heraus. Am Gerät belegt:
+      „schreib mike: Testnachricht von Lina" ging real als
+      **„testnachricht von lina"** raus. Im Deutschen liest sich das für den
+      Empfänger wie kaputt, und der blinde Absender kann es nicht prüfen.
+      `resolveSms` bekommt jetzt als einzige Regel den Originaltext und matcht
+      case-insensitiv; am Gerät mit einer zweiten echten SMS verifiziert.
+      **Gleiche Ursache, noch offen:** `SetReminder`, `SetCalendarEvent` und
+      `SearchAudiobook` bekommen ihre Slots ebenfalls kleingeschrieben. Bei der
+      Suche egal, beim Termintitel sichtbar im CalendarPanel für Angehörige.
+- [x] **Korrektur zu einem Befund von heute:** Die Meldung „keine
+      Standard-SMS-App gesetzt" war **falsch**. `settings get secure
+      sms_default_application` liefert auf modernem Android auch dann `null`,
+      wenn alles korrekt konfiguriert ist – maßgeblich ist der RoleManager,
+      und `cmd role get-role-holders android.app.role.SMS` lieferte bereits
+      vorher `com.google.android.apps.messaging`. SMS-Versand funktioniert am
+      Gerät nachweislich.
 - [ ] **P1 – Paketliste im AccessibilityService ist geraten, nicht ermittelt.**
       `handleNotification()` vergleicht gegen fest verdrahtete Paketnamen, u.a.
       `com.samsung.android.incallui` und `com.samsung.android.messaging` – ein

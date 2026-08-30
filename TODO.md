@@ -270,15 +270,27 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
       alte Erfolgsmeldung spricht. **Beide Pfade am Gerät verifiziert:**
       Flugmodus → Fehlermeldung nach 8s; echter Anruf → `state=2` (OFFHOOK)
       nach 1,5s, keine Fehlermeldung.
-- [ ] **P1 NEU (2026-08-30) – Lina hört während eines laufenden Anrufs weiter
-      zu.** Am Gerät beobachtet: 11 Sekunden nach dem Verbindungsaufbau kam
-      eine verhörte Eingabe aus dem Telefonat an und ging an die Claude-API.
-      Zwei Probleme in einem: Lina funkt in Gespräche hinein, **und
-      Gesprächsinhalte verlassen währenddessen das Gerät**. Das berührt die
-      Einwilligung in WARTUNG.md, die von Telefonaten nichts sagt.
-      Erwartet: Weckwort und STT pausieren, solange der Telefoniezustand nicht
-      `CALL_STATE_IDLE` ist. Der dafür nötige `TelephonyCallback` ist mit dem
-      Fix oben bereits im Projekt.
+- [ ] **P1 NEU (2026-08-30) – Raumgespräche erreichen die Claude-API.**
+      Am Gerät beobachtet: Während im Zimmer ein Discord-Gespräch lief, nahm
+      Lina im Folgefenster eine Passage daraus auf, verhörte sie und schickte
+      sie an die API. Der „Raumgespräch"-Filter existiert – aber er sitzt
+      **bei Claude** (`gespraech_beenden` im Systemprompt), also erst
+      **nachdem** die Äußerung das Gerät verlassen hat. Lokal filtert nur das
+      News-Folgefenster, das Gesprächsfenster reicht alles weiter.
+      Konsequenz für die Einwilligung: WARTUNG.md sagt zu, dass *freie Fragen*
+      an einen Internetdienst gehen. Dass im Folgefenster auch **mitgehörte
+      Gespräche Dritter** dorthin gelangen können, steht dort nicht – und
+      Besucher der Wohnung haben dem ohnehin nie zugestimmt.
+      Denkbare Richtungen: lokale Vorfilterung, bevor gesendet wird
+      (der lokale Router aus ADR-032 wäre genau dafür der richtige Ort);
+      kürzeres Folgefenster; Sprachprofil-Erkennung.
+- [ ] **P2 (2026-08-30) – Zuhören während eines aktiven Telefonats.** Davon
+      unabhängig, aber offen: Solange der Telefoniezustand nicht
+      `CALL_STATE_IDLE` ist, sollten Weckwort und STT pausieren, damit Lina
+      nicht ins Telefonat hineinredet. Der nötige `TelephonyCallback` ist seit
+      dem Anruf-Status-Fix im Projekt. **Nicht** am Gerät beobachtet – die
+      früher hier notierte Beobachtung war eine Fehlzuordnung (es war das
+      Discord-Gespräch im Raum, siehe Punkt darüber).
 - [x] **Behoben (2026-08-30) – SMS wurden kleingeschrieben versendet.**
       `resolve()` reicht `input.trim().lowercase()` an alle Regeln weiter, und
       `resolveSms` schnitt den Nachrichtentext daraus heraus. Am Gerät belegt:

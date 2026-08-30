@@ -19,6 +19,15 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
    SMS-Inhalte werden **nicht** übertragen.
 3. **Aufnahmen:** Bei der Ersteinrichtung entstehen Sprachaufnahmen (Weckwort,
    Befehle) für das Training der Erkennung. Sie werden nur dafür verwendet.
+3a. **Mitgehörtes im Folgefenster (Stand 2026-08-30):** Nach einer Antwort hört
+   Lina kurz weiter zu, ohne dass das Weckwort nötig ist. Was in dieser Zeit im
+   Raum gesprochen wird, kann aufgenommen und **an denselben Internetdienst
+   geschickt** werden – auch wenn es gar nicht an Lina gerichtet war. Die
+   Erkennung „das war ein Raumgespräch" trifft Claude, also erst nach dem
+   Versand. Am Gerät beobachtet mit einem parallel laufenden Videotelefonat im
+   Zimmer. Das betrifft auch **Besuch**, der dem nie zugestimmt hat: Wer
+   Gespräche führt, die niemanden etwas angehen, sollte Lina vorher mit
+   „Schlafmodus" oder über den Ausschalter stumm stellen.
 4. **Dokument-Vorlesen:** Sagt die Nutzer:in „lies mir die Post vor", macht Lina
    ein Foto des Dokuments im Rahmen und schickt es zur Auswertung an denselben
    Internetdienst. Das betrifft auch private Post. Das Bild wird **nicht

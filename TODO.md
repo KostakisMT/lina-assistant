@@ -259,19 +259,26 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
       sie nicht (`number=` leer), damit lässt sich der SMS-EMPFANG auch nach
       der Freischaltung nicht ohne Weiteres testen. Nummer beim Anbieter oder
       auf der Kartenverpackung nachsehen und hier notieren.
-- [ ] **P2 – Anruf-Erfolgsmeldung hat dasselbe Problem.** `dialContact()` sagt
-      „Ich rufe … an", bevor feststeht, ob eine Verbindung zustande kommt.
-      Gleiche Klasse wie der SMS-Fehler oben, gleiche Konsequenz für einen
-      Nutzer, der das Ergebnis nicht sehen kann.
-
-## 🟠 Benachrichtigungen — Befunde 2026-08-30 — P1/P2
-
-> Begriffsklärung, weil „Nachrichten" im Deutschen dreierlei meint:
-> **News** („was gibt es Neues", `ReadNews`, läuft über Claude+Websuche) ·
-> **SMS** („lies meine Nachrichten", `ReadSms`, lokal) ·
-> **Benachrichtigungen** (Android-Notifications, `LinaAccessibilityService`).
-> Dieser Abschnitt betrifft ausschließlich die dritte Bedeutung.
-
+- [x] **Behoben (2026-08-30) – Anruf meldete Erfolg, ohne ihn zu kennen.**
+      Gleiche Klasse wie der SMS-Fehler: `dialContact()` sagte „Ich rufe … an",
+      bevor feststand, ob überhaupt gewählt wird. Jetzt neutrale Ansage
+      („Ich verbinde dich mit …") und eine Überwachung des Telefoniezustands
+      über `TelephonyCallback.CallStateListener`. Bleibt der Zustand 8 Sekunden
+      lang `CALL_STATE_IDLE`, sagt Lina an, dass der Anruf nicht zustande kam.
+      Gelingt er, schweigt sie – der Nutzer hört das Freizeichen selbst.
+      `CallResult.Success` ist leer, damit der Launcher nicht zusätzlich die
+      alte Erfolgsmeldung spricht. **Beide Pfade am Gerät verifiziert:**
+      Flugmodus → Fehlermeldung nach 8s; echter Anruf → `state=2` (OFFHOOK)
+      nach 1,5s, keine Fehlermeldung.
+- [ ] **P1 NEU (2026-08-30) – Lina hört während eines laufenden Anrufs weiter
+      zu.** Am Gerät beobachtet: 11 Sekunden nach dem Verbindungsaufbau kam
+      eine verhörte Eingabe aus dem Telefonat an und ging an die Claude-API.
+      Zwei Probleme in einem: Lina funkt in Gespräche hinein, **und
+      Gesprächsinhalte verlassen währenddessen das Gerät**. Das berührt die
+      Einwilligung in WARTUNG.md, die von Telefonaten nichts sagt.
+      Erwartet: Weckwort und STT pausieren, solange der Telefoniezustand nicht
+      `CALL_STATE_IDLE` ist. Der dafür nötige `TelephonyCallback` ist mit dem
+      Fix oben bereits im Projekt.
 - [x] **Behoben (2026-08-30) – SMS wurden kleingeschrieben versendet.**
       `resolve()` reicht `input.trim().lowercase()` an alle Regeln weiter, und
       `resolveSms` schnitt den Nachrichtentext daraus heraus. Am Gerät belegt:

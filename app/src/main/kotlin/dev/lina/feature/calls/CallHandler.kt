@@ -4,7 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.telecom.TelecomManager
+import android.telephony.TelephonyCallback
+import android.telephony.TelephonyManager
+import android.util.Log
 import dev.lina.core.contacts.Contact
 import dev.lina.core.contacts.ContactMatchResult
 import dev.lina.core.contacts.FuzzyContactMatcher
@@ -36,7 +41,14 @@ class CallHandler(
                     )
                 } else {
                     dialContact(match.contact)
-                    CallResult.Success("Ich rufe ${match.contact.displayName} an.")
+                    // Leer, damit der Aufrufer NICHT zusätzlich spricht:
+                    // dialContact() macht die Ansage selbst und weiß als
+                    // einzige Stelle, ob überhaupt gewählt wurde. Vorher stand
+                    // hier "Ich rufe X an." – und das wurde auch dann gesagt,
+                    // wenn gar kein Anruf zustande kam (am 2026-08-30 im
+                    // Flugmodus reproduziert: erst die Erfolgsmeldung, dann
+                    // acht Sekunden später der Fehlschlag).
+                    CallResult.Success("")
                 }
             }
             is ContactMatchResult.MultipleMatches -> {
@@ -58,14 +70,91 @@ class CallHandler(
      * NUR aufrufen, wenn die Nummer entweder unbedenklich ist oder der Nutzer
      * bestätigt hat – die Prüfung sitzt in [startCall] bzw. beim Aufrufer der
      * Rückfrage. Direkt aufgerufen umgeht diese Methode den Schutz.
+     *
+     * Die Ansage ist bewusst neutral ("Ich verbinde dich mit …"): Ob der
+     * Anruf zustande kommt, steht zu diesem Zeitpunkt nicht fest. Die
+     * Vorgängerfassung meldete unbedingt "Ich rufe … an", auch wenn gar nichts
+     * passierte – am 2026-08-30 ohne SIM genau so beobachtet, der Dialer kam
+     * nie hoch und Lina meldete trotzdem Erfolg. Dieselbe Klasse Fehler wie
+     * beim SMS-Versand (siehe [dev.lina.feature.sms.SmsSender]): für einen
+     * Nutzer, der das Ergebnis nicht sehen kann, ist eine falsche Rückmeldung
+     * schlechter als gar keine.
+     *
+     * Gemeldet wird deshalb nur der FEHLSCHLAG. Kommt die Verbindung zustande,
+     * hört der Nutzer das Freizeichen selbst – eine zusätzliche Ansage würde
+     * ihm nur ins Gespräch reden.
      */
     fun dialContact(contact: Contact) {
-        ttsEngine.speak("Ich rufe ${contact.displayName} an.", TtsPriority.HIGH)
+        ttsEngine.speak("Ich verbinde dich mit ${contact.displayName}.", TtsPriority.HIGH)
         val intent = Intent(Intent.ACTION_CALL).apply {
             data = Uri.parse("tel:${contact.phoneNumber}")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "ACTION_CALL fehlgeschlagen", e)
+            ttsEngine.speak(
+                "Ich konnte den Anruf nicht starten.",
+                TtsPriority.HIGH,
+            )
+            return
+        }
+        watchCallEstablished(contact.displayName)
+    }
+
+    /**
+     * Beobachtet, ob der Anruf innerhalb von [CALL_ESTABLISH_TIMEOUT_MS]
+     * überhaupt aus dem Ruhezustand kommt. Bleibt der Telefoniezustand
+     * durchgehend `CALL_STATE_IDLE`, ist nichts passiert – etwa weil keine
+     * SIM steckt, kein Netz da ist oder der Anbieter ablehnt.
+     *
+     * Absichtlich nur dieses eine Signal: Der genaue Trennungsgrund wäre nur
+     * über einen eigenen `InCallService` zu bekommen, und die Frage "ist
+     * überhaupt etwas passiert" ist die, die dem Nutzer fehlt.
+     */
+    private fun watchCallEstablished(name: String) {
+        val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        val handler = Handler(Looper.getMainLooper())
+        var settled = false
+        var callback: TelephonyCallback? = null
+
+        val stop = {
+            callback?.let { runCatching { tm.unregisterTelephonyCallback(it) } }
+            callback = null
+        }
+
+        val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
+            override fun onCallStateChanged(state: Int) {
+                if (settled) return
+                if (state != TelephonyManager.CALL_STATE_IDLE) {
+                    // Verbindung baut sich auf – der Nutzer hört es selbst.
+                    settled = true
+                    Log.d(TAG, "Anruf an $name aufgebaut (state=$state)")
+                    handler.post { stop() }
+                }
+            }
+        }
+        callback = cb
+        try {
+            tm.registerTelephonyCallback(context.mainExecutor, cb)
+        } catch (e: SecurityException) {
+            // Ohne READ_PHONE_STATE keine Überwachung – dann lieber gar keine
+            // Aussage treffen als eine falsche.
+            Log.w(TAG, "Anrufüberwachung nicht möglich", e)
+            return
+        }
+
+        handler.postDelayed({
+            if (settled) return@postDelayed
+            settled = true
+            stop()
+            Log.w(TAG, "Anruf an $name kam nicht zustande (Zustand blieb IDLE)")
+            ttsEngine.speak(
+                "Der Anruf bei $name ist nicht zustande gekommen.",
+                TtsPriority.HIGH,
+            )
+        }, CALL_ESTABLISH_TIMEOUT_MS)
     }
 
     @Suppress("MissingPermission")
@@ -86,6 +175,11 @@ class CallHandler(
         ttsEngine.speak("Aufgelegt.", TtsPriority.HIGH)
     }
 }
+
+private const val TAG = "CallHandler"
+
+/** So lange wird auf einen Verbindungsaufbau gewartet, bevor Lina abwinkt. */
+private const val CALL_ESTABLISH_TIMEOUT_MS = 8_000L
 
 sealed class CallResult {
     data class Success(val message: String) : CallResult()

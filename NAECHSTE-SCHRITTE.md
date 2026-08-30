@@ -17,11 +17,14 @@ Zwei Fehler, die an diesem Tag gemacht wurden – bitte nicht wiederholen:
    die Entscheidung ausdrücklich fest. Ein Commit-Diff allein sagt nicht, ob
    etwas verloren ging oder bewusst entfernt wurde.
 
-   **Vorsicht mit dem Wort „Nachrichten" – es meint im Deutschen zweierlei:**
+   **Vorsicht mit dem Wort „Nachrichten" – es meint im Deutschen dreierlei:**
    - **News** („was gibt es Neues?", RSS-Quellen, `ResolvedIntent.ReadNews`) –
      laufen bewusst komplett über Claude+Websuche.
    - **SMS** („lies meine Nachrichten", `ResolvedIntent.ReadSms`) – bleiben
      lokal und sind davon **nicht** berührt.
+   - **Benachrichtigungen** (Android-Notifications, `LinaAccessibilityService`)
+     – wieder etwas anderes; nur Anruf- und SMS-Notifications überleben den
+     Filter, alles übrige fällt still weg. Siehe eigenen Abschnitt in TODO.md.
 
    In `LocalCommandResolverTest` standen beide Bedeutungen bis 2026-08-30 unter
    demselben Wort direkt untereinander. Die Tests heißen jetzt `SMS vorlesen`,

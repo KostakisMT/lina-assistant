@@ -229,6 +229,40 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 
 ---
 
+## 🟠 Benachrichtigungen — Befunde 2026-08-30 — P1/P2
+
+> Begriffsklärung, weil „Nachrichten" im Deutschen dreierlei meint:
+> **News** („was gibt es Neues", `ReadNews`, läuft über Claude+Websuche) ·
+> **SMS** („lies meine Nachrichten", `ReadSms`, lokal) ·
+> **Benachrichtigungen** (Android-Notifications, `LinaAccessibilityService`).
+> Dieser Abschnitt betrifft ausschließlich die dritte Bedeutung.
+
+- [ ] **P1 – Keine Standard-SMS-App auf dem Testtablet gesetzt.**
+      `settings get secure sms_default_application` liefert `null`. Google
+      Messages ist installiert, aber nicht als Standard eingetragen. Ohne
+      Standard-SMS-App ist unklar, ob eingehende SMS im System-Provider landen
+      und wer die Benachrichtigung postet – beides braucht Lina
+      (`SmsReader` + `LinaAccessibilityService`). Erklärt möglicherweise, warum
+      SMS nie am Gerät verifiziert werden konnte. **Vor jedem SMS-Test setzen.**
+- [ ] **P1 – Paketliste im AccessibilityService ist geraten, nicht ermittelt.**
+      `handleNotification()` vergleicht gegen fest verdrahtete Paketnamen, u.a.
+      `com.samsung.android.incallui` und `com.samsung.android.messaging` – ein
+      Erbstück vom Vorgängergerät. Nutzt jemand eine andere Telefon- oder
+      SMS-App, hört Lina **still** auf, eingehende Anrufe zu melden. Robuster:
+      zur Laufzeit den echten Standard abfragen
+      (`TelecomManager.getDefaultDialerPackage()`,
+      `Telephony.Sms.getDefaultSmsPackage()`) statt zu raten.
+- [ ] **P2 – Alle übrigen Benachrichtigungen fallen still unter den Tisch.**
+      Der Filter lässt nur Anruf und SMS durch; Kalender, Paketankündigungen,
+      Medikamenten-Apps, Messenger sind für den Nutzer damit unsichtbar – er
+      sieht die Statusleiste nicht. CLAUDE.md führt „Notifications in Echtzeit
+      lesen" als Fähigkeit des AccessibilityService; gelesen werden sie, aber
+      nur zwei Sorten überleben. Entweder ausbauen (Sprachbefehl „was gibt es
+      für Benachrichtigungen", sinnvolle Whitelist/Blacklist) oder CLAUDE.md
+      angleichen.
+
+---
+
 ## 🟠 Kontakt-Import überarbeiten — aus dem Klientenbesuch 2026-08-30 — P1/P2
 
 > Ausgangslage: Beim Klienten wurde eine echte Vodafone-SIM eingelegt. Der

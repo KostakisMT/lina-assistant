@@ -349,4 +349,72 @@ class LocalCommandResolverTest {
     fun `unbekannter Satz liefert null`() {
         assertNull(resolver.resolve("erzähl mir etwas über die nordsee"))
     }
+
+    /**
+     * Abgrenzung zum Dokument-Vorlesen: "Zeitung" gehört zur Kamera, nicht zu
+     * den Nachrichten – resolveDocument steht in der Kette vorher.
+     */
+    @Test
+    fun `lies mir die Zeitung vor bleibt Dokument`() {
+        assertEquals(ResolvedIntent.ReadDocument, resolver.resolve("lies mir die Zeitung vor"))
+    }
+
+    /**
+     * "weiter" muss global das Hörbuch fortsetzen. Eine frühere Fassung von
+     * resolveNews erzeugte daraus NextNews und stand vor resolveAudiobook –
+     * falls Nachrichten je wieder lokal aufgelöst werden, darf das nicht
+     * zurückkommen. NextNews entsteht ausschließlich im Folgefenster
+     * (LauncherActivity.mapNewsFollowUp).
+     */
+    @Test
+    fun `weiter bleibt Hoerbuch-Fortsetzen`() {
+        assertEquals(ResolvedIntent.ResumeAudiobook, resolver.resolve("weiter"))
+    }
+
+    /**
+     * Frei gestellte Fragen nach der Bibliothek. "Welche Hörbücher habe ich"
+     * funktionierte schon, "was kann ich heute hören" fiel bis 2026-08-30 an
+     * Claude durch, obwohl es dieselbe Frage ist.
+     */
+    @Test
+    fun `freie Fragen nach der Bibliothek landen bei ListAudiobooks`() {
+        listOf(
+            "welche hörbücher habe ich",
+            "was kann ich heute hören",
+            "was kann ich hören",
+            "was gibt es zu hören",
+            "was könnte ich mir anhören",
+        ).forEach {
+            assertEquals(it, ResolvedIntent.ListAudiobooks, resolver.resolve(it))
+        }
+    }
+
+    /**
+     * Offene Suchbitte ohne Suchbegriff → Rückfrage statt Blindsuche.
+     * Vorher machte resolveAudiobookSearch aus "such mir ein Hörbuch" die
+     * LibriVox-Anfrage "mir ein hörbuch".
+     */
+    @Test
+    fun `offene Suchbitte fragt nach dem Thema`() {
+        listOf(
+            "kannst du ein hörbuch für mich suchen",
+            "such mir ein hörbuch",
+            "suche ein hörbuch",
+            "finde mir ein hörbuch",
+            "kannst du mir ein buch empfehlen",
+        ).forEach {
+            assertEquals(it, ResolvedIntent.AskAudiobookTopic, resolver.resolve(it))
+        }
+    }
+
+    /** Konkrete Suchen dürfen NICHT in der Rückfrage landen. */
+    @Test
+    fun `konkrete Hoerbuchsuche bleibt direkte Suche`() {
+        // Entscheidend ist nur, dass die Rückfrage NICHT greift. Wie der
+        // Suchbegriff genau zugeschnitten wird, ist bestehendes Verhalten
+        // von resolveAudiobookSearch (siehe TODO.md).
+        assertTrue(resolver.resolve("suche hörbuch von tolstoi") is ResolvedIntent.SearchAudiobook)
+        assertTrue(resolver.resolve("suche tolstoi") is ResolvedIntent.SearchAudiobook)
+    }
+
 }

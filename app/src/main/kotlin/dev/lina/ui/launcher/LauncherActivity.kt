@@ -1500,9 +1500,57 @@ class LauncherActivity : ComponentActivity() {
         statusText = "Lina denkt nach…"
         linaActivity = LinaActivity.Thinking
         Earcons.thinking()
+
+        // Claude kann serverseitig mehrere Websuch-Runden fahren. Am
+        // 2026-08-30 am Testtablet gemessen: 118 Sekunden zwischen Frage und
+        // Antwort, in denen Lina kein Wort sagte. Für einen blinden Nutzer ist
+        // das nicht von "Gerät ist tot" zu unterscheiden – und Leitprinzip 6
+        // verlangt für jede Aktion akustische Rückmeldung. Deshalb: regelmäßig
+        // vertrösten und nach einer harten Grenze aufgeben.
+        var settled = false
+        val reassure = object : Runnable {
+            var round = 0
+            override fun run() {
+                if (settled) return
+                round++
+                ttsEngine?.speak(
+                    if (round == 1) "Einen Moment, ich suche noch."
+                    else "Ich bin noch dran.",
+                    TtsPriority.LOW,
+                )
+                mainHandler.postDelayed(this, CLAUDE_REASSURE_REPEAT_MS)
+            }
+        }
+        val giveUp = Runnable {
+            if (settled) return@Runnable
+            settled = true
+            mainHandler.removeCallbacks(reassure)
+            android.util.Log.w("LinaLauncher", "Claude-Antwort abgebrochen nach ${CLAUDE_HARD_TIMEOUT_MS}ms: \"$input\"")
+            ttsEngine?.speak(
+                "Das dauert mir zu lange. Frag mich das gern gleich noch einmal.",
+                TtsPriority.HIGH,
+            )
+            statusText = "Lina bereit – sag \"$WAKE_WORD\""
+            linaActivity = LinaActivity.Idle
+            resumeWakeWordListening()
+        }
+        mainHandler.postDelayed(reassure, CLAUDE_REASSURE_AFTER_MS)
+        mainHandler.postDelayed(giveUp, CLAUDE_HARD_TIMEOUT_MS)
+
         Thread {
             val reply = conversation.ask(input, freshWakeWord)
             runOnUiThread {
+                // Nach dem Aufgeben darf die verspätete Antwort NICHT mehr
+                // gesprochen werden – sonst redet Lina los, nachdem der Nutzer
+                // die Sache längst abgehakt (oder "stopp" gesagt) hat.
+                if (settled) {
+                    android.util.Log.d("LinaLauncher", "Verspätete Claude-Antwort verworfen: \"$input\"")
+                    return@runOnUiThread
+                }
+                settled = true
+                mainHandler.removeCallbacks(reassure)
+                mainHandler.removeCallbacks(giveUp)
+
                 val response = when (reply) {
                     is LinaReply.Say -> reply.text
                     is LinaReply.Do -> handleIntent(reply.intent)
@@ -1748,6 +1796,13 @@ class LauncherActivity : ComponentActivity() {
             if (librivoxSuggestionOpened) openLibrivoxSuggestionFollowUp()
             "" // listBooks() spricht bereits alles Nötige selbst
         }
+        is ResolvedIntent.AskAudiobookTopic -> {
+            // Fragt "Zu welchem Thema?" und sucht dann bei LibriVox. Der Flow
+            // existierte bereits, war aber nur über den Vorschlag bei kleiner
+            // Bibliothek erreichbar – jetzt auch direkt per Sprachbefehl.
+            openLibrivoxTopicFollowUp()
+            "" // openLibrivoxTopicFollowUp() spricht selbst
+        }
         is ResolvedIntent.SearchAudiobook -> {
             audiobookManager?.searchAndPlay(intent.query)
             "Suche nach ${intent.query}…"
@@ -1916,6 +1971,7 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.RewindAudiobook -> "RewindAudiobook(${intent.seconds}s)"
         is ResolvedIntent.AudiobookInfo -> "AudiobookInfo"
         is ResolvedIntent.ListAudiobooks -> "ListAudiobooks"
+        is ResolvedIntent.AskAudiobookTopic -> "AskAudiobookTopic"
         is ResolvedIntent.SearchAudiobook -> "SearchAudiobook(${intent.query})"
         is ResolvedIntent.SearchAudiobookByGenre -> "SearchAudiobookByGenre(${intent.topic})"
         is ResolvedIntent.SleepTimer -> "SleepTimer(${intent.minutes}min)"
@@ -1966,6 +2022,13 @@ class LauncherActivity : ComponentActivity() {
         private const val WAKE_WORD = "Hey Lina"
         // Whisper ist nicht-streamend: bis zu 10s Aufnahme + Transkriptionszeit
         private const val STT_TIMEOUT_MS = 30_000L
+
+        // Vertröstung und harte Grenze für Claude-Antworten. Die Werte sind an
+        // der Messung vom 2026-08-30 orientiert: unauffällige Antworten kamen
+        // in ~9s, die entgleiste Websuche brauchte 118s.
+        private const val CLAUDE_REASSURE_AFTER_MS = 12_000L
+        private const val CLAUDE_REASSURE_REPEAT_MS = 20_000L
+        private const val CLAUDE_HARD_TIMEOUT_MS = 90_000L
         private const val DEBUG_FILE_RETENTION_DAYS = 7L
         // Transiente Fehleranzeige der Statuskugel – danach zurück zu Idle
         private const val ERROR_DISPLAY_MS = 4_000L

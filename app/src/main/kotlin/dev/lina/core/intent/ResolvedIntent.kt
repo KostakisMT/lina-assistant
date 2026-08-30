@@ -17,6 +17,13 @@ sealed class ResolvedIntent {
     data class SearchAudiobook(val query: String) : ResolvedIntent()
     /** Suche nach Thema/Genre statt Titel/Autor (LibriVox-Taxonomie, siehe LibrivoxGenres). */
     data class SearchAudiobookByGenre(val topic: String) : ResolvedIntent()
+
+    /**
+     * Offene Suchbitte ohne konkreten Titel/Autor ("kannst du ein Hörbuch für
+     * mich suchen"). Lina fragt zurück "Zu welchem Thema?", statt mit einem
+     * sinnlosen Suchbegriff bei LibriVox loszulaufen.
+     */
+    data object AskAudiobookTopic : ResolvedIntent()
     data object NextChapter : ResolvedIntent()
     data object PreviousChapter : ResolvedIntent()
     /** 1-basiert, wie gesprochen ("Kapitel drei"). */

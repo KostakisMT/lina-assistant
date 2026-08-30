@@ -5,6 +5,74 @@
 
 ---
 
+## [2026-08-30] Übergabe-Vorbereitung: Onboarding-Tempo, Hörbuch-Sprache, Claude-Timeout
+
+**Was:**
+
+1. **Onboarding – längere Antwortzeiten für persönliche Fragen.** Im Gerätetest
+   kamen ausgerechnet bei den erzählenden Fragen die kürzesten Aufnahmen heraus
+   (Bücher 3,8s, wichtigste Person 4,3s) – die Antworten wurden abgeschnitten,
+   was die Erkennung zusätzlich verschlechtert. Drei Grenzen wirkten zusammen
+   und waren alle auf Kurzbefehle ausgelegt: `ANSWER_END_SILENCE_MS` (1800ms),
+   `MAX_RECORD_MS` (10s **hart in der Engine**) und `ANSWER_TIMEOUT_MS` (15s).
+   `WhisperSttEngine.maxRecordMs` ist jetzt konfigurierbar (wie `endSilenceMs`
+   und `noSpeechTimeoutMs`); `QUESTIONS` ist von `Pair` auf eine
+   `Question`-Datenklasse mit `openEnded`-Flag umgestellt. Die vier erzählenden
+   Fragen bekommen 2500ms Pausentoleranz, 20s Aufnahme und 30s Timeout.
+
+2. **Hörbücher freier ansprechbar.** „Was kann ich heute hören?" fiel bisher an
+   Claude durch, obwohl es dieselbe Frage ist wie „welche Hörbücher habe ich" →
+   trifft jetzt `ListAudiobooks`. Neu `ResolvedIntent.AskAudiobookTopic` für
+   offene Suchbitten ohne Suchbegriff („kannst du ein Hörbuch für mich
+   suchen"): Lina fragt „Zu welchem Thema?" zurück, statt loszusuchen. Der
+   Rückfrage-Flow (`openLibrivoxTopicFollowUp`) existierte bereits, war aber
+   nur über den Vorschlag bei kleiner Bibliothek erreichbar. **Nebenbefund
+   behoben:** „such mir ein Hörbuch" landete vorher als LibriVox-Suchanfrage
+   `mir ein hörbuch`.
+
+3. **Claude-Antworten: Vertröstung + harte Grenze.** `askClaude()` startete
+   einen Thread ohne jeden Timeout und ohne Zwischenmeldung. Am Gerät gemessen:
+   **118 Sekunden** zwischen Frage und Antwort, in denen Lina kein Wort sagte
+   (Claude fuhr serverseitig mehrere Websuch-Runden). Für einen blinden Nutzer
+   nicht von „Gerät ist tot" zu unterscheiden. Jetzt: nach 12s „Einen Moment,
+   ich suche noch.", danach alle 20s „Ich bin noch dran.", nach 90s Abbruch mit
+   Ansage. Verspätete Antworten werden verworfen – vorher sprach Lina sie auch
+   dann noch aus, wenn der Nutzer längst „stopp" gesagt hatte (am Gerät
+   beobachtet).
+
+**Korrektur zu einem früheren Befund in dieser Sitzung:** Der fehlende
+News-Intent wurde hier zunächst als versehentliche Regression aus `a12fd03`
+gemeldet und beinahe „repariert". Das war falsch. Der Test
+`Nachrichten gehen komplett an Ebene 2` in `LocalCommandResolverTest` hält die
+Entscheidung ausdrücklich fest: Nachrichten macht bewusst Claude per Websuche,
+der lokale Resolver fasst sie nicht an. Die Änderung wurde zurückgenommen.
+Was als offene Frage bleibt: CLAUDE.md beschreibt weiterhin RSS-Feeds und
+Vertrauensquellen als Priorität 3, und `NewsSyncWorker` synchronisiert im
+Hintergrund Feeds, die per Sprache nicht erreichbar sind. Code und Doku
+widersprechen sich – siehe TODO.md.
+
+**Warum:** Vorbereitung der Übergabe an den Testnutzer. Alle drei Punkte kamen
+aus dem Gerätetest bzw. direkt aus dem Feedback beim Durchspielen der
+Einrichtung.
+
+**Dateien:** `core/stt/WhisperSttEngine.kt`, `feature/onboarding/VoiceOnboarding.kt`,
+`core/intent/ResolvedIntent.kt`, `core/intent/LocalCommandResolver.kt`,
+`ui/launcher/LauncherActivity.kt`, `core/intent/LocalCommandResolverTest.kt`.
+182 Tests grün (beide Flavors).
+
+**Offen:**
+- Erkennungsqualität auf Raumdistanz (davon unberührt): im Onboarding kamen
+  6 von 6 Antworten falsch an, u.a. „Oldenburg" → „Albenburg" – und das war
+  ein vollständiger, NICHT abgeschnittener Satz. Die Antworten gehen ungefiltert
+  in den Claude-System-Prompt, Lina las danach Nachrichten aus dem falschen
+  Landkreis vor.
+- `speak()` beendet weiterhin keine laufende Aufnahme (Ursache B der
+  Geistereingaben).
+- `resolveAudiobookSearch` schneidet „suche Hörbuch von Tolstoi" zu
+  `von tolstoi` statt `tolstoi` zu – bestehendes Verhalten, klein.
+
+---
+
 ## [2026-08-30] Fix: Geistereingaben – Whisper halluzinierte auf Raumrauschen
 
 **Was:** Bei der Vorbereitung der Klienten-Übergabe (Gerätetest am Lenovo-

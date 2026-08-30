@@ -223,7 +223,19 @@ class LocalCommandResolver : IntentResolver {
         input.matches(Regex(""".*\bleiser\b.*""")) -> ResolvedIntent.VolumeDown
         input.matches(Regex(""".*(?:was höre ich|welches buch|was läuft|was spielt).*""")) ->
             ResolvedIntent.AudiobookInfo
-        input.matches(Regex(""".*(?:welche hörbücher|meine hörbücher|hörbuch(?:liste|er)|bibliothek).*""")) ->
+        // Offene Suchbitte OHNE konkreten Titel/Autor. Muss VOR
+        // resolveAudiobookSearch greifen: dessen Muster "such\s+(.+)" würde
+        // aus "such mir ein Hörbuch" den Suchbegriff "mir ein hörbuch" machen
+        // und den bei LibriVox abfeuern. Der von/über-Ausschluss lässt
+        // konkrete Anfragen ("such ein Hörbuch von Tolstoi") durchfallen.
+        input.matches(Regex(""".*\b(?:such\w*|find\w*|empfehl\w*|empfiehl\w*)\b.*""")) &&
+            input.matches(Regex(""".*\b(?:hörbuch|hörbücher|buch|bücher)\b.*""")) &&
+            !input.matches(Regex(""".*\b(?:von|über|ueber|mit|titel|autor|thema|genre)\b.*""")) ->
+            ResolvedIntent.AskAudiobookTopic
+        // "Was kann ich heute hören?" ist dieselbe Frage wie "welche Hörbücher
+        // habe ich" – nur so, wie man sie tatsächlich stellt.
+        input.matches(Regex(""".*was (?:kann|könnte|koennte|gibt es|gibts).*\b(?:hören|hoeren|anhören|anhoeren)\b.*""")) ||
+            input.matches(Regex(""".*(?:welche hörbücher|meine hörbücher|hörbuch(?:liste|er)|bibliothek).*""")) ->
             ResolvedIntent.ListAudiobooks
         else -> resolveVolumeLevel(input) ?: resolveSleepTimer(input) ?:
             resolveAudiobookGenreSearch(input) ?: resolveAudiobookSearch(input)

@@ -1000,3 +1000,96 @@ dex-Dateien), `app-ngo-debug.apk` enthält keine einzige – kein Fall von
 - Kein `GemmaConversation` in dieser Phase: `ConversationEngineProvider` im
   `ngo`-Flavor ist ein reiner Platzhalter (`create(...) = null`). Das ist der
   Anschlusspunkt für Phase E, sobald ein finegetunter On-Device-Pfad steht.
+
+---
+
+## ADR-035: Ein gemeinsamer Werkzeug-Katalog als Voraussetzung für den lokalen Router; Regex nur noch für Reflexe
+**Datum:** 2026-08-30 | **Status:** Vorgeschlagen – aus einer Live-Sitzung am Testtablet, noch nicht umgesetzt
+
+**Kontext:** Beim Durchspielen vor der Übergabe sprach der Entwickler frei mit
+Lina und stellte fest: „nichts funktioniert richtig". Die Auswertung des
+Mitschnitts ergab zwei ineinandergreifende Ursachen, keine davon in der
+Sprachausgabe oder im Feature-Code:
+
+1. **Whisper verstümmelt bei Raumdistanz genau die Wörter, auf die es
+   ankommt.** Gemessen: „Tolstoi" → „Teustol", „LibriVox" → „Privaks",
+   „Onleihe" → „Interleihte", „Hörbuch" → „führbuch". Damit verfehlt die
+   Regex-Ebene, die auf exakte Formulierungen angewiesen ist.
+2. **Der Auffangpfad hatte für den betroffenen Bereich keine Werkzeuge.**
+   `ClaudeConversation.TOOLS` kannte 10 Werkzeuge, `ResolvedIntent` hat 46
+   Intents. Beim Hörbuch konnte Claude genau eins: abspielen. Auf „welche
+   Hörbücher habe ich" antwortete Claude wahrheitsgemäß „ich habe keinen
+   Zugriff auf eine Liste" – und dementierte damit eine Funktion, die es
+   gibt. Für den Nutzer sieht das aus, als könne Lina nichts.
+
+Entscheidend: **`training/llm/prompts/system_prompt_router_de.txt` listet
+exakt dieselben 10 Werkzeuge.** Der lokale Llama-3.2-3B-Router aus ADR-032
+erbt die Lücke unverändert. Die dort gemessenen 88,5 % (46/52) beziehen sich
+auf diesen schmalen Katalog, nicht auf Linas tatsächlichen Funktionsumfang.
+
+Ursache der Lücke ist strukturell: Intent-Liste und Werkzeug-Liste sind zwei
+handgepflegte Listen ohne Verbindung. Sie sind auf 46 gegen 10 auseinander-
+gelaufen, und **nichts im Projekt hat das bemerkt** – gefunden hat es der
+Entwickler beim freien Sprechen, drei Stunden vor einer Übergabe.
+
+**Entscheidung:**
+
+1. **Ein Katalog, zwei Verbraucher.** Jede Fähigkeit wird einmal deklariert
+   (Name, Parameter, Beschreibung, erzeugter `ResolvedIntent`). Daraus wird
+   sowohl `ClaudeConversation.TOOLS` generiert als auch der Werkzeugblock in
+   `system_prompt_router_de.txt`. Cloud-Pfad und lokaler Pfad können damit
+   nicht mehr auseinanderlaufen.
+2. **Ein Test, der die Drift bricht.** Ein Unit-Test schlägt fehl, sobald ein
+   `ResolvedIntent` weder ein Werkzeug hat noch auf einer expliziten
+   Ausnahmeliste steht. Auf die Ausnahmeliste gehören nur die internen
+   Folgefenster-Intents (`NextNews`, `NewsDetail`, `AskAudiobookTopic` u.ä.),
+   die nie aus freier Rede entstehen. **Das ist der eigentliche Kern dieser
+   ADR** – ohne ihn steht dieselbe Lücke in drei Monaten wieder da.
+3. **Die Regex-Ebene schrumpft auf Reflexe.** Sie bleibt zuständig für das,
+   was sie allein kann: sofort und offline. Konkret Stopp, Pause, Weiter,
+   lauter/leiser, Anrufsteuerung (annehmen/ablehnen/auflegen) und
+   Schlafmodus. Kriterium ist nicht Erkennungsgüte, sondern
+   Sicherheitsrelevanz oder Sofort-Unterbrechung: Sagt der Nutzer „stopp",
+   während Lina redet, sind Sekunden Bedenkzeit ein Defekt.
+   Alles andere geht an die Routing-Ebene.
+4. **Die Routing-Ebene ist langfristig lokal** (ADR-032, Llama-3.2-3B-Router
+   auf dem Tablet). Claude bleibt für **Nachrichten und freie Gespräche** –
+   das deckt sich mit der bereits getroffenen Entscheidung, Nachrichten
+   komplett über Claude+Websuche zu fahren (festgehalten im Test
+   `Nachrichten gehen komplett an Ebene 2`).
+5. **Reihenfolge:** Katalog und Test zuerst, danach das nächste
+   Router-Training. Andernfalls wird zweimal trainiert – einmal auf den
+   schmalen Satz, dann auf den vollen.
+
+**Konsequenzen:**
+
+- **Die 88,5 % aus ADR-032 sind kein übertragbarer Ausgangswert.** Mehr
+  Werkzeuge bedeuten mehr Klassen; die Genauigkeit wird zunächst sinken und
+  muss neu erarbeitet werden. Zusammen mit der dort dokumentierten
+  Lauf-zu-Lauf-Varianz (ein zweiter Lauf: 59,6 %) heißt das: der lokale Pfad
+  ist weiter von der Auslieferung entfernt, als die Zahl vermuten lässt.
+- **Bis der lokale Router steht, trägt Claude die Routing-Last.** Das erhöht
+  die API-Kosten gegenüber heute, weil die Regex bislang die häufigen Befehle
+  abfängt. Der Nutzer hat für diesen einen Testnutzer bis zu 20 EUR/Monat als
+  vertretbar bezeichnet. Verlässlich schätzen lässt sich das erst mit
+  Nutzungsdaten; der größte Treiber ist die Websuche für Nachrichten, nicht
+  die Gerätebefehle. Berührt ADR-020 (Proxy mit Nutzungszähler).
+- **Wartezeiten werden häufiger.** Deshalb ist die am selben Tag gebaute
+  Vertröstung (12s „Einen Moment, ich suche noch", harte Grenze 90s) eine
+  **Voraussetzung** dieser Architektur, keine Politur.
+- **Offline bleibt eine Lücke.** Ohne Netz und ohne lokalen Router bleiben nur
+  die Reflexe. Lina muss das dann ansagen („Ich bin gerade nicht verbunden,
+  ich verstehe nur die Grundbefehle") – stilles Scheitern ist für einen
+  blinden Nutzer nicht von einem defekten Gerät zu unterscheiden.
+
+**Belege aus der Sitzung (2026-08-30):** Nach dem Nachrüsten der elf
+Hörbuch-Werkzeuge wurden dieselben verstümmelten Transkripte erneut
+eingespielt. „Was ihr hörbücher habe ist." → `hoerbuecher_auflisten`.
+„Spiele her und knecht vom Teustol" → `hoerbuch_suchen("Herr und Knecht
+Tolstoi")` – das Modell korrigiert beide verstümmelten Namen selbst, was eine
+Regex prinzipiell nicht leisten kann. Gegenbeispiel für Punkt 3: „Suche nach
+Hörbischan in der Kategorie Politik" erreichte die Routing-Ebene **gar
+nicht**, weil die lokale Regex `such\s+(.+)` vorher zugriff und den ganzen
+verstümmelten Satz als LibriVox-Suchbegriff abfeuerte. Die Regex ist dort
+nicht nur unvollständig, sie zerstört aktiv Eingaben, die die nächste Ebene
+richtig verstanden hätte.

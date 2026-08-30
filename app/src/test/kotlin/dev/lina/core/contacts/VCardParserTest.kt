@@ -140,4 +140,33 @@ class VCardParserTest {
     fun `leerer Text liefert leere Liste`() {
         assertEquals(0, VCardParser.parse("").size)
     }
+    /**
+     * Ende-zu-Ende-Absicherung fuer den iPad-Weg (scripts/ipad-import.sh +
+     * ipad_contacts_to_vcard.py): exakt das Format, das der Konverter aus
+     * einer iOS-AddressBook.sqlitedb erzeugt. Bricht dieser Test, passt der
+     * Konverter nicht mehr zum Parser und der Kontakt-Import schlaegt beim
+     * Nutzer fehl - gemerkt wuerde es sonst erst vor Ort.
+     */
+    @Test
+    fun `vCard aus dem iPad-Konverter wird gelesen`() {
+        val vcf = listOf(
+            "BEGIN:VCARD", "VERSION:3.0", "N:Hartmann;Boris;;;", "FN:Boris Hartmann",
+            "TEL;TYPE=CELL:+4915555501234", "END:VCARD",
+            "BEGIN:VCARD", "VERSION:3.0", "N:Es\u00dffeld;Dirk;;;", "FN:Dirk Es\u00dffeld",
+            "TEL;TYPE=CELL:+491715550103", "END:VCARD",
+            "BEGIN:VCARD", "VERSION:3.0", "N:Nummern;Zwei;;;", "FN:Zwei Nummern",
+            "TEL;TYPE=CELL:+491701111111", "TEL;TYPE=CELL:01702222222", "END:VCARD",
+        ).joinToString("\r\n")
+
+        val contacts = VCardParser.parse(vcf)
+
+        // Umlaut/ss ueberleben den Weg durch den Konverter
+        assertTrue(contacts.any { it.displayName == "Dirk Es\u00dffeld" })
+        assertTrue(contacts.any { it.displayName == "Boris Hartmann" && it.phoneNumber == "+4915555501234" })
+        // Beide Nummern eines Kontakts kommen an
+        val zwei = contacts.filter { it.displayName == "Zwei Nummern" }.map { it.phoneNumber }
+        assertTrue("+491701111111" in zwei)
+        assertTrue("01702222222" in zwei)
+    }
+
 }

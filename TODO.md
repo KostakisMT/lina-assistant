@@ -229,6 +229,54 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 
 ---
 
+## 🟠 Kontakt-Import überarbeiten — aus dem Klientenbesuch 2026-08-30 — P1/P2
+
+> Ausgangslage: Beim Klienten wurde eine echte Vodafone-SIM eingelegt. Der
+> Import lieferte **21 Einträge, davon 0 persönliche** – ausschließlich
+> Diensteinträge des Anbieters, **13 davon mit 199ct/Min** (Tarot, Horoskop,
+> PartnerschaftLiebe, Auskunft, Mailboxtexte …). Der Datensatz liegt als
+> `tablet-data/testdaten/vodafone-sim.vcf` (+ Rohdump) und ist bewusst auf dem
+> Testtablet geblieben, damit gegen echte statt ausgedachte Daten entwickelt
+> werden kann.
+>
+> Das eigentliche Risiko ist nicht der volle Adressspeicher, sondern die Kette:
+> Whisper verhört bei Raumdistanz Eigennamen (belegt: „Tolstoi" → „Teustol")
+> → Fuzzy-Matching landet auf „Tarot" oder „Auskunft" → Lina wählt eine
+> Premium-Nummer → **der Nutzer sieht nicht, wen er anruft.**
+
+- [ ] **P1 – Schutz an den ANRUF hängen, nicht an den Import.** Vor dem Wählen
+  einer Premium-/Kurzwahlnummer ansagen und bestätigen lassen. Wirkt
+  unabhängig davon, wie die Nummer ins Telefonbuch kam – also auch bei
+  Google-Konto-Sync während der Android-Ersteinrichtung, an dem gar kein
+  Lina-Code beteiligt ist. Ein reiner Importfilter lässt genau diese Tür offen.
+  Das ist der wichtigste der vier Punkte hier.
+- [ ] **P1 – SIM-Import filtern statt abschaffen.** Kurzwahlnummern (< 7
+  Ziffern), Namen mit „ct/Min", bekannte Anbieter-Präfixe. **Nicht abschaffen:**
+  genau die Zielgruppe (ältere Menschen mit altem Tastenhandy) hat ihre
+  Kontakte oft tatsächlich auf der SIM. Der Weg ist richtig, nur ungefiltert.
+- [ ] **P2 – Gebündelt nachfragen statt still importieren.** „Ich habe 21
+  Einträge gefunden, 13 sehen nach Servicenummern aus. Soll ich die
+  weglassen?" Widerspricht ADR-029 nicht – dort wurde die Einzelbestätigung
+  pro Kontakt verworfen, nicht eine gebündelte Rückfrage.
+- [ ] **P2 – vCard als Haupttrichter ausbauen.** Begonnen mit
+  `scripts/ipad-import.sh`, `scripts/ipad_contacts_to_vcard.py` und
+  `scripts/merge-vcards.py`. Offen: Google-Export, Android-zu-Android.
+  Hintergrund: iOS verteilt Kontakte über mehrere Accounts – der
+  iCloud-Export übersieht Yahoo-Kontakte **stillschweigend** (beim Klienten
+  genau so aufgetreten), das Gerätebackup ist als einziger Weg account-blind.
+- [ ] **P3 – `ipad-import.sh` zeigt keinen Fortschritt.** Die Ausgabe von
+  `idevicebackup2` läuft durch `tail -3`, der Nutzer sitzt bei einem ~20-GB-
+  Backup minutenlang vor einem scheinbar eingefrorenen Terminal. Am 2026-08-30
+  beim Klienten aufgefallen.
+- [x] **Behoben (2026-08-30):** `ContactDedup.partition()` verglich jeden
+  Kandidaten nur gegen den Bestand, nicht gegen die bereits akzeptierten
+  Kandidaten desselben Durchlaufs. Beim Zusammenführen zweier Accounts
+  (iCloud + Yahoo) der Normalfall – beide Einträge landeten im Telefonbuch,
+  und jede Dublette heißt für einen blinden Nutzer eine Rückfrage bei jedem
+  Anruf.
+
+---
+
 ## 🔴 Robustheit vor Release — Factsheet-Review (2026-08-22) — P1/P2 gemischt
 
 > Entstanden aus einer Durchsicht des technischen Factsheets (Artifact) neben

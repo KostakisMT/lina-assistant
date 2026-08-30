@@ -5,6 +5,7 @@ import android.os.Looper
 import android.util.Log
 import dev.lina.core.audio.Earcons
 import dev.lina.core.audio.WavRecorder
+import dev.lina.core.stt.SpeechDetector
 import dev.lina.core.stt.WhisperSttEngine
 import dev.lina.core.tts.TtsEngine
 import dev.lina.core.tts.TtsPriority
@@ -52,6 +53,7 @@ class VoiceOnboarding(
     fun cancel() {
         cancelled = true
         stt?.endSilenceMs = DEFAULT_END_SILENCE_RESTORE_MS
+        stt?.noSpeechTimeoutMs = SpeechDetector.NO_SPEECH_TIMEOUT_MS
         stt?.stopListening()
     }
 
@@ -98,7 +100,12 @@ class VoiceOnboarding(
 
     private fun question(index: Int, onFinished: (String, String, String) -> Unit) {
         if (cancelled) return
-        if (index == 0) stt?.endSilenceMs = ANSWER_END_SILENCE_MS
+        if (index == 0) {
+            stt?.endSilenceMs = ANSWER_END_SILENCE_MS
+            // Offene Fragen brauchen Denkzeit VOR dem ersten Wort – sonst
+            // verwirft die Sprachlos-Notbremse die Antwort, bevor sie beginnt.
+            stt?.noSpeechTimeoutMs = ANSWER_NO_SPEECH_TIMEOUT_MS
+        }
         if (index >= QUESTIONS.size || stt == null) {
             finish(onFinished)
             return
@@ -192,6 +199,9 @@ class VoiceOnboarding(
         // Ältere Nutzer machen Denkpausen mitten in der Antwort – großzügiger
         // als die Standard-Stille-Erkennung (1200ms), sonst wird abgeschnitten
         private const val ANSWER_END_SILENCE_MS = 1800
+        // Passend zu ANSWER_TIMEOUT_MS (15s): lieber auf eine Denkpause warten
+        // als eine Antwort verwerfen, die gerade erst anfangen wollte.
+        private const val ANSWER_NO_SPEECH_TIMEOUT_MS = 12_000
         private const val DEFAULT_END_SILENCE_RESTORE_MS = 1200
         private const val GO_TONE_LEAD_MS = 400L
 

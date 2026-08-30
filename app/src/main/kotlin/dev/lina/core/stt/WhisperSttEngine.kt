@@ -37,6 +37,18 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
      */
     @Volatile var endSilenceMs: Int = DEFAULT_END_SILENCE_MS
 
+    /**
+     * Wie lange ohne jeden Sprachbeginn aufgenommen wird, bevor die Aufnahme
+     * als "hat gar nicht gesprochen" verworfen wird. Standard 5s.
+     *
+     * Das Onboarding erhöht das für die Fragephase: dort werden offene Fragen
+     * gestellt ("Was soll ich für dich besonders gut können?"), vor denen eine
+     * Denkpause von mehr als 5s völlig normal ist – und anders als bei der
+     * Stille-Erkennung nach Sprachbeginn gibt es hier noch kein Signal, dass
+     * überhaupt jemand antworten will.
+     */
+    @Volatile var noSpeechTimeoutMs: Int = SpeechDetector.NO_SPEECH_TIMEOUT_MS
+
     fun initialize(onReady: () -> Unit, onError: (Exception) -> Unit) {
         Thread({
             try {
@@ -138,7 +150,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
 
         val collected = ArrayList<FloatArray>()
         val frame = ShortArray(FRAME_SAMPLES)
-        val detector = SpeechDetector(endSilenceMs)
+        val detector = SpeechDetector(endSilenceMs, noSpeechTimeoutMs)
         var totalMs = 0
 
         try {

@@ -66,7 +66,9 @@ class LocalCommandResolverTest {
     }
 
     @Test
-    fun `Nachrichten vorlesen`() {
+    fun `SMS vorlesen`() {
+        // "Nachrichten" heisst im Deutschen beides: SMS und News.
+        // Hier ist die SMS-Seite gemeint - siehe ReadSms.
         assertEquals(ResolvedIntent.ReadSms, resolver.resolve("lies meine nachrichten"))
     }
 
@@ -84,18 +86,24 @@ class LocalCommandResolverTest {
     }
 
     @Test
-    fun `Nachrichten schlagen Dokument`() {
-        // Abgrenzung: "lies meine Nachrichten" darf nicht die Kamera auslösen
+    fun `SMS schlagen Dokument`() {
+        // Abgrenzung: "lies meine Nachrichten" darf nicht die Kamera auslösen.
+        // Gemeint sind SMS, nicht News.
         assertEquals(ResolvedIntent.ReadSms, resolver.resolve("lies meine nachrichten"))
     }
 
-    // -------------------------------------------------------- Nachrichten
+    // ------------------------------------------- Nachrichten (News, nicht SMS)
 
     @Test
-    fun `Nachrichten gehen komplett an Ebene 2`() {
-        // Nachrichten macht jetzt Claude per Websuche (relevanter Regional- und
+    fun `News gehen komplett an Ebene 2`() {
+        // ACHTUNG Doppeldeutigkeit: hier geht es um NEWS ("was gibt es Neues"),
+        // NICHT um SMS. "lies meine Nachrichten" trifft weiterhin ReadSms -
+        // siehe `SMS vorlesen` und `SMS schlagen Dokument` weiter oben.
+        //
+        // News macht bewusst Claude per Websuche (relevanter Regional- und
         // Welt-Überblick mit Rückfragen) – der lokale Resolver fasst sie nicht an,
-        // damit die Eingabe an Ebene 2 durchfällt.
+        // damit die Eingabe an Ebene 2 durchfällt. Das ist eine ENTSCHEIDUNG,
+        // keine vergessene Regel: wer hier ReadNews wieder einbaut, hebelt sie aus.
         assertNull(resolver.resolve("was gibt es neues"))
         assertNull(resolver.resolve("was gibt es neues aus hannover"))
     }
@@ -250,7 +258,8 @@ class LocalCommandResolverTest {
     fun `Kapitel schlaegt Zurueckspulen`() {
         // "zurück" gehört sonst zum Spulen – sobald "Kapitel" fällt, gewinnt
         // die Kapitelnavigation. "nächste meldung" ohne Kapitelbezug ist kein
-        // lokaler Befehl mehr (Nachrichten laufen über Claude).
+        // lokaler Befehl mehr (News laufen über Claude, siehe `News gehen
+        // komplett an Ebene 2`).
         assertEquals(ResolvedIntent.NextChapter, resolver.resolve("nächstes kapitel"))
         assertEquals(ResolvedIntent.PreviousChapter, resolver.resolve("ein kapitel zurück"))
         assertNull(resolver.resolve("nächste meldung"))

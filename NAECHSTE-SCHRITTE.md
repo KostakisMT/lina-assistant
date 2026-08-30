@@ -13,9 +13,21 @@ Zwei Fehler, die an diesem Tag gemacht wurden – bitte nicht wiederholen:
 
 1. **Vor dem „Reparieren" nach einem Test suchen, der die Absicht festhält.**
    Der fehlende News-Intent sah nach einer versehentlichen Regression aus und
-   wurde beinahe zurückgebaut. Der Test `Nachrichten gehen komplett an Ebene 2`
-   hält die Entscheidung ausdrücklich fest. Ein Commit-Diff allein sagt nicht,
-   ob etwas verloren ging oder bewusst entfernt wurde.
+   wurde beinahe zurückgebaut. Der Test `News gehen komplett an Ebene 2` hält
+   die Entscheidung ausdrücklich fest. Ein Commit-Diff allein sagt nicht, ob
+   etwas verloren ging oder bewusst entfernt wurde.
+
+   **Vorsicht mit dem Wort „Nachrichten" – es meint im Deutschen zweierlei:**
+   - **News** („was gibt es Neues?", RSS-Quellen, `ResolvedIntent.ReadNews`) –
+     laufen bewusst komplett über Claude+Websuche.
+   - **SMS** („lies meine Nachrichten", `ResolvedIntent.ReadSms`) – bleiben
+     lokal und sind davon **nicht** berührt.
+
+   In `LocalCommandResolverTest` standen beide Bedeutungen bis 2026-08-30 unter
+   demselben Wort direkt untereinander. Die Tests heißen jetzt `SMS vorlesen`,
+   `SMS schlagen Dokument` bzw. `News gehen komplett an Ebene 2`. Wer hier
+   durcheinanderkommt, baut entweder die News-Entscheidung zurück oder
+   zerschießt das SMS-Vorlesen.
 2. **Der Debug-Broadcast ist kein Ersatz für das Mikrofon.**
    `am broadcast -a dev.lina.DEBUG_INPUT` speist Text in `processDebugInput()`
    ein und **umgeht damit alle Bestätigungsfenster**, die über

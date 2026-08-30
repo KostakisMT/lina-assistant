@@ -25,6 +25,11 @@ class LocalCommandResolver : IntentResolver {
     /**
      * Dokument-Vorlesen per Kamera. Steht NACH resolveSms, damit
      * "lies meine Nachrichten" weiterhin die SMS-Funktion trifft.
+     *
+     * "Nachrichten" meint im Deutschen zweierlei: SMS und News. Hier ist die
+     * SMS-Seite gemeint. News ("was gibt es Neues") werden vom lokalen
+     * Resolver bewusst gar nicht angefasst und fallen an Ebene 2 durch –
+     * siehe den Test `News gehen komplett an Ebene 2`.
      */
     private fun resolveDocument(input: String): ResolvedIntent? = when {
         input.matches(

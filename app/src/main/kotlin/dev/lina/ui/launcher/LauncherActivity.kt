@@ -57,6 +57,7 @@ import dev.lina.core.sim.SimChangeDetector
 import dev.lina.core.sim.SimChangeResult
 import dev.lina.core.sim.SimIdentityReader
 import dev.lina.core.stt.SttEngine
+import dev.lina.core.stt.TranscriptPlausibility
 import dev.lina.core.stt.VoskSttEngine
 import dev.lina.core.stt.WhisperSttEngine
 import dev.lina.core.tts.AndroidTtsEngine
@@ -772,7 +773,17 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private fun handleFollowUpResult(text: String, newsMode: Boolean) {
-        if (text.isBlank()) {
+        // Zweite Reihe hinter dem Filter in WhisperSttEngine: greift auch für
+        // den Vosk-Fallback und schützt vor allem das GESPRÄCHS-Fenster, das
+        // – anders als das News-Fenster weiter unten – sonst jeden Text
+        // ungeprüft an die Claude-API weiterreicht.
+        if (!TranscriptPlausibility.isPlausible(text)) {
+            if (text.isNotBlank()) {
+                android.util.Log.d(
+                    "LinaLauncher",
+                    "Folgefenster: unplausibles Transkript verworfen: \"$text\"",
+                )
+            }
             resumeWakeWordListening()
             return
         }

@@ -101,6 +101,11 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
                 "Transkription \"${text}\" (${samples.size / SAMPLE_RATE.toFloat()}s Audio " +
                     "in ${System.currentTimeMillis() - t0}ms)"
             )
+            if (!TranscriptPlausibility.isPlausible(text)) {
+                Log.d(TAG, "Transkript verworfen (Untertitel-Artefakt): \"$text\"")
+                onResult("")
+                return@Thread
+            }
             onResult(text)
         }, "whisper-listen").apply { start() }
     }
@@ -133,15 +138,15 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
 
         val collected = ArrayList<FloatArray>()
         val frame = ShortArray(FRAME_SAMPLES)
-        var speechStarted = false
-        var silenceMs = 0
+        val detector = SpeechDetector(endSilenceMs)
         var totalMs = 0
 
         try {
             while (listening && totalMs < MAX_RECORD_MS) {
                 val read = record.read(frame, 0, FRAME_SAMPLES)
                 if (read <= 0) break
-                totalMs += read * 1000 / SAMPLE_RATE
+                val frameMs = read * 1000 / SAMPLE_RATE
+                totalMs += frameMs
 
                 var maxAmp = 0
                 val floats = FloatArray(read)
@@ -153,19 +158,25 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
                 }
                 collected.add(floats)
 
-                if (maxAmp >= SPEECH_AMP_THRESHOLD) {
-                    speechStarted = true
-                    silenceMs = 0
-                } else if (speechStarted) {
-                    silenceMs += read * 1000 / SAMPLE_RATE
-                    if (silenceMs >= endSilenceMs) break
-                } else if (totalMs >= NO_SPEECH_TIMEOUT_MS) {
-                    // Nutzer hat gar nicht gesprochen
-                    return FloatArray(0)
+                when (detector.offer(maxAmp, frameMs)) {
+                    SpeechDetector.Decision.STOP_SPEECH_ENDED -> break
+                    SpeechDetector.Decision.ABORT_NO_SPEECH -> {
+                        // Nutzer hat gar nicht gesprochen
+                        return FloatArray(0)
+                    }
+                    SpeechDetector.Decision.CONTINUE -> Unit
                 }
             }
         } finally {
             stopAudioRecord()
+        }
+
+        // Sprachbeginn kann auch von einem Störgeräusch mit Nachhall einrasten.
+        // Ohne ausreichend Sprachenergie gar nicht erst transkribieren – sonst
+        // halluziniert Whisper Untertitel-Artefakte auf reines Raumrauschen.
+        if (!detector.hasEnoughSpeech()) {
+            Log.d(TAG, "Zu wenig Sprachenergie (${detector.speechMs}ms), verworfen")
+            return FloatArray(0)
         }
 
         val total = collected.sumOf { it.size }
@@ -193,9 +204,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val FRAME_SAMPLES = 1600 // 100ms
-        private const val SPEECH_AMP_THRESHOLD = 1000
         private const val DEFAULT_END_SILENCE_MS = 1200
-        private const val NO_SPEECH_TIMEOUT_MS = 5000
         private const val MAX_RECORD_MS = 10000
     }
 }

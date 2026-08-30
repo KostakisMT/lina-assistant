@@ -5,6 +5,73 @@
 
 ---
 
+## [2026-08-30] Fix: Geistereingaben – Whisper halluzinierte auf Raumrauschen
+
+**Was:** Bei der Vorbereitung der Klienten-Übergabe (Gerätetest am Lenovo-
+Testtablet) fiel auf, dass Lina im stillen Raum von sich aus Eingaben
+verarbeitete. Von **zwei** echten Mikrofonöffnungen des Testlaufs lieferten
+**beide** eine Geistereingabe – gemessen `"* Erinnungsvolle Musik *"` aus 5,5 s
+Stille, die ungefiltert als Befehl an die Claude-API ging.
+
+Zwei getrennte Ursachen, beide belegt über logcat-Zeitstempel:
+
+1. **Halluzination auf Rauschen.** `WhisperSttEngine.recordUntilSilence()`
+   setzte `speechStarted` bereits nach EINEM 100-ms-Frame über der Schwelle
+   (1000/32768 ≈ −30 dBFS) und nahm es nie zurück. Die Notbremse für „gar
+   nicht gesprochen" (`NO_SPEECH_TIMEOUT_MS`) hing im `else if`-Zweig dahinter
+   und war danach unerreichbar. Ein einzelnes Klacken genügte, um Whisper bis
+   zu 10 s Raumrauschen zu geben. Whisper base ist auf Untertitel-Korpora
+   trainiert und antwortet darauf mit Untertitel-Artefakten. Anschließend gab
+   es **keinerlei** Plausibilitätsprüfung – der einzige Filter war eine
+   Mindestlänge von 0,5 s, die jeder Rauschclip überschreitet.
+2. **Lina spricht ins offene Mikrofon.** `openFollowUpWindow()` wartet über
+   `waitForSilenceThenRun()` korrekt, bis Piper still ist, bevor es das Mikro
+   öffnet – die Gegenrichtung ist aber ungesichert: `speak()` beendet keine
+   laufende Aufnahme. Die Echo-Unterdrückung (`LauncherActivity:441`) schützt
+   nur das Weckwort. Im Testlauf war der Auslöser ein injizierter
+   Debug-Broadcast, der Beleg also durch die Testmethode kontaminiert; dieselbe
+   Situation entsteht im Betrieb aber ohne Zutun durch eine fällige
+   `ReminderScheduler`-Ansage oder jede `TtsPriority.INTERRUPT`-Ausgabe.
+
+**Behoben (Ursache 1, vollständig):**
+- Neu `core/stt/SpeechDetector.kt` – reine, unit-testbare Zustandslogik für die
+  Aufnahmeschleife. Sprachbeginn rastet erst nach 300 ms **zusammenhängender**
+  lauter Frames ein; die Notbremse wird unabhängig geprüft; ein fertiger Clip
+  braucht insgesamt ≥ 400 ms Sprachenergie (`hasEnoughSpeech()`), sonst wird er
+  gar nicht erst transkribiert.
+- Neu `core/stt/TranscriptPlausibility.kt` – verwirft Untertitel-Artefakte
+  (vollständig geklammerte Texte wie `[Musik]`/`* Musik *`, Abspann-Floskeln
+  wie „Untertitel der Amara.org-Community", „Vielen Dank fürs Zuschauen").
+  Bewusst eng gehalten: ein durchgelassenes Artefakt ist harmloser als eine
+  verschluckte Äußerung.
+- `WhisperSttEngine` nutzt beides; `LauncherActivity.handleFollowUpResult()`
+  prüft zusätzlich (zweite Reihe für den Vosk-Fallback und speziell für das
+  GESPRÄCHS-Fenster, das – anders als das News-Fenster – bisher jeden Text
+  ungeprüft an Claude weiterreichte).
+
+**Warum:** Das Tablet soll mehrere Tage unbeaufsichtigt beim Klienten stehen.
+Selbstgespräche, Verwirrung und unnötige API-Kosten sind dort der kritischste
+Fehlermodus – und für einen blinden Nutzer nicht als Fehlfunktion erkennbar.
+
+**Dateien:** `core/stt/SpeechDetector.kt` (neu),
+`core/stt/TranscriptPlausibility.kt` (neu), `core/stt/WhisperSttEngine.kt`,
+`ui/launcher/LauncherActivity.kt`, `core/stt/SpeechDetectorTest.kt` (neu),
+`core/stt/TranscriptPlausibilityTest.kt` (neu). 14 neue Unit-Tests,
+177 Tests gesamt grün (beide Flavors).
+
+**Offen:**
+- **Ursache 2 ist NICHT behoben.** `speak()` muss eine laufende Aufnahme
+  beenden (symmetrisch zur bestehenden Weckwort-Unterdrückung). Bewusst
+  zurückgestellt: invasivster der vier Fixes, Regressionsrisiko unmittelbar
+  vor einer Übergabe.
+- Wirksamkeit am Gerät noch nicht gegengemessen – der Testlauf mit dem
+  reparierten Build steht aus.
+- Schwellen (`SPEECH_ONSET_MS` 300, `MIN_SPEECH_MS` 400) sind ein Kompromiss.
+  Falls kurze Bestätigungen („Ja"/„Nein", tragen den SIM-Import) verschluckt
+  werden, ist `MIN_SPEECH_MS` die Stellschraube.
+
+---
+
 ## [2026-08-22] Doku: Technisches Factsheet (Artifact) + Robustheits-Review
 
 **Was:**

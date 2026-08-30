@@ -244,12 +244,9 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 > → Fuzzy-Matching landet auf „Tarot" oder „Auskunft" → Lina wählt eine
 > Premium-Nummer → **der Nutzer sieht nicht, wen er anruft.**
 
-- [ ] **P1 – Schutz an den ANRUF hängen, nicht an den Import.** Vor dem Wählen
-  einer Premium-/Kurzwahlnummer ansagen und bestätigen lassen. Wirkt
-  unabhängig davon, wie die Nummer ins Telefonbuch kam – also auch bei
-  Google-Konto-Sync während der Android-Ersteinrichtung, an dem gar kein
-  Lina-Code beteiligt ist. Ein reiner Importfilter lässt genau diese Tür offen.
-  Das ist der wichtigste der vier Punkte hier.
+- [x] **Behoben (2026-08-30) – Schutz am ANRUF statt am Import.** `PhoneNumberRisk` klassifiziert Notruf / Premium / Service / Kurzwahl; `CallHandler.startCall()` liefert `CallResult.Confirm` statt zu wählen, `openRiskyCallConfirm()` fragt nach. Notrufe werden nie nachgefragt. Am Gerät gegen die echten SIM-Nummern verifiziert (Tarot 22377, Horoskop 22335 → Rückfrage, kein Anruf; normale Nummer → wählt direkt). **Offen:** ein gesprochenes „ja" ist noch nicht geprüft – der Debug-Broadcast umgeht das Bestätigungsfenster, das nur am echten Mikrofon hört.
+- [ ] **P2 (2026-08-30):** Das Muster `if (onboarding != null) return` in den Folgefenster-Öffnern verschluckt Nutzerabsichten **still**. Bei `openRiskyCallConfirm()` behoben (Lina sagt jetzt an, dass sie nicht anruft), aber `openSimImportFollowUp()`, `openDocFollowUp()`, `openLibrivoxSuggestionFollowUp()` u.a. haben es weiterhin. Bei der SIM-Nachfrage besonders heikel: `recordSeen()` läuft vorher, die Karte gilt danach als bekannt und die Frage kommt **nie wieder**.
+- [ ] **P2 (2026-08-30):** Whisper halluziniert auf Raumrauschen gelegentlich zusammenhängenden englischen Text (am Gerät: "3.7, expect is you attack quick, but I'm pretty low on attack…"). Der Artefaktfilter greift dort nicht – er erkennt Untertitel-Notation, keinen plausibel klingenden Fließtext. Denkbar: Sprache des Transkripts prüfen und Nicht-Deutsches im Befehlspfad verwerfen.
 - [ ] **P1 – SIM-Import filtern statt abschaffen.** Kurzwahlnummern (< 7
   Ziffern), Namen mit „ct/Min", bekannte Anbieter-Präfixe. **Nicht abschaffen:**
   genau die Zielgruppe (ältere Menschen mit altem Tastenhandy) hat ihre

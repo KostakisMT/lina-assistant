@@ -5,6 +5,55 @@
 
 ---
 
+## [2026-08-30] Anruf-Schutz für Premium- und Kurzwahlnummern
+
+**Was:** Lina fragt vor dem Wählen einer Sondernummer nach, statt sie
+kommentarlos zu wählen. Neu `core/contacts/PhoneNumberRisk.kt` (rein,
+unit-testbar): Notruf (110, 112, 116117, 116116, 19222) → wird **immer sofort**
+gewählt, niemals nachgefragt; Premium (0900, 0137/0138, Auskunft 118xx),
+Service (0180, 0181) und Anbieter-Kurzwahlen (≤ 6 Ziffern) → Rückfrage.
+Auslandsnummern gelten als normal, weil sich ihre Tarifstruktur hier nicht
+beurteilen lässt – lieber nicht nachfragen als falsch nachfragen.
+
+`CallHandler.startCall()` liefert dafür ein neues `CallResult.Confirm` und
+wählt **nicht**; `LauncherActivity.openRiskyCallConfirm()` stellt die Frage und
+wählt erst nach einem klaren Ja. Alles andere – Nein, Unverstandenes, Stille,
+Timeout – bedeutet: kein Anruf.
+
+**Warum:** Beim Klientenbesuch brachte eine echte Vodafone-SIM 21 Einträge ins
+Telefonbuch, davon **keinen persönlichen**, 13 mit 199ct/Min. Das Risiko ist
+die Kette: Whisper verhört bei Raumdistanz Eigennamen (am Gerät belegt:
+"Tolstoi" → "Teustol"), das Fuzzy-Matching landet auf "Tarot" oder "Auskunft",
+Lina wählt – und der blinde Nutzer **sieht nicht, wen er anruft**.
+
+Die Prüfung sitzt bewusst am ANRUF, nicht am Import: So wirkt sie unabhängig
+davon, wie eine Nummer ins Telefonbuch kam – auch über den Google-Konto-Sync
+während der Android-Ersteinrichtung, an dem gar kein Lina-Code beteiligt ist.
+Ein reiner Importfilter ließe genau diese Tür offen.
+
+**Nebenbefund, mitbehoben:** `openRiskyCallConfirm()` verschluckte den
+Anrufwunsch zunächst **spurlos**, wenn keine Rückfrage möglich war (STT noch
+nicht geladen, oder Einrichtung läuft) – nicht gewählt, nicht abgelehnt, keine
+Rückmeldung. Am Gerät aufgefallen, weil die zurückgesetzte Einrichtung bei
+jedem App-Start neu lief. Jetzt sagt Lina in dem Fall an, dass sie nicht
+anruft. Dasselbe Muster (`if (onboarding != null) return`) steckt in weiteren
+Folgefenster-Öffnern und verschluckt dort ebenfalls still – siehe TODO.md.
+
+**Dateien:** `core/contacts/PhoneNumberRisk.kt` (neu),
+`core/contacts/PhoneNumberRiskTest.kt` (neu, 11 Tests mit den echten
+SIM-Nummern), `feature/calls/CallHandler.kt`, `ui/launcher/LauncherActivity.kt`.
+
+**Am Gerät verifiziert:** "ruf tarot an" → Rückfrage, kein Anruf; "ruf horoskop
+an" → Rückfrage, Timeout, kein Anruf; "ruf mike an" (normale Nummer) → wählt
+direkt. `mCallState` blieb bei den Sondernummern durchgehend 0.
+
+**Offen:** Die Ja/Nein-Auswertung selbst ist nur über den Timeout- und
+Leer-Pfad belegt – der Debug-Broadcast umgeht das Bestätigungsfenster, das nur
+am echten Mikrofon hört. Ein gesprochenes "ja" muss noch am Gerät geprüft
+werden, sinnvollerweise mit dem freigegebenen Testkontakt.
+
+---
+
 ## [2026-08-30] Übergabe-Vorbereitung: Onboarding-Tempo, Hörbuch-Sprache, Claude-Timeout
 
 **Was:**

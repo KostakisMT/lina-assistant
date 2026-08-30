@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.lina.core.accessibility.LinaAccessibilityService
 import dev.lina.core.audio.Earcons
+import dev.lina.core.contacts.Contact
 import dev.lina.core.contacts.ContactMatchResult
 import dev.lina.core.contacts.ContactRepository
 import dev.lina.core.contacts.FuzzyContactMatcher
@@ -67,6 +68,7 @@ import dev.lina.core.tts.TtsPriority
 import dev.lina.core.wakeword.WakeWordService
 import dev.lina.feature.audiobook.AudiobookManager
 import dev.lina.feature.calls.CallHandler
+import dev.lina.feature.calls.CallResult
 import dev.lina.feature.contactimport.ContactImportManager
 import dev.lina.feature.contactimport.ContactImportStore
 import dev.lina.feature.contactimport.ImportResult
@@ -115,6 +117,9 @@ class LauncherActivity : ComponentActivity() {
     private var calendarManager: CalendarManager? = null
     private var contactImportManager: ContactImportManager? = null
     /** Fingerabdruck der SIM, für die gerade eine Import-Nachfrage offen ist. */
+    /** Kontakt, dessen Sondernummer gerade zur Bestätigung aussteht. */
+    private var pendingRiskyCall: Contact? = null
+
     private var pendingSimImportIdentity: String? = null
     /** true, wenn `listBooks()` gerade den LibriVox-Vorschlags-Dialog geöffnet hat (steuert Weckwort-Neustart). */
     private var librivoxSuggestionOpened = false
@@ -1250,6 +1255,101 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Rückfrage vor dem Wählen einer Sondernummer (Premium, Service,
+     * Anbieter-Kurzwahl). Siehe [dev.lina.core.contacts.PhoneNumberRisk] –
+     * der Nutzer sieht nicht, wen Lina anruft, deshalb muss die Entscheidung
+     * gesprochen bei ihm liegen.
+     *
+     * Bei ausbleibender oder unverstandener Antwort wird NICHT gewählt: bei
+     * einer teuren Nummer ist Nichtstun die richtige Voreinstellung.
+     */
+    private fun openRiskyCallConfirm(contact: Contact, prompt: String) {
+        val stt = sttEngine
+        if (stt == null || onboarding != null) {
+            // Ohne Spracherkennung oder mitten in der Einrichtung lässt sich
+            // nicht nachfragen. Dann NICHT wählen – aber auch nicht still
+            // verschlucken: der Nutzer hat um einen Anruf gebeten und muss
+            // hören, dass er nicht zustande kommt. Am 2026-08-30 am Gerät
+            // beobachtet: während der laufenden Einrichtung verschwand der
+            // Anrufwunsch spurlos, ohne Wählen und ohne jede Rückmeldung.
+            android.util.Log.w(
+                "LinaLauncher",
+                "Sondernummer ${contact.displayName}: Rückfrage nicht möglich " +
+                    "(stt=${stt != null}, onboarding=${onboarding != null}) – kein Anruf",
+            )
+            ttsEngine?.speak(
+                "${contact.displayName} ist eine Sondernummer. Ich kann gerade nicht " +
+                    "nachfragen und rufe deshalb nicht an.",
+                TtsPriority.HIGH,
+            )
+            return
+        }
+        pendingRiskyCall = contact
+        android.util.Log.d(
+            "LinaLauncher",
+            "Sondernummer erkannt: ${contact.displayName} (${contact.phoneNumber}) – " +
+                "nicht gewählt, frage nach",
+        )
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        ttsEngine?.speak(prompt, TtsPriority.HIGH)
+        waitForSilenceThenRun(
+            onReady = {
+                statusText = "Sondernummer – ich höre…"
+                linaActivity = LinaActivity.Listening
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        pendingRiskyCall = null
+                        android.util.Log.d("LinaLauncher", "Sondernummer: keine Antwort – kein Anruf")
+                        ttsEngine?.speak("Ich habe nicht angerufen.", TtsPriority.NORMAL)
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleRiskyCallConfirm(text)
+                        }
+                    }
+                }, 350)
+            },
+            onTimeout = {
+                pendingRiskyCall = null
+                resumeWakeWordListening()
+            },
+        )
+    }
+
+    private fun handleRiskyCallConfirm(text: String) {
+        val contact = pendingRiskyCall
+        pendingRiskyCall = null
+        val t = text.lowercase()
+        when {
+            contact == null -> resumeWakeWordListening()
+            listOf("ja", "klar", "genau", "trotzdem", "mach", "bitte").any { t.contains(it) } -> {
+                android.util.Log.d("LinaLauncher", "Sondernummer bestätigt: \"$text\" – wähle ${contact.displayName}")
+                callHandler?.dialContact(contact)
+            }
+            // Alles andere gilt als Nein – auch Unverstandenes. Eine teure
+            // Nummer im Zweifel NICHT zu wählen ist die sichere Richtung.
+            else -> {
+                android.util.Log.d("LinaLauncher", "Sondernummer abgelehnt: \"$text\" – kein Anruf")
+                ttsEngine?.speak("Alles klar, ich rufe nicht an.", TtsPriority.NORMAL)
+                resumeWakeWordListening()
+            }
+        }
+    }
+
     /** Sprach-Nachfrage bei automatisch erkannter neuer/anderer SIM-Karte. */
     private fun openSimImportFollowUp() {
         val stt = sttEngine ?: return
@@ -1722,8 +1822,13 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.Call -> {
             val handler = callHandler
             if (handler != null) {
-                val result = handler.startCall(intent.contactQuery)
-                result.displayMessage
+                when (val result = handler.startCall(intent.contactQuery)) {
+                    is CallResult.Confirm -> {
+                        openRiskyCallConfirm(result.contact, result.message)
+                        "" // openRiskyCallConfirm spricht die Rückfrage selbst
+                    }
+                    else -> result.displayMessage
+                }
             } else {
                 resolveContactWithDisambiguation(intent.contactQuery, "Ich rufe")
             }

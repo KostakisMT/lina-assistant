@@ -49,6 +49,16 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
      */
     @Volatile var noSpeechTimeoutMs: Int = SpeechDetector.NO_SPEECH_TIMEOUT_MS
 
+    /**
+     * Harte Obergrenze für die Aufnahmedauer. Standard 10s – genug für jeden
+     * Befehl. Das Onboarding erhöht das für die persönlichen Fragen ("Wen
+     * möchtest du am häufigsten anrufen? Und wie nennst du diese Person?"):
+     * solche Antworten sind erzählend und mehrteilig, 10s schneiden sie mitten
+     * im Satz ab. Ein abgeschnittenes Fragment ist für Whisper zusätzlich
+     * schwerer zu erkennen – die Kürzung verschlechtert also doppelt.
+     */
+    @Volatile var maxRecordMs: Int = DEFAULT_MAX_RECORD_MS
+
     fun initialize(onReady: () -> Unit, onError: (Exception) -> Unit) {
         Thread({
             try {
@@ -154,7 +164,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
         var totalMs = 0
 
         try {
-            while (listening && totalMs < MAX_RECORD_MS) {
+            while (listening && totalMs < maxRecordMs) {
                 val read = record.read(frame, 0, FRAME_SAMPLES)
                 if (read <= 0) break
                 val frameMs = read * 1000 / SAMPLE_RATE
@@ -217,6 +227,6 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val FRAME_SAMPLES = 1600 // 100ms
         private const val DEFAULT_END_SILENCE_MS = 1200
-        private const val MAX_RECORD_MS = 10000
+        private const val DEFAULT_MAX_RECORD_MS = 10000
     }
 }

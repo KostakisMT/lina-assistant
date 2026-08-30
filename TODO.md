@@ -239,16 +239,26 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
       Lina meldete viermal Erfolg, beim Empfänger kam nichts an. Jetzt wird
       ein `sentIntent` ausgewertet und das echte Ergebnis gesprochen, mit
       alltagssprachlicher Begründung je Fehlercode.
-- [ ] **P1 offen – die SIM sendet keine SMS.** Vier Versuche, über IWLAN **und**
-      über LTE, immer `RESULT_ERROR_GENERIC_FAILURE`. Empfang ist gut
-      (LTE, rsrp -96, level 4/4, eingebucht bei vodafone.de), das Problem liegt
-      also nicht am Funk. Verdacht: **Daten-SIM ohne SMS-Freischaltung** – der
-      SIM-Adressspeicher enthielt ausschließlich Vodafone-Diensteinträge, wie
-      bei einer frisch ausgelieferten Tablet-/Daten-SIM.
-      **Nächster Schritt zur Abgrenzung:** eine SMS direkt aus Google Messages
-      von Hand verschicken. Schlägt auch das fehl, liegt es an der Karte und
-      nicht an Lina. Dann beim Anbieter SMS freischalten lassen oder eine
-      SIM mit SMS-Option verwenden.
+- [x] **Verifiziert (2026-08-30) – Anrufe funktionieren am echten Gerät.**
+      Erster Beleg überhaupt für Priorität 1. Telecom-Log:
+      `SET_DIALING → SET_DISCONNECTED, Reason: CODE_USER_DECLINE` – der Anruf
+      erreichte das Netz und ließ das Zielgerät klingeln, wurde dort abgelehnt.
+      Zum Vergleich vor dem Einlegen der SIM: `Mobilfunknetz nicht verfügbar,
+      OUT_OF_SERVICE`. Getestet ausschließlich mit dem freigegebenen Kontakt.
+- [ ] **P1 offen – die SIM sendet keine SMS, kann aber telefonieren.** Vier
+      Versuche über IWLAN **und** LTE, immer `RESULT_ERROR_GENERIC_FAILURE`;
+      Empfang gut (LTE, rsrp -96, level 4/4, vodafone.de). **Vom Nutzer
+      gegengeprüft: auch der Versand von Hand aus Google Messages schlägt
+      fehl** – es liegt also an der Karte, nicht an Lina.
+      Da Sprache funktioniert, ist es **keine reine Daten-SIM**, sondern
+      gezielt die SMS-Option, die fehlt oder nicht freigeschaltet ist. Beim
+      Anbieter klären. **Bis dahin ist der gesamte SMS-Zweig (Priorität 2)
+      nicht testbar** – weder Senden noch, mangels bekannter eigener Rufnummer,
+      Empfangen.
+- [ ] **P2 – Eigene Rufnummer des Tablets ist unbekannt.** Die SIM speichert
+      sie nicht (`number=` leer), damit lässt sich der SMS-EMPFANG auch nach
+      der Freischaltung nicht ohne Weiteres testen. Nummer beim Anbieter oder
+      auf der Kartenverpackung nachsehen und hier notieren.
 - [ ] **P2 – Anruf-Erfolgsmeldung hat dasselbe Problem.** `dialContact()` sagt
       „Ich rufe … an", bevor feststeht, ob eine Verbindung zustande kommt.
       Gleiche Klasse wie der SMS-Fehler oben, gleiche Konsequenz für einen

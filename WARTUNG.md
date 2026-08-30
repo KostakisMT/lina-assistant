@@ -83,6 +83,21 @@ Sprachnotiz festhalten.
 installiert sie übers Netz; Lina startet danach neu. Kein App-Store, keine
 Wartezeit.
 
+> ⚠️ **Nach JEDEM Deploy den AccessibilityService wieder einschalten.**
+> Android deaktiviert Accessibility-Dienste bei jeder Neuinstallation
+> (`adb install -r`) aus Sicherheitsgründen – still, ohne Hinweis. Ohne den
+> Dienst funktionieren eingehende Anrufe nicht mehr, und dem blinden Nutzer
+> fällt nur auf, dass Lina beim Klingeln nichts mehr sagt. Am 2026-08-30 genau
+> so passiert und erst bei der Abschlusskontrolle bemerkt.
+>
+> ```bash
+> adb shell settings put secure enabled_accessibility_services dev.lina/dev.lina.core.accessibility.LinaAccessibilityService
+> adb shell settings put secure accessibility_enabled 1
+> ```
+>
+> Kontrolle: `adb shell dumpsys accessibility | grep 'label=Lina'` muss eine
+> Zeile liefern.
+
 ## Ersteinrichtung (macht die Nutzer:in selbst, komplett gesprochen)
 
 Beim allerersten Start (nachdem Berechtigungen erteilt sind und die
@@ -108,7 +123,11 @@ Debug-Befehle (Texteingabe oder `remote.sh say`):
 - [ ] WLAN der Nutzer:in eingetragen, Tablet am Strom, Ständer
 - [ ] Tailscale online (`remote.sh status` von unterwegs testen!)
 - [ ] `CLAUDE_API_KEY` in der installierten APK enthalten (freie Konversation testen)
-- [ ] Battery-Whitelist + Accessibility-Service gesetzt (App führt hin)
+- [ ] Battery-Whitelist + Accessibility-Service gesetzt (App führt hin) –
+      **nach dem letzten Deploy prüfen**, Neuinstallation schaltet ihn ab
+- [ ] Vollbackup des Geräts gezogen (`./scripts/backup-device.sh`) – sichert
+      installierte APK, interne App-Daten, Aufnahmen und den Kontaktstand VOR
+      einem SIM-Import
 - [ ] Echte Kontakte eingetragen – per SIM-Karte (Lina fragt automatisch) oder
       vCard-Datei ("Kontakte aus einer Datei importieren") statt manuell per adb
 - [ ] `einrichtung zurücksetzen` ausgeführt, damit die Einrichtung beim

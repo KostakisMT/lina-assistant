@@ -51,9 +51,10 @@ Zwei Fehler, die an diesem Tag gemacht wurden – bitte nicht wiederholen:
       *sicheren* Richtungen (Timeout, leeres Transkript). Der Ja-Pfad, der
       tatsächlich wählt, ist ungeprüft, weil der Debug-Broadcast das
       Bestätigungsfenster umgeht.
-      **Vorgehen:** dem freigegebenen Testkontakt (der freigegebene Testkontakt,
-      01555 5501234) testweise eine Kurzwahl als Zweitnummer geben, dann per
-      Mikrofon „ja" sagen. **Real anrufen ausschließlich diesen Kontakt.**
+      **Vorgehen:** dem freigegebenen Testkontakt (Name und Nummer stehen in
+      NUTZERPROFIL.md, gitignored) testweise eine Kurzwahl als Zweitnummer
+      geben, dann per
+      Mikrofon „ja" sagen. **Real anrufen ausschließlich diesen einen Kontakt.**
 - [ ] **Notruf gegenprüfen.** 110/112 dürfen nie in die Rückfrage laufen.
       Unit-getestet, am Gerät nicht – und hier ist ein Fehler nicht tolerierbar.
       Ohne echten Anruf prüfbar, indem ein Kontakt mit der Nummer 112 angelegt

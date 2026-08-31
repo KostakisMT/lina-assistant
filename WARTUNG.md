@@ -19,6 +19,15 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
    SMS-Inhalte werden **nicht** übertragen.
 3. **Aufnahmen:** Bei der Ersteinrichtung entstehen Sprachaufnahmen (Weckwort,
    Befehle) für das Training der Erkennung. Sie werden nur dafür verwendet.
+3a. **Mitgehörtes im Folgefenster (Stand 2026-08-30):** Nach einer Antwort hört
+   Lina kurz weiter zu, ohne dass das Weckwort nötig ist. Was in dieser Zeit im
+   Raum gesprochen wird, kann aufgenommen und **an denselben Internetdienst
+   geschickt** werden – auch wenn es gar nicht an Lina gerichtet war. Die
+   Erkennung „das war ein Raumgespräch" trifft Claude, also erst nach dem
+   Versand. Am Gerät beobachtet mit einem parallel laufenden Videotelefonat im
+   Zimmer. Das betrifft auch **Besuch**, der dem nie zugestimmt hat: Wer
+   Gespräche führt, die niemanden etwas angehen, sollte Lina vorher mit
+   „Schlafmodus" oder über den Ausschalter stumm stellen.
 4. **Dokument-Vorlesen:** Sagt die Nutzer:in „lies mir die Post vor", macht Lina
    ein Foto des Dokuments im Rahmen und schickt es zur Auswertung an denselben
    Internetdienst. Das betrifft auch private Post. Das Bild wird **nicht
@@ -83,6 +92,21 @@ Sprachnotiz festhalten.
 installiert sie übers Netz; Lina startet danach neu. Kein App-Store, keine
 Wartezeit.
 
+> ⚠️ **Nach JEDEM Deploy den AccessibilityService wieder einschalten.**
+> Android deaktiviert Accessibility-Dienste bei jeder Neuinstallation
+> (`adb install -r`) aus Sicherheitsgründen – still, ohne Hinweis. Ohne den
+> Dienst funktionieren eingehende Anrufe nicht mehr, und dem blinden Nutzer
+> fällt nur auf, dass Lina beim Klingeln nichts mehr sagt. Am 2026-08-30 genau
+> so passiert und erst bei der Abschlusskontrolle bemerkt.
+>
+> ```bash
+> adb shell settings put secure enabled_accessibility_services dev.lina/dev.lina.core.accessibility.LinaAccessibilityService
+> adb shell settings put secure accessibility_enabled 1
+> ```
+>
+> Kontrolle: `adb shell dumpsys accessibility | grep 'label=Lina'` muss eine
+> Zeile liefern.
+
 ## Ersteinrichtung (macht die Nutzer:in selbst, komplett gesprochen)
 
 Beim allerersten Start (nachdem Berechtigungen erteilt sind und die
@@ -108,7 +132,11 @@ Debug-Befehle (Texteingabe oder `remote.sh say`):
 - [ ] WLAN der Nutzer:in eingetragen, Tablet am Strom, Ständer
 - [ ] Tailscale online (`remote.sh status` von unterwegs testen!)
 - [ ] `CLAUDE_API_KEY` in der installierten APK enthalten (freie Konversation testen)
-- [ ] Battery-Whitelist + Accessibility-Service gesetzt (App führt hin)
+- [ ] Battery-Whitelist + Accessibility-Service gesetzt (App führt hin) –
+      **nach dem letzten Deploy prüfen**, Neuinstallation schaltet ihn ab
+- [ ] Vollbackup des Geräts gezogen (`./scripts/backup-device.sh`) – sichert
+      installierte APK, interne App-Daten, Aufnahmen und den Kontaktstand VOR
+      einem SIM-Import
 - [ ] Echte Kontakte eingetragen – per SIM-Karte (Lina fragt automatisch) oder
       vCard-Datei ("Kontakte aus einer Datei importieren") statt manuell per adb
 - [ ] `einrichtung zurücksetzen` ausgeführt, damit die Einrichtung beim

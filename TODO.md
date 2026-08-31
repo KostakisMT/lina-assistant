@@ -204,7 +204,169 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [ ] TTS-Lautstärke über Tablet-Lautsprecher ausreichend?
 - [ ] RSS-Feeds erreichbar? (Junge Welt Paywall?)
 - [ ] JAVA_HOME muss gesetzt sein für Builds (`openjdk@17` via Homebrew)
+- [x] **Gefunden UND behoben (2026-08-30):** Geistereingaben im stillen Raum – `WhisperSttEngine` setzte `speechStarted` nach EINEM lauten 100-ms-Frame und nahm es nie zurück, wodurch die Notbremse `NO_SPEECH_TIMEOUT_MS` im `else if`-Zweig unerreichbar wurde. Ein Klacken genügte, Whisper bekam bis zu 10 s Raumrauschen und antwortete mit Untertitel-Artefakten (`"* Erinnungsvolle Musik *"`), die ungefiltert an die Claude-API gingen. Von zwei echten Mikrofonöffnungen im Testlauf lieferten **beide** eine Geistereingabe. **Fix:** neue reine Klassen `SpeechDetector` (Einrasten erst nach 300 ms zusammenhängender Sprache, unabhängige Notbremse, ≥ 400 ms Sprachenergie pro Clip) und `TranscriptPlausibility` (verwirft Untertitel-Artefakte); zusätzlich Prüfung in `handleFollowUpResult()`, weil das Gesprächsfenster – anders als das News-Fenster – bisher jeden Text ungeprüft an Claude weiterreichte. 14 neue Unit-Tests.
+- [ ] **P1 offen, gehört zum selben Fund:** `speak()` beendet keine laufende Aufnahme – ist das Mikro im Folgefenster offen, kann Lina hineinsprechen (`waitForSilenceThenRun()` sichert nur die Gegenrichtung). Im Betrieb ausgelöst durch fällige `ReminderScheduler`-Ansagen, den News-/Hörbuch-Reader oder jede `TtsPriority.INTERRUPT`-Ausgabe. Vor der Übergabe bewusst zurückgestellt (invasivster Fix, Regressionsrisiko).
+- [ ] **P1 neu (2026-08-30):** „Was gibt es Neues?" erreicht das RSS-Feature **nicht**. `ResolvedIntent.ReadNews` wird nirgends im Quellcode erzeugt – nur konsumiert; im `LocalCommandResolver` fehlt jede News-Regel (entfernt in `a12fd03`). Der Befehl landet stattdessen bei Claude mit Websuche, die kuratierten Vertrauensquellen (Junge Welt, unsere zeit, Spektrum, Yacht) werden komplett umgangen. `feature/news/` samt `NewsSyncWorker` läuft im Hintergrund, ist per Sprache aber unerreichbar. Verschärfend: das Onboarding lässt genau diesen Befehl üben und schließt mit ihm als Beispiel ab.
+- [x] **Behoben (2026-08-30):** Claude-Antworten konnten minutenlang ohne jede Rückmeldung hängen – am Gerät 118s gemessen, weil Claude serverseitig mehrere Websuch-Runden fuhr. `askClaude()` hatte weder Timeout noch Zwischenansage, und die verspätete Antwort wurde selbst nach „stopp" noch ausgesprochen. Jetzt: Vertröstung nach 12s und alle 20s, harte Grenze bei 90s mit Ansage, verspätete Antworten werden verworfen.
+- [x] **Behoben (2026-08-30):** Hörbücher waren nur in festen Formulierungen ansprechbar. „Was kann ich heute hören?" fiel an Claude durch; „such mir ein Hörbuch" wurde als LibriVox-Suche nach `mir ein hörbuch` abgefeuert. Neu: `AskAudiobookTopic` (Rückfrage „Zu welchem Thema?") und erweiterte Muster für die Bibliotheksfrage.
+- [ ] **P1 (2026-08-30, ADR-035):** Gemeinsamer Werkzeug-Katalog für Cloud- und lokalen Pfad. `ClaudeConversation.TOOLS` kannte 10 Werkzeuge, `ResolvedIntent` hat 46 Intents – und `training/llm/prompts/system_prompt_router_de.txt` listet **exakt dieselben 10**, der lokale Router aus ADR-032 erbt die Lücke also unverändert. Fähigkeiten einmal deklarieren, daraus Claude-Tools UND den Router-Prompt erzeugen.
+  - [ ] **Der eigentliche Kern:** Unit-Test, der fehlschlägt, sobald ein `ResolvedIntent` weder ein Werkzeug hat noch auf einer expliziten Ausnahmeliste steht (nur interne Folgefenster-Intents wie `NextNews`, `AskAudiobookTopic`). Ohne ihn läuft dieselbe Drift in drei Monaten wieder auf.
+  - [ ] Erst danach das nächste Router-Training – sonst wird zweimal trainiert. **Achtung: die 88,5 % aus ADR-032 sind kein übertragbarer Ausgangswert**, mehr Werkzeuge = mehr Klassen = zunächst schlechtere Genauigkeit. Dazu die dort dokumentierte Lauf-zu-Lauf-Varianz (zweiter Lauf 59,6 %).
+- [ ] **P1 (2026-08-30, ADR-035):** Regex-Ebene auf Reflexe zurückschneiden (Stopp, Pause, Weiter, lauter/leiser, Anrufsteuerung, Schlafmodus – sofort und offline nötig). Alles andere an die Routing-Ebene. Belegt: „Suche nach Hörbischan in der Kategorie Politik" erreichte Claude **gar nicht**, weil `such\s+(.+)` vorher zugriff und den verstümmelten Satz als LibriVox-Suchbegriff abfeuerte – die Regex zerstört aktiv Eingaben, die die nächste Ebene verstanden hätte.
+- [ ] **P2 (2026-08-30, ADR-035):** Offline-Ansage. Ohne Netz und ohne lokalen Router bleiben nur die Reflexe – Lina muss das sagen („Ich bin gerade nicht verbunden, ich verstehe nur die Grundbefehle"). Stilles Scheitern ist für einen blinden Nutzer nicht von einem defekten Gerät zu unterscheiden.
+- [x] **Behoben (2026-08-30):** Claude kannte beim Hörbuch nur `hoerbuch_abspielen`. Elf Werkzeuge nachgerüstet (auflisten, suchen nach Titel/Autor, suchen nach Thema, pausieren, fortsetzen, Info, zurückspulen, Kapitel vor/zurück/springen/auflisten) plus Systemprompt-Regel, dass Hörbücher zu Linas Können gehören und verstümmelte Titel stillschweigend zu korrigieren sind. Am Gerät mit den echten Fehlschlägen gegengeprüft.
+- [x] **Behoben (2026-08-30):** Eigene Regression – `SPEECH_AMP_THRESHOLD` 1000 und `MIN_SPEECH_MS` 400 verwarfen bei Raumdistanz echte Antworten („Zu wenig Sprachenergie (300ms)", dreimal in Folge nach sauberem Weckwort). Die alte kaputte Fassung schnitt alle Frames mit, meine verwarf leise Aufnahmen ganz. Jetzt 500 / 300ms.
+- [ ] **P1 (2026-08-30):** Erkennungsqualität auf Raumdistanz – im Onboarding-Durchlauf kamen **6 von 6** Antworten falsch an („Oldenburg" → „Albenburg", „Reisen" → „greisen"). Die Antworten gehen ungefiltert in den Claude-System-Prompt; Lina las daraufhin Regionalnachrichten aus dem falschen Landkreis vor. Nicht durch längere Aufnahmezeiten lösbar – der Albenburg-Satz war vollständig. Hebel: größeres Whisper-Modell (`small` statt `base`), externes Mikrofon, geringerer Abstand. **Konsequenz für die Übergabe: `answers.json` nach der Einrichtung gemeinsam mit dem Nutzer durchgehen, er kann Fehler nicht selbst bemerken.**
+- [ ] **Feature (2026-08-30, Nutzerwunsch):** „Was steht hier?" ist am Tablet mehrdeutig – gemeint sein kann der Bildschirm oder ein Blatt vor der Kamera. Lina soll zurückfragen und dann beides können: zusammenfassen und auf Wunsch vollständig vorlesen, wie bei der Post.
+  - **Bildschirm-Pfad über den UI-Baum, nicht über einen Screenshot.** `accessibility_service_config.xml` hat `canRetrieveWindowContent="true"` und `flagRetrieveInteractiveWindows` bereits gesetzt – `LinaAccessibilityService` nutzt es nur nicht (behandelt heute ausschließlich Notifications). Text direkt aus `rootInActiveWindow` zu lesen ist dem Screenshot+Vision-Weg klar überlegen: kein Bild verlässt das Gerät, keine Vision-Kosten, exakt statt OCR-geraten, passt zu Leitprinzip 2. Screenshot+Vision (`AccessibilityService.takeScreenshot()`, API 30+) nur als Rückfall für reine Bildinhalte.
+  - Zu bauen: statische Instanz + `readScreenText()` im Service; `ResolvedIntent.AskReadSource` + Resolver-Regel für die mehrdeutigen Formulierungen („was steht hier/da"); Rückfrage-Flow im Launcher, der danach in den **bestehenden** `openDocFollowUp()` mündet (Zusammenfassung → „soll ich alles vorlesen?"). Eindeutige Formulierungen („lies mir die Post vor") müssen unangetastet an die Kamera gehen.
+  - **Vorher entscheiden:** Lina ist der Launcher und steht meist selbst im Vordergrund. „Was steht auf dem Bildschirm" liest beim Primärnutzer dann Linas eigene Oberfläche vor (Kugel + Statuszeile, laut CLAUDE.md für sehende Angehörige gedacht). Echten Nutzen hat der Pfad, wenn eine andere App offen ist oder das Kalender-Panel läuft. Die Rückfrage selbst ist unabhängig davon richtig.
+  - Zurückgestellt am 2026-08-30: neuer Code im AccessibilityService unmittelbar vor einer mehrtägigen unbeaufsichtigten Nutzung beim Klienten war das größere Risiko.
+- [ ] **P2 (2026-08-30):** Code und Doku widersprechen sich bei den Nachrichten. `LocalCommandResolverTest` hält fest, dass Nachrichten bewusst komplett an Claude/Websuche gehen; CLAUDE.md beschreibt weiterhin RSS-Feeds und Vertrauensquellen (Junge Welt, unsere zeit, Spektrum, Yacht) als Priorität 3. `NewsSyncWorker` synchronisiert im Hintergrund Feeds, die per Sprache nicht erreichbar sind. Entscheiden: RSS-Weg wiederbeleben (dann sind die kuratierten Quellen wieder im Spiel und Folgefragen kosten keine Websuche) oder `feature/news/` samt Worker ausbauen und CLAUDE.md angleichen.
+- [ ] **P3 (2026-08-30):** `resolveAudiobookSearch` schneidet „suche Hörbuch von Tolstoi" zu Suchbegriff `von tolstoi` statt `tolstoi` – das erste Muster greift vor dem spezifischeren `(?:hörbuch|buch)\s+(?:von|über)\s+(.+)`.
+- [ ] **P1 neu (2026-08-30):** Falsche Erfolgsmeldung beim Anruf – „ruf boris an" ohne SIM meldet „Ich rufe Boris Herrmann an.", der Dialer kommt nie hoch, es passiert nichts. Am Gerät belegt (`gsm.sim.state=ABSENT`, `topResumedActivity` blieb Lina). Konkreter Fall des offenen Punkts „Fehler-/Offline-Pfade akustisch abdecken".
 - [x] **Sicherheitslücke gefunden UND behoben (2026-08-22):** `LauncherActivity` registrierte einen `BroadcastReceiver` für Action `dev.lina.DEBUG_INPUT` (`RECEIVER_EXPORTED`, kein `BuildConfig.DEBUG`-Gate, keine Permission). Jede App auf dem Gerät (oder `adb shell`) konnte darüber beliebigen Text direkt in `processDebugInput()` einspeisen – denselben Pfad wie echte STT-Ergebnisse, inkl. `CallHandler.dialContact()` (`ACTION_CALL`, kein SIM-State-Check) und `SmsSender` (`SmsManager.sendTextMessage`, kein Guard). Reproduziert mit `adb shell am broadcast -a dev.lina.DEBUG_INPUT -p dev.lina --es text '...'`. **Fix:** Registrierung in `onCreate()` hinter `if (BuildConfig.DEBUG)` gezogen (`LauncherActivity.kt:291`). Verifiziert: generierte `BuildConfig.java` für `standardRelease` hat `DEBUG = false` → Receiver registriert sich in Release-Builds gar nicht mehr; im Debug-Build (Testtablet) funktioniert der Kanal unverändert für Entwicklungszwecke.
+
+---
+
+- [x] **Behoben (2026-08-30) – Lina meldete SMS-Erfolg, ohne es zu wissen.**
+      `SmsSender` übergab an `sendTextMessage()` für `sentIntent` und
+      `deliveryIntent` jeweils `null` und sagte direkt danach bedingungslos
+      „SMS gesendet." Da die Methode asynchron arbeitet und bei Netzfehlern
+      keine Exception wirft, konnte Lina den Ausgang gar nicht kennen.
+      **Am Gerät belegt:** vier Testnachrichten scheiterten sämtlich mit
+      `RESULT_ERROR_GENERIC_FAILURE` (Android: „Persist SMS into FAILED"),
+      Lina meldete viermal Erfolg, beim Empfänger kam nichts an. Jetzt wird
+      ein `sentIntent` ausgewertet und das echte Ergebnis gesprochen, mit
+      alltagssprachlicher Begründung je Fehlercode.
+- [x] **Verifiziert (2026-08-30) – Anrufe funktionieren am echten Gerät.**
+      Erster Beleg überhaupt für Priorität 1. Telecom-Log:
+      `SET_DIALING → SET_DISCONNECTED, Reason: CODE_USER_DECLINE` – der Anruf
+      erreichte das Netz und ließ das Zielgerät klingeln, wurde dort abgelehnt.
+      Zum Vergleich vor dem Einlegen der SIM: `Mobilfunknetz nicht verfügbar,
+      OUT_OF_SERVICE`. Getestet ausschließlich mit dem freigegebenen Kontakt.
+- [ ] **P1 offen – die SIM sendet keine SMS, kann aber telefonieren.** Vier
+      Versuche über IWLAN **und** LTE, immer `RESULT_ERROR_GENERIC_FAILURE`;
+      Empfang gut (LTE, rsrp -96, level 4/4, vodafone.de). **Vom Nutzer
+      gegengeprüft: auch der Versand von Hand aus Google Messages schlägt
+      fehl** – es liegt also an der Karte, nicht an Lina.
+      Da Sprache funktioniert, ist es **keine reine Daten-SIM**, sondern
+      gezielt die SMS-Option, die fehlt oder nicht freigeschaltet ist. Beim
+      Anbieter klären. **Bis dahin ist der gesamte SMS-Zweig (Priorität 2)
+      nicht testbar** – weder Senden noch, mangels bekannter eigener Rufnummer,
+      Empfangen.
+- [ ] **P2 – Eigene Rufnummer des Tablets ist unbekannt.** Die SIM speichert
+      sie nicht (`number=` leer), damit lässt sich der SMS-EMPFANG auch nach
+      der Freischaltung nicht ohne Weiteres testen. Nummer beim Anbieter oder
+      auf der Kartenverpackung nachsehen und hier notieren.
+- [x] **Behoben (2026-08-30) – Anruf meldete Erfolg, ohne ihn zu kennen.**
+      Gleiche Klasse wie der SMS-Fehler: `dialContact()` sagte „Ich rufe … an",
+      bevor feststand, ob überhaupt gewählt wird. Jetzt neutrale Ansage
+      („Ich verbinde dich mit …") und eine Überwachung des Telefoniezustands
+      über `TelephonyCallback.CallStateListener`. Bleibt der Zustand 8 Sekunden
+      lang `CALL_STATE_IDLE`, sagt Lina an, dass der Anruf nicht zustande kam.
+      Gelingt er, schweigt sie – der Nutzer hört das Freizeichen selbst.
+      `CallResult.Success` ist leer, damit der Launcher nicht zusätzlich die
+      alte Erfolgsmeldung spricht. **Beide Pfade am Gerät verifiziert:**
+      Flugmodus → Fehlermeldung nach 8s; echter Anruf → `state=2` (OFFHOOK)
+      nach 1,5s, keine Fehlermeldung.
+- [x] **Behoben (2026-08-30) – Raumgespräche erreichen die Claude-API.**
+      Neu `RoomSpeechFilter`: entscheidet lokal, ob eine Äußerung an Lina
+      gerichtet war, und sitzt in `handleFollowUpResult()` vor `askClaude()`.
+      Gewichtete Indizien, im Zweifel wird blockiert (das Weckwort bleibt der
+      verlässliche Weg). Der lokale Resolver dient ausdrücklich NICHT als
+      Freifahrtschein – „ich ruf dich später an" trifft `resolveCall` und ist
+      trotzdem eine Absprache unter Menschen. 14 Unit-Tests.
+      **Am Gerät noch nicht verifiziert:** der Debug-Broadcast erreicht das
+      Folgefenster nicht, im Testlauf war der Raum still. Mit echter Stimme
+      nachholen – Erwartung: Logzeile `Nicht an Lina gerichtet`, kein
+      API-Aufruf; und in der Gegenrichtung, dass echte Folgefragen durchkommen.
+- [ ] **P2 (2026-08-30) – Zuhören während eines aktiven Telefonats.** Davon
+      unabhängig, aber offen: Solange der Telefoniezustand nicht
+      `CALL_STATE_IDLE` ist, sollten Weckwort und STT pausieren, damit Lina
+      nicht ins Telefonat hineinredet. Der nötige `TelephonyCallback` ist seit
+      dem Anruf-Status-Fix im Projekt. **Nicht** am Gerät beobachtet – die
+      früher hier notierte Beobachtung war eine Fehlzuordnung (es war das
+      Discord-Gespräch im Raum, siehe Punkt darüber).
+- [x] **Behoben (2026-08-30) – SMS wurden kleingeschrieben versendet.**
+      `resolve()` reicht `input.trim().lowercase()` an alle Regeln weiter, und
+      `resolveSms` schnitt den Nachrichtentext daraus heraus. Am Gerät belegt:
+      „schreib mike: Testnachricht von Lina" ging real als
+      **„testnachricht von lina"** raus. Im Deutschen liest sich das für den
+      Empfänger wie kaputt, und der blinde Absender kann es nicht prüfen.
+      `resolveSms` bekommt jetzt als einzige Regel den Originaltext und matcht
+      case-insensitiv; am Gerät mit einer zweiten echten SMS verifiziert.
+      **Gleiche Ursache, noch offen:** `SetReminder`, `SetCalendarEvent` und
+      `SearchAudiobook` bekommen ihre Slots ebenfalls kleingeschrieben. Bei der
+      Suche egal, beim Termintitel sichtbar im CalendarPanel für Angehörige.
+- [x] **Korrektur zu einem Befund von heute:** Die Meldung „keine
+      Standard-SMS-App gesetzt" war **falsch**. `settings get secure
+      sms_default_application` liefert auf modernem Android auch dann `null`,
+      wenn alles korrekt konfiguriert ist – maßgeblich ist der RoleManager,
+      und `cmd role get-role-holders android.app.role.SMS` lieferte bereits
+      vorher `com.google.android.apps.messaging`. SMS-Versand funktioniert am
+      Gerät nachweislich.
+- [ ] **P1 – Paketliste im AccessibilityService ist geraten, nicht ermittelt.**
+      `handleNotification()` vergleicht gegen fest verdrahtete Paketnamen, u.a.
+      `com.samsung.android.incallui` und `com.samsung.android.messaging` – ein
+      Erbstück vom Vorgängergerät. Nutzt jemand eine andere Telefon- oder
+      SMS-App, hört Lina **still** auf, eingehende Anrufe zu melden. Robuster:
+      zur Laufzeit den echten Standard abfragen
+      (`TelecomManager.getDefaultDialerPackage()`,
+      `Telephony.Sms.getDefaultSmsPackage()`) statt zu raten.
+- [ ] **P2 – Alle übrigen Benachrichtigungen fallen still unter den Tisch.**
+      Der Filter lässt nur Anruf und SMS durch; Kalender, Paketankündigungen,
+      Medikamenten-Apps, Messenger sind für den Nutzer damit unsichtbar – er
+      sieht die Statusleiste nicht. CLAUDE.md führt „Notifications in Echtzeit
+      lesen" als Fähigkeit des AccessibilityService; gelesen werden sie, aber
+      nur zwei Sorten überleben. Entweder ausbauen (Sprachbefehl „was gibt es
+      für Benachrichtigungen", sinnvolle Whitelist/Blacklist) oder CLAUDE.md
+      angleichen.
+
+---
+
+## 🟠 Kontakt-Import überarbeiten — aus dem Klientenbesuch 2026-08-30 — P1/P2
+
+> Ausgangslage: Beim Klienten wurde eine echte Vodafone-SIM eingelegt. Der
+> Import lieferte **21 Einträge, davon 0 persönliche** – ausschließlich
+> Diensteinträge des Anbieters, **13 davon mit 199ct/Min** (Tarot, Horoskop,
+> PartnerschaftLiebe, Auskunft, Mailboxtexte …). Der Datensatz liegt als
+> `tablet-data/testdaten/vodafone-sim.vcf` (+ Rohdump) und ist bewusst auf dem
+> Testtablet geblieben, damit gegen echte statt ausgedachte Daten entwickelt
+> werden kann.
+>
+> Das eigentliche Risiko ist nicht der volle Adressspeicher, sondern die Kette:
+> Whisper verhört bei Raumdistanz Eigennamen (belegt: „Tolstoi" → „Teustol")
+> → Fuzzy-Matching landet auf „Tarot" oder „Auskunft" → Lina wählt eine
+> Premium-Nummer → **der Nutzer sieht nicht, wen er anruft.**
+
+- [x] **Behoben (2026-08-30) – Schutz am ANRUF statt am Import.** `PhoneNumberRisk` klassifiziert Notruf / Premium / Service / Kurzwahl; `CallHandler.startCall()` liefert `CallResult.Confirm` statt zu wählen, `openRiskyCallConfirm()` fragt nach. Notrufe werden nie nachgefragt. Am Gerät gegen die echten SIM-Nummern verifiziert (Tarot 22377, Horoskop 22335 → Rückfrage, kein Anruf; normale Nummer → wählt direkt). **Offen:** ein gesprochenes „ja" ist noch nicht geprüft – der Debug-Broadcast umgeht das Bestätigungsfenster, das nur am echten Mikrofon hört.
+- [ ] **P2 (2026-08-30):** Das Muster `if (onboarding != null) return` in den Folgefenster-Öffnern verschluckt Nutzerabsichten **still**. Bei `openRiskyCallConfirm()` behoben (Lina sagt jetzt an, dass sie nicht anruft), aber `openSimImportFollowUp()`, `openDocFollowUp()`, `openLibrivoxSuggestionFollowUp()` u.a. haben es weiterhin. Bei der SIM-Nachfrage besonders heikel: `recordSeen()` läuft vorher, die Karte gilt danach als bekannt und die Frage kommt **nie wieder**.
+- [ ] **P2 (2026-08-30):** Whisper halluziniert auf Raumrauschen gelegentlich zusammenhängenden englischen Text (am Gerät: "3.7, expect is you attack quick, but I'm pretty low on attack…"). Der Artefaktfilter greift dort nicht – er erkennt Untertitel-Notation, keinen plausibel klingenden Fließtext. Denkbar: Sprache des Transkripts prüfen und Nicht-Deutsches im Befehlspfad verwerfen.
+- [ ] **P1 – SIM-Import filtern statt abschaffen.** Kurzwahlnummern (< 7
+  Ziffern), Namen mit „ct/Min", bekannte Anbieter-Präfixe. **Nicht abschaffen:**
+  genau die Zielgruppe (ältere Menschen mit altem Tastenhandy) hat ihre
+  Kontakte oft tatsächlich auf der SIM. Der Weg ist richtig, nur ungefiltert.
+- [ ] **P2 – Gebündelt nachfragen statt still importieren.** „Ich habe 21
+  Einträge gefunden, 13 sehen nach Servicenummern aus. Soll ich die
+  weglassen?" Widerspricht ADR-029 nicht – dort wurde die Einzelbestätigung
+  pro Kontakt verworfen, nicht eine gebündelte Rückfrage.
+- [ ] **P2 – vCard als Haupttrichter ausbauen.** Begonnen mit
+  `scripts/ipad-import.sh`, `scripts/ipad_contacts_to_vcard.py` und
+  `scripts/merge-vcards.py`. Offen: Google-Export, Android-zu-Android.
+  Hintergrund: iOS verteilt Kontakte über mehrere Accounts – der
+  iCloud-Export übersieht Yahoo-Kontakte **stillschweigend** (beim Klienten
+  genau so aufgetreten), das Gerätebackup ist als einziger Weg account-blind.
+- [ ] **P3 – `ipad-import.sh` zeigt keinen Fortschritt.** Die Ausgabe von
+  `idevicebackup2` läuft durch `tail -3`, der Nutzer sitzt bei einem ~20-GB-
+  Backup minutenlang vor einem scheinbar eingefrorenen Terminal. Am 2026-08-30
+  beim Klienten aufgefallen.
+- [x] **Behoben (2026-08-30):** `ContactDedup.partition()` verglich jeden
+  Kandidaten nur gegen den Bestand, nicht gegen die bereits akzeptierten
+  Kandidaten desselben Durchlaufs. Beim Zusammenführen zweier Accounts
+  (iCloud + Yahoo) der Normalfall – beide Einträge landeten im Telefonbuch,
+  und jede Dublette heißt für einen blinden Nutzer eine Rückfrage bei jedem
+  Anruf.
 
 ---
 

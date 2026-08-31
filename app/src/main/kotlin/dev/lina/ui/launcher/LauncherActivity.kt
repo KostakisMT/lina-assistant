@@ -42,12 +42,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.lina.core.accessibility.LinaAccessibilityService
 import dev.lina.core.audio.Earcons
+import dev.lina.core.contacts.Contact
 import dev.lina.core.contacts.ContactMatchResult
 import dev.lina.core.contacts.ContactRepository
 import dev.lina.core.contacts.FuzzyContactMatcher
 import dev.lina.BuildConfig
 import dev.lina.core.intent.LocalCommandResolver
 import dev.lina.core.intent.ResolvedIntent
+import dev.lina.core.intent.RoomSpeechFilter
 import dev.lina.core.llm.ConversationEngine
 import dev.lina.core.llm.ConversationEngineProvider
 import dev.lina.core.llm.DocumentReadResult
@@ -57,6 +59,7 @@ import dev.lina.core.sim.SimChangeDetector
 import dev.lina.core.sim.SimChangeResult
 import dev.lina.core.sim.SimIdentityReader
 import dev.lina.core.stt.SttEngine
+import dev.lina.core.stt.TranscriptPlausibility
 import dev.lina.core.stt.VoskSttEngine
 import dev.lina.core.stt.WhisperSttEngine
 import dev.lina.core.tts.AndroidTtsEngine
@@ -66,6 +69,7 @@ import dev.lina.core.tts.TtsPriority
 import dev.lina.core.wakeword.WakeWordService
 import dev.lina.feature.audiobook.AudiobookManager
 import dev.lina.feature.calls.CallHandler
+import dev.lina.feature.calls.CallResult
 import dev.lina.feature.contactimport.ContactImportManager
 import dev.lina.feature.contactimport.ContactImportStore
 import dev.lina.feature.contactimport.ImportResult
@@ -114,6 +118,9 @@ class LauncherActivity : ComponentActivity() {
     private var calendarManager: CalendarManager? = null
     private var contactImportManager: ContactImportManager? = null
     /** Fingerabdruck der SIM, für die gerade eine Import-Nachfrage offen ist. */
+    /** Kontakt, dessen Sondernummer gerade zur Bestätigung aussteht. */
+    private var pendingRiskyCall: Contact? = null
+
     private var pendingSimImportIdentity: String? = null
     /** true, wenn `listBooks()` gerade den LibriVox-Vorschlags-Dialog geöffnet hat (steuert Weckwort-Neustart). */
     private var librivoxSuggestionOpened = false
@@ -566,7 +573,7 @@ class LauncherActivity : ComponentActivity() {
         callHandler = CallHandler(this, tts, matcher)
         val reader = SmsReader(this, tts)
         smsReader = reader
-        smsSender = SmsSender(tts, matcher, reader)
+        smsSender = SmsSender(this, tts, matcher, reader)
         newsReader = NewsReader(this, tts)
         audiobookManager = AudiobookManager(this, tts)
         reminderManager = ReminderManager(this, tts)
@@ -772,7 +779,17 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private fun handleFollowUpResult(text: String, newsMode: Boolean) {
-        if (text.isBlank()) {
+        // Zweite Reihe hinter dem Filter in WhisperSttEngine: greift auch für
+        // den Vosk-Fallback und schützt vor allem das GESPRÄCHS-Fenster, das
+        // – anders als das News-Fenster weiter unten – sonst jeden Text
+        // ungeprüft an die Claude-API weiterreicht.
+        if (!TranscriptPlausibility.isPlausible(text)) {
+            if (text.isNotBlank()) {
+                android.util.Log.d(
+                    "LinaLauncher",
+                    "Folgefenster: unplausibles Transkript verworfen: \"$text\"",
+                )
+            }
             resumeWakeWordListening()
             return
         }
@@ -815,6 +832,30 @@ class LauncherActivity : ComponentActivity() {
             resolved is ResolvedIntent.SleepModeOff
         ) {
             ttsEngine?.speak(handleIntent(resolved))
+            resumeWakeWordListening()
+            return
+        }
+        // Lokale Vorfilterung, BEVOR etwas das Gerät verlässt.
+        //
+        // Das Folgefenster hört ohne Weckwort mit; alles, was im Raum
+        // gesprochen wird, landet hier. Die Prüfung "war das an mich
+        // gerichtet" gab es bisher nur in Claudes Systemprompt
+        // (gespraech_beenden) – also erst NACH dem Versand. Am 2026-08-30 am
+        // Gerät beobachtet: eine Passage aus einem Videotelefonat im Zimmer
+        // ging an die API.
+        //
+        // Steht bewusst NACH Stopp/Schlafmodus (die müssen immer wirken und
+        // bleiben ohnehin lokal) und VOR askClaude().
+        val adresse = RoomSpeechFilter.evaluate(text)
+        if (!adresse.verdict.mayReachCloud()) {
+            android.util.Log.d(
+                "LinaLauncher",
+                "Nicht an Lina gerichtet (${adresse.verdict}, Punkte ${adresse.score}, " +
+                    "${adresse.signals.joinToString(", ")}) – bleibt lokal: \"$text\"",
+            )
+            // Still schließen, genau wie das News-Folgefenster es schon tut:
+            // eine Rückfrage ("meintest du mich?") würde erst recht in fremde
+            // Gespräche hineinreden.
             resumeWakeWordListening()
             return
         }
@@ -1239,6 +1280,101 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Rückfrage vor dem Wählen einer Sondernummer (Premium, Service,
+     * Anbieter-Kurzwahl). Siehe [dev.lina.core.contacts.PhoneNumberRisk] –
+     * der Nutzer sieht nicht, wen Lina anruft, deshalb muss die Entscheidung
+     * gesprochen bei ihm liegen.
+     *
+     * Bei ausbleibender oder unverstandener Antwort wird NICHT gewählt: bei
+     * einer teuren Nummer ist Nichtstun die richtige Voreinstellung.
+     */
+    private fun openRiskyCallConfirm(contact: Contact, prompt: String) {
+        val stt = sttEngine
+        if (stt == null || onboarding != null) {
+            // Ohne Spracherkennung oder mitten in der Einrichtung lässt sich
+            // nicht nachfragen. Dann NICHT wählen – aber auch nicht still
+            // verschlucken: der Nutzer hat um einen Anruf gebeten und muss
+            // hören, dass er nicht zustande kommt. Am 2026-08-30 am Gerät
+            // beobachtet: während der laufenden Einrichtung verschwand der
+            // Anrufwunsch spurlos, ohne Wählen und ohne jede Rückmeldung.
+            android.util.Log.w(
+                "LinaLauncher",
+                "Sondernummer ${contact.displayName}: Rückfrage nicht möglich " +
+                    "(stt=${stt != null}, onboarding=${onboarding != null}) – kein Anruf",
+            )
+            ttsEngine?.speak(
+                "${contact.displayName} ist eine Sondernummer. Ich kann gerade nicht " +
+                    "nachfragen und rufe deshalb nicht an.",
+                TtsPriority.HIGH,
+            )
+            return
+        }
+        pendingRiskyCall = contact
+        android.util.Log.d(
+            "LinaLauncher",
+            "Sondernummer erkannt: ${contact.displayName} (${contact.phoneNumber}) – " +
+                "nicht gewählt, frage nach",
+        )
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        ttsEngine?.speak(prompt, TtsPriority.HIGH)
+        waitForSilenceThenRun(
+            onReady = {
+                statusText = "Sondernummer – ich höre…"
+                linaActivity = LinaActivity.Listening
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        pendingRiskyCall = null
+                        android.util.Log.d("LinaLauncher", "Sondernummer: keine Antwort – kein Anruf")
+                        ttsEngine?.speak("Ich habe nicht angerufen.", TtsPriority.NORMAL)
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleRiskyCallConfirm(text)
+                        }
+                    }
+                }, 350)
+            },
+            onTimeout = {
+                pendingRiskyCall = null
+                resumeWakeWordListening()
+            },
+        )
+    }
+
+    private fun handleRiskyCallConfirm(text: String) {
+        val contact = pendingRiskyCall
+        pendingRiskyCall = null
+        val t = text.lowercase()
+        when {
+            contact == null -> resumeWakeWordListening()
+            listOf("ja", "klar", "genau", "trotzdem", "mach", "bitte").any { t.contains(it) } -> {
+                android.util.Log.d("LinaLauncher", "Sondernummer bestätigt: \"$text\" – wähle ${contact.displayName}")
+                callHandler?.dialContact(contact)
+            }
+            // Alles andere gilt als Nein – auch Unverstandenes. Eine teure
+            // Nummer im Zweifel NICHT zu wählen ist die sichere Richtung.
+            else -> {
+                android.util.Log.d("LinaLauncher", "Sondernummer abgelehnt: \"$text\" – kein Anruf")
+                ttsEngine?.speak("Alles klar, ich rufe nicht an.", TtsPriority.NORMAL)
+                resumeWakeWordListening()
+            }
+        }
+    }
+
     /** Sprach-Nachfrage bei automatisch erkannter neuer/anderer SIM-Karte. */
     private fun openSimImportFollowUp() {
         val stt = sttEngine ?: return
@@ -1489,9 +1625,57 @@ class LauncherActivity : ComponentActivity() {
         statusText = "Lina denkt nach…"
         linaActivity = LinaActivity.Thinking
         Earcons.thinking()
+
+        // Claude kann serverseitig mehrere Websuch-Runden fahren. Am
+        // 2026-08-30 am Testtablet gemessen: 118 Sekunden zwischen Frage und
+        // Antwort, in denen Lina kein Wort sagte. Für einen blinden Nutzer ist
+        // das nicht von "Gerät ist tot" zu unterscheiden – und Leitprinzip 6
+        // verlangt für jede Aktion akustische Rückmeldung. Deshalb: regelmäßig
+        // vertrösten und nach einer harten Grenze aufgeben.
+        var settled = false
+        val reassure = object : Runnable {
+            var round = 0
+            override fun run() {
+                if (settled) return
+                round++
+                ttsEngine?.speak(
+                    if (round == 1) "Einen Moment, ich suche noch."
+                    else "Ich bin noch dran.",
+                    TtsPriority.LOW,
+                )
+                mainHandler.postDelayed(this, CLAUDE_REASSURE_REPEAT_MS)
+            }
+        }
+        val giveUp = Runnable {
+            if (settled) return@Runnable
+            settled = true
+            mainHandler.removeCallbacks(reassure)
+            android.util.Log.w("LinaLauncher", "Claude-Antwort abgebrochen nach ${CLAUDE_HARD_TIMEOUT_MS}ms: \"$input\"")
+            ttsEngine?.speak(
+                "Das dauert mir zu lange. Frag mich das gern gleich noch einmal.",
+                TtsPriority.HIGH,
+            )
+            statusText = "Lina bereit – sag \"$WAKE_WORD\""
+            linaActivity = LinaActivity.Idle
+            resumeWakeWordListening()
+        }
+        mainHandler.postDelayed(reassure, CLAUDE_REASSURE_AFTER_MS)
+        mainHandler.postDelayed(giveUp, CLAUDE_HARD_TIMEOUT_MS)
+
         Thread {
             val reply = conversation.ask(input, freshWakeWord)
             runOnUiThread {
+                // Nach dem Aufgeben darf die verspätete Antwort NICHT mehr
+                // gesprochen werden – sonst redet Lina los, nachdem der Nutzer
+                // die Sache längst abgehakt (oder "stopp" gesagt) hat.
+                if (settled) {
+                    android.util.Log.d("LinaLauncher", "Verspätete Claude-Antwort verworfen: \"$input\"")
+                    return@runOnUiThread
+                }
+                settled = true
+                mainHandler.removeCallbacks(reassure)
+                mainHandler.removeCallbacks(giveUp)
+
                 val response = when (reply) {
                     is LinaReply.Say -> reply.text
                     is LinaReply.Do -> handleIntent(reply.intent)
@@ -1663,8 +1847,13 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.Call -> {
             val handler = callHandler
             if (handler != null) {
-                val result = handler.startCall(intent.contactQuery)
-                result.displayMessage
+                when (val result = handler.startCall(intent.contactQuery)) {
+                    is CallResult.Confirm -> {
+                        openRiskyCallConfirm(result.contact, result.message)
+                        "" // openRiskyCallConfirm spricht die Rückfrage selbst
+                    }
+                    else -> result.displayMessage
+                }
             } else {
                 resolveContactWithDisambiguation(intent.contactQuery, "Ich rufe")
             }
@@ -1736,6 +1925,13 @@ class LauncherActivity : ComponentActivity() {
             librivoxSuggestionOpened = audiobookManager?.listBooks() == true
             if (librivoxSuggestionOpened) openLibrivoxSuggestionFollowUp()
             "" // listBooks() spricht bereits alles Nötige selbst
+        }
+        is ResolvedIntent.AskAudiobookTopic -> {
+            // Fragt "Zu welchem Thema?" und sucht dann bei LibriVox. Der Flow
+            // existierte bereits, war aber nur über den Vorschlag bei kleiner
+            // Bibliothek erreichbar – jetzt auch direkt per Sprachbefehl.
+            openLibrivoxTopicFollowUp()
+            "" // openLibrivoxTopicFollowUp() spricht selbst
         }
         is ResolvedIntent.SearchAudiobook -> {
             audiobookManager?.searchAndPlay(intent.query)
@@ -1905,6 +2101,7 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.RewindAudiobook -> "RewindAudiobook(${intent.seconds}s)"
         is ResolvedIntent.AudiobookInfo -> "AudiobookInfo"
         is ResolvedIntent.ListAudiobooks -> "ListAudiobooks"
+        is ResolvedIntent.AskAudiobookTopic -> "AskAudiobookTopic"
         is ResolvedIntent.SearchAudiobook -> "SearchAudiobook(${intent.query})"
         is ResolvedIntent.SearchAudiobookByGenre -> "SearchAudiobookByGenre(${intent.topic})"
         is ResolvedIntent.SleepTimer -> "SleepTimer(${intent.minutes}min)"
@@ -1955,6 +2152,13 @@ class LauncherActivity : ComponentActivity() {
         private const val WAKE_WORD = "Hey Lina"
         // Whisper ist nicht-streamend: bis zu 10s Aufnahme + Transkriptionszeit
         private const val STT_TIMEOUT_MS = 30_000L
+
+        // Vertröstung und harte Grenze für Claude-Antworten. Die Werte sind an
+        // der Messung vom 2026-08-30 orientiert: unauffällige Antworten kamen
+        // in ~9s, die entgleiste Websuche brauchte 118s.
+        private const val CLAUDE_REASSURE_AFTER_MS = 12_000L
+        private const val CLAUDE_REASSURE_REPEAT_MS = 20_000L
+        private const val CLAUDE_HARD_TIMEOUT_MS = 90_000L
         private const val DEBUG_FILE_RETENTION_DAYS = 7L
         // Transiente Fehleranzeige der Statuskugel – danach zurück zu Idle
         private const val ERROR_DISPLAY_MS = 4_000L

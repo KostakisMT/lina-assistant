@@ -5,6 +5,246 @@
 
 ---
 
+## [2026-08-30] Lokale Vorfilterung: Raumgespräche verlassen das Gerät nicht mehr
+
+**Was:** Neu `core/intent/RoomSpeechFilter.kt` – entscheidet **auf dem Gerät**,
+ob eine Äußerung an Lina gerichtet war, und sitzt in
+`handleFollowUpResult()` **vor** `askClaude()`.
+
+**Warum:** Das Folgefenster hört nach jeder Antwort kurz ohne Weckwort mit.
+Bis jetzt ging alles, was dabei ankam, an die Claude-API. Die Prüfung „war das
+überhaupt an mich gerichtet" stand zwar im Systemprompt (`gespraech_beenden`),
+aber damit **erst, nachdem die Äußerung das Gerät verlassen hatte**. Am Gerät
+beobachtet: Während im Zimmer ein Videotelefonat lief, nahm Lina eine Passage
+daraus auf und schickte sie an die API. Betroffen ist auch **Besuch**, der dem
+nie zugestimmt hat.
+
+**Wie:** Gewichtete Indizien statt einer einzelnen Regel.
+- Positiv: Modalfragen („kannst du"), Anknüpfungen („erzähl mehr", „die
+  zweite"), Fragewort am Satzanfang, Imperative, Fragezeichen.
+- Negativ: dritte Person („er hat gesagt"), Absprachen („bis dann", „ich ruf
+  dich an"), das allgemeine Muster „ich <verb> dir/dich", Füllwörter („mhm",
+  „ach so"), bloßes Ja/Nein, Länge ohne jeden Bezug.
+- Abkürzung: die direkte Anrede „Lina" ist immer adressiert.
+
+**Zwei Entscheidungen, die den Entwurf tragen:**
+
+1. **Im Zweifel blockieren.** `UNCERTAIN` wird behandelt wie Raumgespräch. Eine
+   fälschlich verworfene Frage kostet eine Wiederholung mit Weckwort; eine
+   fälschlich gesendete Passage aus einem fremden Gespräch ist nicht
+   zurückholbar und fällt niemandem auf. Das Folgefenster ist Bequemlichkeit,
+   das Weckwort ist die Garantie.
+2. **Der lokale Resolver ist ausdrücklich KEIN Freifahrtschein.** Naheliegend
+   wäre, einen Regex-Treffer als „ist ein Befehl, also an Lina gerichtet" zu
+   werten. Beim Verdrahten fiel auf, dass das genau falsch herum wäre:
+   „ich ruf dich später an" trifft `resolveCall` und ist die klassische
+   Absprache unter Menschen. Die zunächst eingebaute Hintertür wurde wieder
+   entfernt und durch einen Regressionstest ersetzt.
+
+Blockiertes wird **still** verworfen – eine Rückfrage („meintest du mich?")
+würde erst recht in fremde Gespräche hineinreden. Die Begründung landet mit
+allen ausschlaggebenden Signalen im Log, damit sich die Schwellen im Betrieb
+nachjustieren lassen.
+
+**Dateien:** `core/intent/RoomSpeechFilter.kt` (neu),
+`core/intent/RoomSpeechFilterTest.kt` (neu, 14 Tests),
+`ui/launcher/LauncherActivity.kt`. 215 Tests grün.
+
+**Offen:** Die Verdrahtung ist am Gerät **nicht** verifiziert. Der
+Debug-Broadcast läuft über `processDebugInput()` und erreicht das
+Folgefenster gar nicht; im Testlauf war der Raum still, sodass schon die
+akustische Ebene alles abfing. Zu prüfen bleibt mit echter Stimme: ein
+Folgefenster öffnen und einen Satz wie „ja ich ruf dich später an"
+sprechen – erwartet wird die Logzeile `Nicht an Lina gerichtet` und **kein**
+API-Aufruf. Ebenso die Gegenrichtung, damit der Filter keine echten
+Folgefragen verschluckt.
+
+---
+
+## [2026-08-30] Anruf-Schutz für Premium- und Kurzwahlnummern
+
+**Was:** Lina fragt vor dem Wählen einer Sondernummer nach, statt sie
+kommentarlos zu wählen. Neu `core/contacts/PhoneNumberRisk.kt` (rein,
+unit-testbar): Notruf (110, 112, 116117, 116116, 19222) → wird **immer sofort**
+gewählt, niemals nachgefragt; Premium (0900, 0137/0138, Auskunft 118xx),
+Service (0180, 0181) und Anbieter-Kurzwahlen (≤ 6 Ziffern) → Rückfrage.
+Auslandsnummern gelten als normal, weil sich ihre Tarifstruktur hier nicht
+beurteilen lässt – lieber nicht nachfragen als falsch nachfragen.
+
+`CallHandler.startCall()` liefert dafür ein neues `CallResult.Confirm` und
+wählt **nicht**; `LauncherActivity.openRiskyCallConfirm()` stellt die Frage und
+wählt erst nach einem klaren Ja. Alles andere – Nein, Unverstandenes, Stille,
+Timeout – bedeutet: kein Anruf.
+
+**Warum:** Beim Klientenbesuch brachte eine echte Vodafone-SIM 21 Einträge ins
+Telefonbuch, davon **keinen persönlichen**, 13 mit 199ct/Min. Das Risiko ist
+die Kette: Whisper verhört bei Raumdistanz Eigennamen (am Gerät belegt:
+"Tolstoi" → "Teustol"), das Fuzzy-Matching landet auf "Tarot" oder "Auskunft",
+Lina wählt – und der blinde Nutzer **sieht nicht, wen er anruft**.
+
+Die Prüfung sitzt bewusst am ANRUF, nicht am Import: So wirkt sie unabhängig
+davon, wie eine Nummer ins Telefonbuch kam – auch über den Google-Konto-Sync
+während der Android-Ersteinrichtung, an dem gar kein Lina-Code beteiligt ist.
+Ein reiner Importfilter ließe genau diese Tür offen.
+
+**Nebenbefund, mitbehoben:** `openRiskyCallConfirm()` verschluckte den
+Anrufwunsch zunächst **spurlos**, wenn keine Rückfrage möglich war (STT noch
+nicht geladen, oder Einrichtung läuft) – nicht gewählt, nicht abgelehnt, keine
+Rückmeldung. Am Gerät aufgefallen, weil die zurückgesetzte Einrichtung bei
+jedem App-Start neu lief. Jetzt sagt Lina in dem Fall an, dass sie nicht
+anruft. Dasselbe Muster (`if (onboarding != null) return`) steckt in weiteren
+Folgefenster-Öffnern und verschluckt dort ebenfalls still – siehe TODO.md.
+
+**Dateien:** `core/contacts/PhoneNumberRisk.kt` (neu),
+`core/contacts/PhoneNumberRiskTest.kt` (neu, 11 Tests mit den echten
+SIM-Nummern), `feature/calls/CallHandler.kt`, `ui/launcher/LauncherActivity.kt`.
+
+**Am Gerät verifiziert:** "ruf tarot an" → Rückfrage, kein Anruf; "ruf horoskop
+an" → Rückfrage, Timeout, kein Anruf; "ruf mike an" (normale Nummer) → wählt
+direkt. `mCallState` blieb bei den Sondernummern durchgehend 0.
+
+**Offen:** Die Ja/Nein-Auswertung selbst ist nur über den Timeout- und
+Leer-Pfad belegt – der Debug-Broadcast umgeht das Bestätigungsfenster, das nur
+am echten Mikrofon hört. Ein gesprochenes "ja" muss noch am Gerät geprüft
+werden, sinnvollerweise mit dem freigegebenen Testkontakt.
+
+---
+
+## [2026-08-30] Übergabe-Vorbereitung: Onboarding-Tempo, Hörbuch-Sprache, Claude-Timeout
+
+**Was:**
+
+1. **Onboarding – längere Antwortzeiten für persönliche Fragen.** Im Gerätetest
+   kamen ausgerechnet bei den erzählenden Fragen die kürzesten Aufnahmen heraus
+   (Bücher 3,8s, wichtigste Person 4,3s) – die Antworten wurden abgeschnitten,
+   was die Erkennung zusätzlich verschlechtert. Drei Grenzen wirkten zusammen
+   und waren alle auf Kurzbefehle ausgelegt: `ANSWER_END_SILENCE_MS` (1800ms),
+   `MAX_RECORD_MS` (10s **hart in der Engine**) und `ANSWER_TIMEOUT_MS` (15s).
+   `WhisperSttEngine.maxRecordMs` ist jetzt konfigurierbar (wie `endSilenceMs`
+   und `noSpeechTimeoutMs`); `QUESTIONS` ist von `Pair` auf eine
+   `Question`-Datenklasse mit `openEnded`-Flag umgestellt. Die vier erzählenden
+   Fragen bekommen 2500ms Pausentoleranz, 20s Aufnahme und 30s Timeout.
+
+2. **Hörbücher freier ansprechbar.** „Was kann ich heute hören?" fiel bisher an
+   Claude durch, obwohl es dieselbe Frage ist wie „welche Hörbücher habe ich" →
+   trifft jetzt `ListAudiobooks`. Neu `ResolvedIntent.AskAudiobookTopic` für
+   offene Suchbitten ohne Suchbegriff („kannst du ein Hörbuch für mich
+   suchen"): Lina fragt „Zu welchem Thema?" zurück, statt loszusuchen. Der
+   Rückfrage-Flow (`openLibrivoxTopicFollowUp`) existierte bereits, war aber
+   nur über den Vorschlag bei kleiner Bibliothek erreichbar. **Nebenbefund
+   behoben:** „such mir ein Hörbuch" landete vorher als LibriVox-Suchanfrage
+   `mir ein hörbuch`.
+
+3. **Claude-Antworten: Vertröstung + harte Grenze.** `askClaude()` startete
+   einen Thread ohne jeden Timeout und ohne Zwischenmeldung. Am Gerät gemessen:
+   **118 Sekunden** zwischen Frage und Antwort, in denen Lina kein Wort sagte
+   (Claude fuhr serverseitig mehrere Websuch-Runden). Für einen blinden Nutzer
+   nicht von „Gerät ist tot" zu unterscheiden. Jetzt: nach 12s „Einen Moment,
+   ich suche noch.", danach alle 20s „Ich bin noch dran.", nach 90s Abbruch mit
+   Ansage. Verspätete Antworten werden verworfen – vorher sprach Lina sie auch
+   dann noch aus, wenn der Nutzer längst „stopp" gesagt hatte (am Gerät
+   beobachtet).
+
+**Korrektur zu einem früheren Befund in dieser Sitzung:** Der fehlende
+News-Intent wurde hier zunächst als versehentliche Regression aus `a12fd03`
+gemeldet und beinahe „repariert". Das war falsch. Der Test
+`Nachrichten gehen komplett an Ebene 2` in `LocalCommandResolverTest` hält die
+Entscheidung ausdrücklich fest: Nachrichten macht bewusst Claude per Websuche,
+der lokale Resolver fasst sie nicht an. Die Änderung wurde zurückgenommen.
+Was als offene Frage bleibt: CLAUDE.md beschreibt weiterhin RSS-Feeds und
+Vertrauensquellen als Priorität 3, und `NewsSyncWorker` synchronisiert im
+Hintergrund Feeds, die per Sprache nicht erreichbar sind. Code und Doku
+widersprechen sich – siehe TODO.md.
+
+**Warum:** Vorbereitung der Übergabe an den Testnutzer. Alle drei Punkte kamen
+aus dem Gerätetest bzw. direkt aus dem Feedback beim Durchspielen der
+Einrichtung.
+
+**Dateien:** `core/stt/WhisperSttEngine.kt`, `feature/onboarding/VoiceOnboarding.kt`,
+`core/intent/ResolvedIntent.kt`, `core/intent/LocalCommandResolver.kt`,
+`ui/launcher/LauncherActivity.kt`, `core/intent/LocalCommandResolverTest.kt`.
+182 Tests grün (beide Flavors).
+
+**Offen:**
+- Erkennungsqualität auf Raumdistanz (davon unberührt): im Onboarding kamen
+  6 von 6 Antworten falsch an, u.a. „Oldenburg" → „Albenburg" – und das war
+  ein vollständiger, NICHT abgeschnittener Satz. Die Antworten gehen ungefiltert
+  in den Claude-System-Prompt, Lina las danach Nachrichten aus dem falschen
+  Landkreis vor.
+- `speak()` beendet weiterhin keine laufende Aufnahme (Ursache B der
+  Geistereingaben).
+- `resolveAudiobookSearch` schneidet „suche Hörbuch von Tolstoi" zu
+  `von tolstoi` statt `tolstoi` zu – bestehendes Verhalten, klein.
+
+---
+
+## [2026-08-30] Fix: Geistereingaben – Whisper halluzinierte auf Raumrauschen
+
+**Was:** Bei der Vorbereitung der Klienten-Übergabe (Gerätetest am Lenovo-
+Testtablet) fiel auf, dass Lina im stillen Raum von sich aus Eingaben
+verarbeitete. Von **zwei** echten Mikrofonöffnungen des Testlaufs lieferten
+**beide** eine Geistereingabe – gemessen `"* Erinnungsvolle Musik *"` aus 5,5 s
+Stille, die ungefiltert als Befehl an die Claude-API ging.
+
+Zwei getrennte Ursachen, beide belegt über logcat-Zeitstempel:
+
+1. **Halluzination auf Rauschen.** `WhisperSttEngine.recordUntilSilence()`
+   setzte `speechStarted` bereits nach EINEM 100-ms-Frame über der Schwelle
+   (1000/32768 ≈ −30 dBFS) und nahm es nie zurück. Die Notbremse für „gar
+   nicht gesprochen" (`NO_SPEECH_TIMEOUT_MS`) hing im `else if`-Zweig dahinter
+   und war danach unerreichbar. Ein einzelnes Klacken genügte, um Whisper bis
+   zu 10 s Raumrauschen zu geben. Whisper base ist auf Untertitel-Korpora
+   trainiert und antwortet darauf mit Untertitel-Artefakten. Anschließend gab
+   es **keinerlei** Plausibilitätsprüfung – der einzige Filter war eine
+   Mindestlänge von 0,5 s, die jeder Rauschclip überschreitet.
+2. **Lina spricht ins offene Mikrofon.** `openFollowUpWindow()` wartet über
+   `waitForSilenceThenRun()` korrekt, bis Piper still ist, bevor es das Mikro
+   öffnet – die Gegenrichtung ist aber ungesichert: `speak()` beendet keine
+   laufende Aufnahme. Die Echo-Unterdrückung (`LauncherActivity:441`) schützt
+   nur das Weckwort. Im Testlauf war der Auslöser ein injizierter
+   Debug-Broadcast, der Beleg also durch die Testmethode kontaminiert; dieselbe
+   Situation entsteht im Betrieb aber ohne Zutun durch eine fällige
+   `ReminderScheduler`-Ansage oder jede `TtsPriority.INTERRUPT`-Ausgabe.
+
+**Behoben (Ursache 1, vollständig):**
+- Neu `core/stt/SpeechDetector.kt` – reine, unit-testbare Zustandslogik für die
+  Aufnahmeschleife. Sprachbeginn rastet erst nach 300 ms **zusammenhängender**
+  lauter Frames ein; die Notbremse wird unabhängig geprüft; ein fertiger Clip
+  braucht insgesamt ≥ 400 ms Sprachenergie (`hasEnoughSpeech()`), sonst wird er
+  gar nicht erst transkribiert.
+- Neu `core/stt/TranscriptPlausibility.kt` – verwirft Untertitel-Artefakte
+  (vollständig geklammerte Texte wie `[Musik]`/`* Musik *`, Abspann-Floskeln
+  wie „Untertitel der Amara.org-Community", „Vielen Dank fürs Zuschauen").
+  Bewusst eng gehalten: ein durchgelassenes Artefakt ist harmloser als eine
+  verschluckte Äußerung.
+- `WhisperSttEngine` nutzt beides; `LauncherActivity.handleFollowUpResult()`
+  prüft zusätzlich (zweite Reihe für den Vosk-Fallback und speziell für das
+  GESPRÄCHS-Fenster, das – anders als das News-Fenster – bisher jeden Text
+  ungeprüft an Claude weiterreichte).
+
+**Warum:** Das Tablet soll mehrere Tage unbeaufsichtigt beim Klienten stehen.
+Selbstgespräche, Verwirrung und unnötige API-Kosten sind dort der kritischste
+Fehlermodus – und für einen blinden Nutzer nicht als Fehlfunktion erkennbar.
+
+**Dateien:** `core/stt/SpeechDetector.kt` (neu),
+`core/stt/TranscriptPlausibility.kt` (neu), `core/stt/WhisperSttEngine.kt`,
+`ui/launcher/LauncherActivity.kt`, `core/stt/SpeechDetectorTest.kt` (neu),
+`core/stt/TranscriptPlausibilityTest.kt` (neu). 14 neue Unit-Tests,
+177 Tests gesamt grün (beide Flavors).
+
+**Offen:**
+- **Ursache 2 ist NICHT behoben.** `speak()` muss eine laufende Aufnahme
+  beenden (symmetrisch zur bestehenden Weckwort-Unterdrückung). Bewusst
+  zurückgestellt: invasivster der vier Fixes, Regressionsrisiko unmittelbar
+  vor einer Übergabe.
+- Wirksamkeit am Gerät noch nicht gegengemessen – der Testlauf mit dem
+  reparierten Build steht aus.
+- Schwellen (`SPEECH_ONSET_MS` 300, `MIN_SPEECH_MS` 400) sind ein Kompromiss.
+  Falls kurze Bestätigungen („Ja"/„Nein", tragen den SIM-Import) verschluckt
+  werden, ist `MIN_SPEECH_MS` die Stellschraube.
+
+---
+
 ## [2026-08-22] Doku: Technisches Factsheet (Artifact) + Robustheits-Review
 
 **Was:**

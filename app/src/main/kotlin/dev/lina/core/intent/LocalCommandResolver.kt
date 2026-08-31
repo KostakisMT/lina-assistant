@@ -14,7 +14,8 @@ class LocalCommandResolver : IntentResolver {
             ?: resolveContactImport(normalized)
             ?: resolveHelperCall(normalized)
             ?: resolveCall(normalized)
-            ?: resolveSms(normalized)
+            // Originaltext, damit der SMS-Inhalt seine Groß-/Kleinschreibung behält
+            ?: resolveSms(input.trim())
             ?: resolveDocument(normalized)
             ?: resolveCallControl(normalized)
             ?: resolveSleepMode(normalized)
@@ -25,6 +26,11 @@ class LocalCommandResolver : IntentResolver {
     /**
      * Dokument-Vorlesen per Kamera. Steht NACH resolveSms, damit
      * "lies meine Nachrichten" weiterhin die SMS-Funktion trifft.
+     *
+     * "Nachrichten" meint im Deutschen zweierlei: SMS und News. Hier ist die
+     * SMS-Seite gemeint. News ("was gibt es Neues") werden vom lokalen
+     * Resolver bewusst gar nicht angefasst und fallen an Ebene 2 durch –
+     * siehe den Test `News gehen komplett an Ebene 2`.
      */
     private fun resolveDocument(input: String): ResolvedIntent? = when {
         input.matches(
@@ -144,10 +150,26 @@ class LocalCommandResolver : IntentResolver {
         return null
     }
 
+    /**
+     * SMS. Bekommt als einzige Regel den **Originaltext** statt der
+     * kleingeschriebenen Fassung und matcht dafür case-insensitiv.
+     *
+     * Grund (am Gerät belegt, 2026-08-30): der Nachrichtentext wird hier als
+     * Slot herausgeschnitten und **wortwörtlich an eine andere Person
+     * verschickt**. Aus der kleingeschriebenen Fassung wurde
+     * "schreib mike: Testnachricht von Lina" zu der real versendeten SMS
+     * "testnachricht von lina" – im Deutschen mit seiner
+     * Substantivgroßschreibung liest sich das für den Empfänger wie kaputt,
+     * und der blinde Absender kann es nicht sehen.
+     *
+     * Der Empfängername (Gruppe 1) geht ohnehin ins Fuzzy-Matching, dem die
+     * Groß-/Kleinschreibung egal ist.
+     */
     private fun resolveSms(input: String): ResolvedIntent? {
+        val ci = setOf(RegexOption.IGNORE_CASE)
         val sendPatterns = listOf(
-            Regex("""(?:schreib|schreibe|sende|send)\s+(.+?)[\s:]+(.+)"""),
-            Regex("""(?:sms|nachricht)\s+an\s+(.+?)[\s:]+(.+)"""),
+            Regex("""(?:schreib|schreibe|sende|send)\s+(.+?)[\s:]+(.+)""", ci),
+            Regex("""(?:sms|nachricht)\s+an\s+(.+?)[\s:]+(.+)""", ci),
         )
         for (pattern in sendPatterns) {
             pattern.find(input)?.let { match ->
@@ -158,11 +180,14 @@ class LocalCommandResolver : IntentResolver {
             }
         }
 
-        if (input.matches(Regex(""".*(?:lies|lese|liest|zeig).*(?:nachricht|sms|nachrichten).*"""))) {
+        if (input.matches(
+                Regex(""".*(?:lies|lese|liest|zeig).*(?:nachricht|sms|nachrichten).*""", ci)
+            )
+        ) {
             return ResolvedIntent.ReadSms
         }
 
-        Regex("""(?:antwort|antworte)[\s:]+(.+)""").find(input)?.let { match ->
+        Regex("""(?:antwort|antworte)[\s:]+(.+)""", ci).find(input)?.let { match ->
             return ResolvedIntent.ReplySms(match.groupValues[1].trim())
         }
 
@@ -223,7 +248,19 @@ class LocalCommandResolver : IntentResolver {
         input.matches(Regex(""".*\bleiser\b.*""")) -> ResolvedIntent.VolumeDown
         input.matches(Regex(""".*(?:was höre ich|welches buch|was läuft|was spielt).*""")) ->
             ResolvedIntent.AudiobookInfo
-        input.matches(Regex(""".*(?:welche hörbücher|meine hörbücher|hörbuch(?:liste|er)|bibliothek).*""")) ->
+        // Offene Suchbitte OHNE konkreten Titel/Autor. Muss VOR
+        // resolveAudiobookSearch greifen: dessen Muster "such\s+(.+)" würde
+        // aus "such mir ein Hörbuch" den Suchbegriff "mir ein hörbuch" machen
+        // und den bei LibriVox abfeuern. Der von/über-Ausschluss lässt
+        // konkrete Anfragen ("such ein Hörbuch von Tolstoi") durchfallen.
+        input.matches(Regex(""".*\b(?:such\w*|find\w*|empfehl\w*|empfiehl\w*)\b.*""")) &&
+            input.matches(Regex(""".*\b(?:hörbuch|hörbücher|buch|bücher)\b.*""")) &&
+            !input.matches(Regex(""".*\b(?:von|über|ueber|mit|titel|autor|thema|genre)\b.*""")) ->
+            ResolvedIntent.AskAudiobookTopic
+        // "Was kann ich heute hören?" ist dieselbe Frage wie "welche Hörbücher
+        // habe ich" – nur so, wie man sie tatsächlich stellt.
+        input.matches(Regex(""".*was (?:kann|könnte|koennte|gibt es|gibts).*\b(?:hören|hoeren|anhören|anhoeren)\b.*""")) ||
+            input.matches(Regex(""".*(?:welche hörbücher|meine hörbücher|hörbuch(?:liste|er)|bibliothek).*""")) ->
             ResolvedIntent.ListAudiobooks
         else -> resolveVolumeLevel(input) ?: resolveSleepTimer(input) ?:
             resolveAudiobookGenreSearch(input) ?: resolveAudiobookSearch(input)

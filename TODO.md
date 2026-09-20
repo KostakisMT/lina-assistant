@@ -28,8 +28,8 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 | **✅** | Erledigt | Nichts Offenes mehr (oder nur unverbindliche Politur) |
 
 **Aktuell P0/P1 auf einen Blick** (Details in den jeweiligen Sektionen):
-- **P0:** 21 SIM-Diensteinträge (11 mit 199ct/Min) stehen seit 2026-09-20 im
-  Telefonbuch des Testnutzers – filtern oder entfernen
+- **P0:** – (die 21 SIM-Diensteinträge sind am 2026-09-20 aus dem Telefonbuch
+  entfernt; dauerhafter Fix bleibt die Filterung, s. Kontakt-Import-Sektion)
 - **P1:** Anrufe/SMS am echten Gerät testen – **seit 2026-09-20 möglich, das
   Testtablet hat jetzt eine SIM** (`gsm.sim.state=LOADED`, 5G + VoWiFi);
   Release-Keystore + signiertes `assembleRelease`; Dauerbetrieb über
@@ -345,16 +345,21 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [x] **Behoben (2026-08-30) – Schutz am ANRUF statt am Import.** `PhoneNumberRisk` klassifiziert Notruf / Premium / Service / Kurzwahl; `CallHandler.startCall()` liefert `CallResult.Confirm` statt zu wählen, `openRiskyCallConfirm()` fragt nach. Notrufe werden nie nachgefragt. Am Gerät gegen die echten SIM-Nummern verifiziert (Tarot 22377, Horoskop 22335 → Rückfrage, kein Anruf; normale Nummer → wählt direkt). **Offen:** ein gesprochenes „ja" ist noch nicht geprüft – der Debug-Broadcast umgeht das Bestätigungsfenster, das nur am echten Mikrofon hört.
 - [ ] **P2 (2026-08-30):** Das Muster `if (onboarding != null) return` in den Folgefenster-Öffnern verschluckt Nutzerabsichten **still**. Bei `openRiskyCallConfirm()` behoben (Lina sagt jetzt an, dass sie nicht anruft), aber `openSimImportFollowUp()`, `openDocFollowUp()`, `openLibrivoxSuggestionFollowUp()` u.a. haben es weiterhin. Bei der SIM-Nachfrage besonders heikel: `recordSeen()` läuft vorher, die Karte gilt danach als bekannt und die Frage kommt **nie wieder**.
 - [ ] **P2 (2026-08-30):** Whisper halluziniert auf Raumrauschen gelegentlich zusammenhängenden englischen Text (am Gerät: "3.7, expect is you attack quick, but I'm pretty low on attack…"). Der Artefaktfilter greift dort nicht – er erkennt Untertitel-Notation, keinen plausibel klingenden Fließtext. Denkbar: Sprache des Transkripts prüfen und Nicht-Deutsches im Befehlspfad verwerfen.
-- [!] **P0 (2026-09-20) – 21 SIM-Diensteintraege stehen JETZT im Telefonbuch
-  des Testnutzers**, 11 davon mit 199ct/Min (Tarot 22377, Horoskop 22335,
-  PartnerschaftLiebe 22484, Astrologie, Geburtstagsgruesse, Mailboxtexte,
-  Infoservices, Musik News, Auslandsauskunft ...). Ausgeloest beim
-  Kontakt-Import am Geraet: ein Debug-Befehl landete im offenen
-  SIM-Import-Folgefenster und galt als Zustimmung. Entweder filtern (s.u.)
-  oder die USIM-Eintraege wieder entfernen – solange sie drinstehen, ist
-  genau die dokumentierte Kette offen: Whisper verhoert einen Namen →
-  Fuzzy-Matching landet auf "Tarot" → nur die Anruf-Rueckfrage haelt es auf,
-  und deren gesprochenes "ja" ist bis heute ungetestet.
+- [x] **Erledigt (2026-09-20) – 21 SIM-Diensteintraege aus dem Telefonbuch
+  entfernt.** Korrektur der urspruenglichen Annahme: Lina hatte sie **nicht**
+  importiert. Sie lagen auf der SIM-Karte (`content://icc/adn`, 21 Saetze) und
+  erschienen als Androids automatischer Spiegel unter dem Konto
+  `USIM Account` – es gab keine lokalen Kopien, alle 199ct/Min-Nummern hingen
+  an `raw_contacts` 53–73. Entfernt per
+  `content delete --uri content://com.android.contacts/raw_contacts --where
+  "account_type='USIM Account'"`. **Die SIM selbst blieb unveraendert**
+  (`icc/adn` danach weiterhin 21) – der Loeschbefehl schreibt auf diesem
+  Geraet nicht durch. Gegenprobe: 0 Eintraege mit 199ct/Min, 0 Kurzwahlnummern
+  < 7 Ziffern, und alle 57 persoenlichen Nummern unveraendert vorhanden.
+  Sicherung vorher: `tablet-data/testdaten/sim-adn-2026-09-20.txt` + `.vcf`.
+  **Nicht verifiziert:** ob der Spiegel nach einem Neustart oder erneutem
+  SIM-Lesen zurueckkehrt (60 s lang stabil bei 0, mehr wurde nicht geprueft) –
+  deshalb bleibt die Filterung unten der dauerhafte Fix, nicht dieses Loeschen.
 - [ ] **P1 – SIM-Import filtern statt abschaffen.** Kurzwahlnummern (< 7
   Ziffern), Namen mit „ct/Min", bekannte Anbieter-Präfixe. **Nicht abschaffen:**
   genau die Zielgruppe (ältere Menschen mit altem Tastenhandy) hat ihre

@@ -39,9 +39,22 @@ zusammengefuehrt, auf das Lenovo-Testtablet geschoben und ueber den
 Dateipicker importiert. Gegenprobe gegen die Contacts-DB: **57 von 57
 Nummern angekommen, 0 fehlen.**
 
-**Offen:** Beim Import lief versehentlich auch der SIM-Import an (s. TODO) –
-21 Vodafone-Diensteintraege stehen jetzt im Telefonbuch des Testnutzers,
-11 davon mit 199ct/Min.
+**Nachtrag – Korrektur:** Die 21 Vodafone-Diensteintraege, die nach dem Import
+im Telefonbuch auffielen, stammten **nicht** aus einem versehentlich
+ausgeloesten SIM-Import von Lina. Sie lagen auf der SIM-Karte selbst
+(`content://icc/adn`) und erschienen als Androids automatischer Spiegel unter
+dem Konto `USIM Account`; lokale Kopien gab es keine. Auf Wunsch entfernt per
+`content delete` auf `raw_contacts` mit `account_type='USIM Account'` – die
+SIM blieb dabei unveraendert (danach weiterhin 21 ADN-Eintraege), der
+Loeschbefehl schreibt auf diesem Geraet nicht durch. Vorher gesichert nach
+`tablet-data/testdaten/sim-adn-2026-09-20.txt` + `.vcf`.
+
+**Gegenprobe nach dem Entfernen:** 0 Eintraege mit 199ct/Min, 0 Kurzwahlnummern
+unter 7 Ziffern, alle 57 persoenlichen Nummern unveraendert vorhanden.
+
+**Offen:** Ob der SIM-Spiegel nach Neustart oder erneutem SIM-Lesen
+zurueckkehrt, ist nicht geprueft (60 s stabil bei 0). Der dauerhafte Fix
+bleibt die Filterung im Kontaktpfad (P1 in TODO.md), nicht dieses Loeschen.
 
 ---
 

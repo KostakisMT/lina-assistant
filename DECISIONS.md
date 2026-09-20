@@ -1093,3 +1093,59 @@ nicht**, weil die lokale Regex `such\s+(.+)` vorher zugriff und den ganzen
 verstümmelten Satz als LibriVox-Suchbegriff abfeuerte. Die Regex ist dort
 nicht nur unvollständig, sie zerstört aktiv Eingaben, die die nächste Ebene
 richtig verstanden hätte.
+
+---
+
+## ADR-036: Alle DOM-Parser gehen durch einen gemeinsamen gehärteten Builder (`SecureXml`)
+
+**Datum:** 2026-08-23 | **Status:** Akzeptiert
+
+**Kontext:** Lina parst XML aus zwei fremden Quellen: DAISY-Bücher (lokal, aber
+von fremden Produktionsstellen) und LibriVox-RSS-Feeds (über das Netz, ohne
+Nutzerinteraktion). `DaisyParser` war seit ADR-019 gegen XXE gehärtet,
+`LibrivoxRepository.parseRssChapters()` nicht – dort stand ein blankes
+`DocumentBuilderFactory.newInstance()`. Die Lücke fiel erst auf, als jemand die
+Datei in ein anderes Projekt portierte und dort reviewte. Genau das ist das
+Muster: die Härtung war Wissen in *einer* Methode, nicht Struktur im Projekt.
+
+**Entscheidung:**
+
+1. **Ein `object SecureXml` in `core/xml/`** liefert den einzigen erlaubten
+   `DocumentBuilder`. `DaisyParser` und `LibrivoxRepository` rufen beide nur
+   noch `SecureXml.newDocumentBuilder()`. Direkte
+   `DocumentBuilderFactory.newInstance()`-Aufrufe sind im Projekt verboten
+   (Eintrag in der "Niemals"-Liste in CLAUDE.md).
+2. **`disallow-doctype-decl=true` als stärkste Sperre**, zusätzlich zur
+   DaisyParser-Vorlage. Ohne DOCTYPE gibt es weder externe Entities noch
+   Entity-Expansion – das erschlägt XXE und "Billion Laughs" in einem Zug.
+   Vertretbar, weil **keiner** der beiden Aufrufer eine DTD braucht:
+   DAISY-Dokumente werden vorher per `sanitizeXhtml()` entdoctyped (das war
+   schon vorher nötig, weil die DAISY-DTD offline nicht ladbar ist), und
+   LibriVox-RSS enthält keine.
+3. **Die übrigen Schalter bleiben trotzdem drin** (load-external-dtd,
+   external-general-entities, external-parameter-entities, `isValidating`,
+   `isExpandEntityReferences`, `isXIncludeAware`) und jeder `setFeature`-Aufruf
+   steckt in `runCatching`. Grund: Androids Expat-basierter
+   `DocumentBuilderFactory` kennt nicht alle Xerces-Feature-URIs und wirft
+   sonst `ParserConfigurationException`. Kein Schalter darf allein tragend
+   sein.
+4. **`setEntityResolver` als letzte Instanz** – parser-unabhängig, greift auch
+   dann, wenn eine Plattform keines der Features kennt: ein Entity wird leer
+   aufgelöst statt aus Datei oder Netz geladen.
+
+**Konsequenzen:**
+
+- Die Härtung kann nicht mehr an einer Stelle veralten. Neue XML-Quellen
+  (z.B. der in TODO.md offene `RssFeedRepository`-Umbau von `XmlPullParser`
+  auf `DocumentBuilder`) erben sie automatisch.
+- `parseRssChapters` wurde von `private` auf `internal` gezogen, damit ein
+  reiner JVM-Test die Härtung ohne Netzwerk prüfen kann – dieselbe Begründung
+  wie bei `parseBooks`.
+- Ein DAISY-Buch, das eine DTD wirklich bräuchte, würde jetzt gar nicht mehr
+  parsen statt still ohne Entities. Bewusst in Kauf genommen: `sanitizeXhtml()`
+  übersetzt die real vorkommenden benannten Entities ohnehin selbst in
+  numerische, und der Fehlerfall ist ein nicht lesbares Buch – nicht ein
+  ausgelesenes Dateisystem.
+- **Nicht** gelöst: `RssFeedRepository` nutzt weiterhin `XmlPullParser`. Der
+  lädt nichts extern nach und ist damit nicht anfällig, geht aber auch nicht
+  durch `SecureXml` – die Regel gilt für DOM-Parser.

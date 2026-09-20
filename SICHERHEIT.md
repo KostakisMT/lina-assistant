@@ -86,8 +86,12 @@ das Gerät.
 - Dokumentfotos werden im Regelfall nicht persistiert.
 - Der Dialogverlauf ist auf 20 Nachrichten begrenzt und wird nicht gespeichert.
 - Kein Nutzerkonto, keine Registrierung, keine Werbe- oder Analyse-SDKs.
-- Externe XML-Entities sind im DAISY-Parser abgeschaltet (XXE-Schutz), weil
-  Bücher aus fremden Quellen stammen.
+- Externe XML-Entities sind in **allen** XML-Parsern abgeschaltet
+  (XXE-Schutz), weil sowohl DAISY-Bücher als auch LibriVox-RSS-Feeds aus
+  fremden Quellen stammen. Zentral in `core/xml/SecureXml.kt`
+  (ADR-036) – `DocumentBuilderFactory` wird nirgends mehr direkt
+  aufgerufen. Bis 2026-08-23 galt das nur für den DAISY-Parser; der
+  LibriVox-Feed-Parser war offen (behoben, siehe CHANGELOG.md).
 - Der Anthropic-Schlüssel liegt nicht im Repository (`local.properties`,
   gitignored).
 

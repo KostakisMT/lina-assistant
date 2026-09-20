@@ -1,6 +1,8 @@
 package dev.lina.feature.audiobook
 
+import dev.lina.core.xml.SecureXml
 import org.json.JSONObject
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -92,11 +94,17 @@ class LibrivoxRepository {
         }
     }
 
-    private fun parseRssChapters(input: java.io.InputStream): List<LibrivoxChapter> {
+    /**
+     * internal statt private, damit ein reiner JVM-Test das Parsing und die
+     * XXE-Härtung ohne Netzwerk prüfen kann.
+     *
+     * Der Feed kommt über das Netz von einer fremden Quelle – ein
+     * unkonfigurierter Parser würde externe Entities auflösen (XXE). Deshalb
+     * geht auch dieser Parser durch [SecureXml], genau wie [DaisyParser].
+     */
+    internal fun parseRssChapters(input: InputStream): List<LibrivoxChapter> {
         val chapters = mutableListOf<LibrivoxChapter>()
-        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
-        val builder = factory.newDocumentBuilder()
-        val doc = builder.parse(input)
+        val doc = SecureXml.newDocumentBuilder().parse(input)
         val items = doc.getElementsByTagName("item")
 
         for (i in 0 until items.length) {

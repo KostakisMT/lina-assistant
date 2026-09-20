@@ -5,6 +5,46 @@
 
 ---
 
+## [2026-09-20] merge-vcards.py: stille Verluste beim Kontakt-Zusammenfuehren beseitigt
+
+**Was:** Drei Fehler im Zusammenfuehren von Kontakt-Exporten behoben, alle aus
+einem echten Durchlauf mit den Exporten des Testnutzers (iCloud + Yahoo).
+
+1. **Telefonspalten des Yahoo-Exports wurden nicht erkannt.** `PHONE_HINTS`
+   suchte nur nach "phone/telefon/mobile/handy/tel". Yahoos Layout heisst aber
+   `Phone,Home,Work,Pager,Fax,Mobile,Other` – beim Testnutzer lagen **alle 5
+   Nummern in "Other"**, der komplette Export fiel damit durch (0 statt 5
+   Kontakte). Neu `PHONE_COLS_EXACT` mit EXAKTER Namensgleichheit, damit
+   "Home Email", "Home Address" und "Other City" nicht mitgefangen werden.
+2. **Eine Eingabedatei mit 0 Kontakten blieb folgenlos.** Genau der teure Fall:
+   der erste Yahoo-Export lieferte eine Datei mit blosser Kopfzeile (325 Byte,
+   null Datensaetze) – ohne Nachzaehlen sah das aus wie Erfolg. Jetzt Warnung
+   auf stderr **und** Rueckgabewert 3, damit es auch in einem Skript auffaellt.
+   Neue Rueckgabewerte: 2 = gar nichts, 3 = eine Eingabe leer, 4 = Datei fehlt.
+   Die Ausgabedatei wird in allen Faellen trotzdem geschrieben.
+3. **Verworfene Zeilen werden gezaehlt und angezeigt** statt still uebersprungen
+   (CSV-Zeilen ohne Name/Nummer), ebenso vCard-Karten ohne Telefonnummer. Beim
+   Zaehlen der vCard-Karten wird das iOS-Gruppenpraefix (`item1.TEL`) beachtet –
+   genau wie in `VCardParser.parseBlock()`, sonst meldet das Skript Karten als
+   nummernlos, die das Geraet sehr wohl importiert.
+
+**Warum:** Jeder dieser drei Fehler verliert Kontakte, ohne es zu sagen. Fuer
+einen blinden Nutzer ist ein fehlender Kontakt nicht von einem Tippfehler im
+Namen zu unterscheiden – er merkt es erst, wenn ein Anruf nicht geht.
+
+**Dateien:** `scripts/merge-vcards.py`.
+
+**Am Geraet verifiziert:** 59 iCloud-Karten + 5 Yahoo-Kontakte zu 64 Karten
+zusammengefuehrt, auf das Lenovo-Testtablet geschoben und ueber den
+Dateipicker importiert. Gegenprobe gegen die Contacts-DB: **57 von 57
+Nummern angekommen, 0 fehlen.**
+
+**Offen:** Beim Import lief versehentlich auch der SIM-Import an (s. TODO) –
+21 Vodafone-Diensteintraege stehen jetzt im Telefonbuch des Testnutzers,
+11 davon mit 199ct/Min.
+
+---
+
 ## [2026-08-30] Lokale Vorfilterung: Raumgespräche verlassen das Gerät nicht mehr
 
 **Was:** Neu `core/intent/RoomSpeechFilter.kt` – entscheidet **auf dem Gerät**,

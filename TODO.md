@@ -28,11 +28,13 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 | **✅** | Erledigt | Nichts Offenes mehr (oder nur unverbindliche Politur) |
 
 **Aktuell P0/P1 auf einen Blick** (Details in den jeweiligen Sektionen):
-- **P0:** – (nichts blockiert aktuell die Weiterarbeit)
-- **P1:** Anrufe/SMS am echten Gerät testen (aktuelles Testtablet hat **keine
-  SIM** – `gsm.sim.state=ABSENT`, Test braucht ein SIM-fähiges Gerät oder eine
-  eingelegte Karte); Release-Keystore + signiertes `assembleRelease`;
-  Dauerbetrieb über Stunden/eine Nacht verifizieren
+- **P0:** 21 SIM-Diensteinträge (11 mit 199ct/Min) stehen seit 2026-09-20 im
+  Telefonbuch des Testnutzers – filtern oder entfernen
+- **P1:** Anrufe/SMS am echten Gerät testen – **seit 2026-09-20 möglich, das
+  Testtablet hat jetzt eine SIM** (`gsm.sim.state=LOADED`, 5G + VoWiFi);
+  Release-Keystore + signiertes `assembleRelease`; Dauerbetrieb über
+  Stunden/eine Nacht verifizieren; gesprochenes „ja" auf die
+  Anruf-Rückfrage prüfen (bisher nur per Debug-Broadcast, der sie umgeht)
 
 ---
 
@@ -343,6 +345,16 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [x] **Behoben (2026-08-30) – Schutz am ANRUF statt am Import.** `PhoneNumberRisk` klassifiziert Notruf / Premium / Service / Kurzwahl; `CallHandler.startCall()` liefert `CallResult.Confirm` statt zu wählen, `openRiskyCallConfirm()` fragt nach. Notrufe werden nie nachgefragt. Am Gerät gegen die echten SIM-Nummern verifiziert (Tarot 22377, Horoskop 22335 → Rückfrage, kein Anruf; normale Nummer → wählt direkt). **Offen:** ein gesprochenes „ja" ist noch nicht geprüft – der Debug-Broadcast umgeht das Bestätigungsfenster, das nur am echten Mikrofon hört.
 - [ ] **P2 (2026-08-30):** Das Muster `if (onboarding != null) return` in den Folgefenster-Öffnern verschluckt Nutzerabsichten **still**. Bei `openRiskyCallConfirm()` behoben (Lina sagt jetzt an, dass sie nicht anruft), aber `openSimImportFollowUp()`, `openDocFollowUp()`, `openLibrivoxSuggestionFollowUp()` u.a. haben es weiterhin. Bei der SIM-Nachfrage besonders heikel: `recordSeen()` läuft vorher, die Karte gilt danach als bekannt und die Frage kommt **nie wieder**.
 - [ ] **P2 (2026-08-30):** Whisper halluziniert auf Raumrauschen gelegentlich zusammenhängenden englischen Text (am Gerät: "3.7, expect is you attack quick, but I'm pretty low on attack…"). Der Artefaktfilter greift dort nicht – er erkennt Untertitel-Notation, keinen plausibel klingenden Fließtext. Denkbar: Sprache des Transkripts prüfen und Nicht-Deutsches im Befehlspfad verwerfen.
+- [!] **P0 (2026-09-20) – 21 SIM-Diensteintraege stehen JETZT im Telefonbuch
+  des Testnutzers**, 11 davon mit 199ct/Min (Tarot 22377, Horoskop 22335,
+  PartnerschaftLiebe 22484, Astrologie, Geburtstagsgruesse, Mailboxtexte,
+  Infoservices, Musik News, Auslandsauskunft ...). Ausgeloest beim
+  Kontakt-Import am Geraet: ein Debug-Befehl landete im offenen
+  SIM-Import-Folgefenster und galt als Zustimmung. Entweder filtern (s.u.)
+  oder die USIM-Eintraege wieder entfernen – solange sie drinstehen, ist
+  genau die dokumentierte Kette offen: Whisper verhoert einen Namen →
+  Fuzzy-Matching landet auf "Tarot" → nur die Anruf-Rueckfrage haelt es auf,
+  und deren gesprochenes "ja" ist bis heute ungetestet.
 - [ ] **P1 – SIM-Import filtern statt abschaffen.** Kurzwahlnummern (< 7
   Ziffern), Namen mit „ct/Min", bekannte Anbieter-Präfixe. **Nicht abschaffen:**
   genau die Zielgruppe (ältere Menschen mit altem Tastenhandy) hat ihre
@@ -354,6 +366,11 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
 - [ ] **P2 – vCard als Haupttrichter ausbauen.** Begonnen mit
   `scripts/ipad-import.sh`, `scripts/ipad_contacts_to_vcard.py` und
   `scripts/merge-vcards.py`. Offen: Google-Export, Android-zu-Android.
+  **Teil-erledigt (2026-09-20):** `merge-vcards.py` erkennt jetzt Yahoos
+  Telefonspalten (`Home/Work/Other/...`, exakte Namen) und meldet leere
+  Eingaben laut statt still – beide Fehler hatten beim Testnutzer echte
+  Kontakte verschluckt. iCloud+Yahoo zusammengefuehrt und am Geraet
+  importiert: 57 von 57 Nummern angekommen.
   Hintergrund: iOS verteilt Kontakte über mehrere Accounts – der
   iCloud-Export übersieht Yahoo-Kontakte **stillschweigend** (beim Klienten
   genau so aufgetreten), das Gerätebackup ist als einziger Weg account-blind.

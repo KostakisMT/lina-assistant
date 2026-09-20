@@ -18,7 +18,10 @@ import org.junit.Test
 class FuzzyContactMatcherTest {
 
     private fun matcher(vararg names: String): FuzzyContactMatcher {
-        val contacts = names.mapIndexed { i, name -> Contact(i.toLong(), name, "0170$i") }
+        // Realistische Mobilnummern: alles unter 7 Ziffern gilt als Kurzwahl
+        // (PhoneNumberRisk) und wird vom Raten ausgeschlossen – ein zu kurzer
+        // Platzhalter würde hier stillschweigend jeden Kontakt herausfiltern.
+        val contacts = names.mapIndexed { i, name -> Contact(i.toLong(), name, "017012345$i") }
         return FuzzyContactMatcher(object : ContactSource {
             override fun loadAll() = contacts
         })
@@ -191,4 +194,72 @@ class FuzzyContactMatcherTest {
         assertEquals("", FuzzyContactMatcher.koelnerPhonetik(""))
         assertEquals("", FuzzyContactMatcher.koelnerPhonetik("123"))
     }
+    // --- Diensteinträge des Anbieters (2026-09-20) -------------------------
+    //
+    // Fixture aus der echten Vodafone-SIM des Testnutzers (Namen und Nummern
+    // 1:1 aus content://icc/adn ausgelesen). Genau diese Einträge standen am
+    // 2026-09-20 im Telefonbuch, als der SIM-Spiegel auftauchte.
+
+    private fun telefonbuchMitDiensteintraegen() = FuzzyContactMatcher(
+        object : ContactSource {
+            override fun loadAll() = listOf(
+                Contact(1, "Arundhati Brandt", "0170123451"),
+                Contact(2, "Boris Hartmann", "0170123452"),
+                Contact(3, "Kartenlegen 199ct/Min Tarot", "22377"),
+                Contact(4, "Horoskop 199ct/Min", "22335"),
+                Contact(5, "Auskunft 11880 199ct/Min", "118802899"),
+                Contact(6, "ADAC Pannenhilfe 30ct/Min", "222222"),
+                Contact(7, "Mailbox", "5500"),
+            )
+        },
+    )
+
+    @Test
+    fun `verhoerter Name landet nicht auf einer Premium-Nummer`() {
+        // "Tolstoi" → "Teustol" ist der am Gerät belegte Whisper-Verhörer.
+        // Vorher konnte das über Phonetik/Levenshtein auf "Tarot" fallen.
+        val result = telefonbuchMitDiensteintraegen().findMatches("teustol")
+        val getroffen = when (result) {
+            is ContactMatchResult.SingleMatch -> listOf(result.contact)
+            is ContactMatchResult.MultipleMatches -> result.contacts
+            is ContactMatchResult.NoMatch -> emptyList()
+        }
+        assertTrue(
+            "Diensteintrag geraten: ${getroffen.map { it.displayName }}",
+            getroffen.none { PhoneNumberRisk.isServiceEntry(it.displayName, it.phoneNumber) },
+        )
+    }
+
+    @Test
+    fun `Kurzwahl wird nicht erraten`() {
+        val result = telefonbuchMitDiensteintraegen().findBestMatch("mailbix")
+        assertTrue(
+            "Kurzwahl 5500 wurde erraten: ${result?.displayName}",
+            result == null || result.phoneNumber != "5500",
+        )
+    }
+
+    @Test
+    fun `bewusst genannter Dienst bleibt erreichbar`() {
+        // Wer "Horoskop" klar ausspricht, soll ihn bekommen – gefiltert wird
+        // nur das Raten, nicht der exakte Namensvergleich.
+        val result = telefonbuchMitDiensteintraegen().findMatches("horoskop")
+        assertTrue(result is ContactMatchResult.SingleMatch)
+        assertEquals("22335", (result as ContactMatchResult.SingleMatch).contact.phoneNumber)
+    }
+
+    @Test
+    fun `echte Kontakte bleiben trotz Filter erratbar`() {
+        val result = telefonbuchMitDiensteintraegen().findBestMatch("arundati")
+        assertEquals("Arundhati Brandt", result?.displayName)
+    }
+
+    @Test
+    fun `Diensteintrag auf normaler Nummer wird am Namen erkannt`() {
+        // 0800/118xx-Nummern sind keine Kurzwahl – hier trägt der Tarif-Marker.
+        assertTrue(PhoneNumberRisk.isServiceEntry("ADAC Pannenhilfe 30ct/Min", "222222"))
+        assertTrue(PhoneNumberRisk.isServiceEntry("Auskunft 11880 199ct/Min", "118802899"))
+        assertTrue(!PhoneNumberRisk.isServiceEntry("Boris Hartmann", "0170123452"))
+    }
+
 }

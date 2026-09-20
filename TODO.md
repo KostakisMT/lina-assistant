@@ -360,6 +360,12 @@ und einem offenen Polish-Punkt ist trotzdem "erledigt", nicht "P1".
   **Nicht verifiziert:** ob der Spiegel nach einem Neustart oder erneutem
   SIM-Lesen zurueckkehrt (60 s lang stabil bei 0, mehr wurde nicht geprueft) –
   deshalb bleibt die Filterung unten der dauerhafte Fix, nicht dieses Loeschen.
+- [x] **Erledigt (2026-09-20, ADR-037) – Diensteinträge sind vom Raten
+  ausgeschlossen.** `FuzzyContactMatcher` nutzt in den Stufen Phonetik und
+  Levenshtein nur noch Nicht-Diensteinträge; exakte Namensnennung erreicht sie
+  weiterhin. Wirkt unabhängig davon, wie ein Eintrag ins Telefonbuch kam –
+  also auch beim SIM-Spiegel und beim Google-Konto-Sync, die kein Importfilter
+  je sieht. Am Gerät installiert.
 - [ ] **P1 – SIM-Import filtern statt abschaffen.** Kurzwahlnummern (< 7
   Ziffern), Namen mit „ct/Min", bekannte Anbieter-Präfixe. **Nicht abschaffen:**
   genau die Zielgruppe (ältere Menschen mit altem Tastenhandy) hat ihre

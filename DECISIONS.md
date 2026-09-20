@@ -1149,3 +1149,62 @@ Muster: die Härtung war Wissen in *einer* Methode, nicht Struktur im Projekt.
 - **Nicht** gelöst: `RssFeedRepository` nutzt weiterhin `XmlPullParser`. Der
   lädt nichts extern nach und ist damit nicht anfällig, geht aber auch nicht
   durch `SecureXml` – die Regel gilt für DOM-Parser.
+
+---
+
+## ADR-037: Diensteinträge werden vom Raten ausgeschlossen, nicht vom Import
+**Datum:** 2026-09-20 | **Status:** Akzeptiert
+
+**Kontext:** Beim Besuch am 2026-09-20 standen 21 Vodafone-Diensteinträge im
+Telefonbuch des Testnutzers, 11 davon mit 199ct/Min. Sie stammten **nicht**
+aus einem Lina-Import: Sie liegen auf der SIM (`content://icc/adn`) und
+erscheinen als Androids automatischer Spiegel unter dem Konto `USIM Account`,
+sobald die Karte steckt. Entfernt wurden sie auf Wunsch; ob der Spiegel nach
+einem Neustart zurückkehrt, ist offen.
+
+Genau das ist der Grund, warum TODO-Punkt „SIM-Import filtern" als alleinige
+Maßnahme nicht trägt – dieselbe Begründung, mit der ADR (PhoneNumberRisk)
+seine Prüfung schon bewusst an den ANRUF gelegt hat statt an den Import: Ein
+Importfilter sieht Einträge nicht, die gar nicht durch Linas Import kamen
+(SIM-Spiegel, Google-Konto-Sync bei der Android-Ersteinrichtung).
+
+Die Rückfrage vor dem Wählen (PhoneNumberRisk) ist zwar die richtige letzte
+Instanz, aber sie ist **nicht die erste**: Bis dahin hat Lina den falschen
+Eintrag bereits ausgewählt und angesagt, und ihr gesprochenes „ja" ist bis
+heute ungetestet. Die belegte Kette bleibt: Whisper verhört „Tolstoi" zu
+„Teustol", das Fuzzy-Matching findet „Tarot".
+
+**Entscheidung:**
+
+1. **Der Filter sitzt im Matching, zwischen den exakten und den ratenden
+   Stufen** des `FuzzyContactMatcher`. Stufen 1–3 (exakter Name, exakter
+   Namensteil, Name enthält Query) sehen weiterhin alle Kontakte; Stufen 4–5
+   (Kölner Phonetik, Levenshtein) nur noch die Nicht-Diensteinträge.
+   Begründung: Was Lina **rät**, darf nie eine Servicenummer sein – was der
+   Nutzer **bewusst beim Namen nennt** („ruf die Auskunft an"), soll er
+   bekommen. Ein pauschales Ausblenden hätte Letzteres mit kaputtgemacht.
+2. **Erkennung über `PhoneNumberRisk.isServiceEntry(name, nummer)`** –
+   wiederverwendet die vorhandene Nummernklassifikation (Premium/Service/
+   Kurzwahl) und ergänzt sie um Tarif-Marker im NAMEN („199ct/Min").
+   Der Namensteil ist nötig, weil nicht jeder Diensteintrag eine auffällige
+   Nummer hat: am Gerät gesehen „Auskunft 11880 199ct/Min" auf 118802899 und
+   „Bestellhotline" auf einer 0800er.
+3. **Die Rückfrage am Anruf bleibt unverändert.** Zwei Linien, nicht eine:
+   Diese hier verhindert die falsche Auswahl, jene das falsche Wählen – auch
+   bei Nummern, die gar nicht im Telefonbuch stehen.
+
+**Konsequenzen:**
+
+- Jeder Kontakt mit weniger als 7 Ziffern gilt als Kurzwahl und ist damit vom
+  Raten ausgeschlossen. Beim Anpassen der Tests fiel auf, dass die bisherigen
+  Platzhalternummern (`"0170$i"` → `01700`) selbst zu kurz waren und unter dem
+  neuen Filter jeden Testkontakt verschluckt hätten – die Fixtures nutzen
+  jetzt realistische Mobilnummern. Ein echter Kontakt mit einer sehr kurzen
+  Nummer (Hausanschluss einer Nebenstelle) wäre ebenfalls nur noch exakt
+  erreichbar; bislang kein bekannter Fall.
+- Der Filter wirkt unabhängig davon, wie ein Eintrag ins Telefonbuch kam.
+  Kehrt der SIM-Spiegel nach einem Neustart zurück, ändert das nichts.
+- **Nicht** gelöst: Der SIM-Import von Lina selbst ist weiterhin ungefiltert
+  (offener P1-Punkt). Dieses ADR macht ihn weniger gefährlich, ersetzt ihn
+  aber nicht – ein Import ohne gebündelte Rückfrage bleibt für den Nutzer
+  undurchsichtig.

@@ -44,8 +44,17 @@ class FuzzyContactMatcher(
         if (containsMatches.size == 1) return ContactMatchResult.SingleMatch(containsMatches.first())
         if (containsMatches.size > 1) return ContactMatchResult.MultipleMatches(containsMatches, normalized)
 
+        // Ab hier wird GERATEN. Diensteinträge des Anbieters fliegen deshalb
+        // raus: ein verhörter Eigenname darf niemals auf "Tarot 199ct/Min"
+        // landen (belegte Kette: "Tolstoi" → "Teustol" → Fuzzy-Treffer).
+        // Die exakten Stufen 1–3 oben behalten sie bewusst – wer "Auskunft"
+        // bewusst ausspricht, soll sie auch erreichen.
+        val ratbar = contacts.filterNot {
+            PhoneNumberRisk.isServiceEntry(it.displayName, it.phoneNumber)
+        }
+
         // 4. Phonetische Ähnlichkeit
-        val phoneticMatches = contacts
+        val phoneticMatches = ratbar
             .map { it to phoneticSimilarity(normalized, it.displayName.lowercase()) }
             .filter { it.second > 0.6 }
             .sortedByDescending { it.second }
@@ -58,7 +67,7 @@ class FuzzyContactMatcher(
         }
 
         // 5. Levenshtein Fuzzy
-        val fuzzyMatches = contacts
+        val fuzzyMatches = ratbar
             .map { it to bestPartialDistance(normalized, it.displayName.lowercase()) }
             .filter { it.second <= 2 }
             .sortedBy { it.second }

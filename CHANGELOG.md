@@ -5,6 +5,47 @@
 
 ---
 
+## [2026-09-20] Diensteintraege koennen nicht mehr erraten werden (ADR-037)
+
+**Was:** `PhoneNumberRisk.isServiceEntry(name, nummer)` neu; der
+`FuzzyContactMatcher` schliesst Diensteintraege des Anbieters aus seinen
+**ratenden** Stufen aus (Koelner Phonetik, Levenshtein). Die exakten Stufen
+1-3 sehen weiterhin alle Kontakte.
+
+**Warum:** Die belegte Kette "Tolstoi" -> Whisper-Verhoerer "Teustol" ->
+Fuzzy-Treffer "Kartenlegen 199ct/Min Tarot". Die Rueckfrage vor dem Waehlen
+(PhoneNumberRisk) ist die richtige letzte Instanz, aber nicht die erste: bis
+dahin hat Lina den falschen Eintrag bereits ausgewaehlt, und ihr gesprochenes
+"ja" ist bis heute ungetestet. Wer einen Dienst dagegen bewusst beim Namen
+nennt ("ruf die Auskunft an"), erreicht ihn unveraendert.
+
+**Wie:** Erkennung ueber die vorhandene Nummernklassifikation (Premium /
+Service / Kurzwahl) plus Tarif-Marker im NAMEN ("199ct/Min"). Der Namensteil
+ist noetig, weil nicht jeder Diensteintrag eine auffaellige Nummer hat -- am
+Geraet gesehen "Auskunft 11880 199ct/Min" auf 118802899 und "Bestellhotline"
+auf einer 0800er.
+
+**Dateien:** `core/contacts/PhoneNumberRisk.kt`,
+`core/contacts/FuzzyContactMatcher.kt`,
+`test/.../FuzzyContactMatcherTest.kt`, `DECISIONS.md` (ADR-037).
+
+**Nebenbefund beim Testen:** Die bisherigen Platzhalternummern der
+Matcher-Tests (`"0170$i"` -> `01700`, 5 Ziffern) gelten selbst als Kurzwahl
+und haetten unter dem neuen Filter **jeden** Testkontakt verschluckt -- 7 von
+22 Tests schlugen fehl. Fixtures auf realistische Mobilnummern umgestellt;
+der Grund steht als Kommentar daneben, damit es nicht zurueckfaellt.
+
+**Verifiziert:** 27 Tests in `FuzzyContactMatcherTest` (5 neue, Fixture mit
+den echten SIM-Namen des Testnutzers) und 11 in `PhoneNumberRiskTest` gruen,
+beide Flavors. `assembleDebug` gruen, Build auf dem Lenovo-Testtablet
+installiert und Start ohne Absturz geprueft.
+
+**Offen:** Der SIM-Import von Lina selbst bleibt ungefiltert (P1). Ein echter
+Kontakt mit weniger als 7 Ziffern waere jetzt nur noch exakt erreichbar --
+bislang kein bekannter Fall.
+
+---
+
 ## [2026-09-20] merge-vcards.py: stille Verluste beim Kontakt-Zusammenfuehren beseitigt
 
 **Was:** Drei Fehler im Zusammenfuehren von Kontakt-Exporten behoben, alle aus

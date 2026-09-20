@@ -106,6 +106,37 @@ object PhoneNumberRisk {
     }
 
     /**
+     * Tarif-Marker, wie Anbieter sie in den NAMEN ihrer SIM-Einträge schreiben
+     * ("Horoskop 199ct/Min", "ADAC Pannenhilfe 30ct/Min"). Ergänzt die
+     * Nummernprüfung, weil manche Diensteinträge auf normal aussehenden
+     * Nummern liegen (am Gerät gesehen: "Auskunft 11880 199ct/Min" mit
+     * 118802899, "Bestellhotline" mit 0800…).
+     */
+    private val TARIFF_MARKERS = listOf("ct/min", "ct / min", "cent/min", "ct pro min")
+
+    /**
+     * Ob ein Telefonbucheintrag ein Diensteintrag des Anbieters ist – also
+     * nichts, was Lina **raten** darf.
+     *
+     * Absicht: Ein verhörter Eigenname soll niemals auf so einem Eintrag
+     * landen. "Tolstoi" → "Teustol" → "Tarot" ist die belegte Kette; der
+     * blinde Nutzer sieht nicht, wen er anruft. Wer den Dienst dagegen
+     * bewusst beim Namen nennt ("ruf die Auskunft an"), soll ihn erreichen –
+     * deshalb wirkt dieser Filter nur auf die ratenden Stufen des
+     * [FuzzyContactMatcher] (Phonetik, Levenshtein), nicht auf den exakten
+     * Namensvergleich.
+     *
+     * Ersetzt NICHT die Rückfrage in [Category.needsConfirmation] – die bleibt
+     * die zweite Verteidigungslinie und greift auch bei Nummern, die gar nicht
+     * im Telefonbuch stehen.
+     */
+    fun isServiceEntry(displayName: String?, number: String?): Boolean {
+        if (classify(number).needsConfirmation()) return true
+        val name = displayName?.lowercase().orEmpty()
+        return TARIFF_MARKERS.any { name.contains(it) }
+    }
+
+    /**
      * Gesprochene Rückfrage. Bewusst ohne Cent-Angaben: die stimmen selten und
      * veralten, und der Nutzer soll die Entscheidung treffen, nicht rechnen.
      */

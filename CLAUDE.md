@@ -281,6 +281,8 @@ app/src/main/kotlin/dev/lina/
 │   │   ├── ContactWriter.kt         # Batch-Insert neuer Kontakte
 │   │   ├── ContactDedup.kt          # + PhoneNumberNormalizer.kt: Duplikat-Erkennung
 │   │   └── VCardParser.kt           # vCard 2.1/3.0, pure/unit-testbar
+│   ├── log/
+│   │   └── Protokoll.kt             # Gesprächsprotokoll pro Tag (Einwilligung WARTUNG.md Pkt. 8)
 │   ├── xml/
 │   │   └── SecureXml.kt             # Einziger erlaubter DocumentBuilder (XXE-Härtung, ADR-036)
 │   ├── sim/
@@ -433,6 +435,16 @@ sehenden Freiwilligen.
 > stattdessen die Play-Store-Seite statt selbst zu installieren. Externe
 > Abhängigkeit – muss vor der Übergabe separat installiert sein. Einwilligung
 > (Live-Video an eine anonyme Person) siehe WARTUNG.md.
+
+### Hilfe ("Was kannst du?")
+| Befehl | Aktion |
+|---|---|
+| "Was kannst du?" / "Womit kannst du mir helfen?" | Überblick, dann Rückfrage nach dem Thema |
+| "Was kannst du mit Hörbüchern?" | Direkt die Erklärung zum Thema |
+
+Lokal (`HelpGuide`), funktioniert ohne Netz. Beispielsätze in den
+Erklärungen werden im Test gegen den `LocalCommandResolver` geprüft – neue
+Befehle dort nachtragen, wenn sie in die Hilfe gehören.
 
 ### Schlafmodus
 | Befehl | Aktion |

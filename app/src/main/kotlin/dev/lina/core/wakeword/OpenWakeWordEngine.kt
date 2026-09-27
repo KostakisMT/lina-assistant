@@ -1,5 +1,6 @@
 package dev.lina.core.wakeword
 
+import dev.lina.core.log.Protokoll
 import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -100,7 +101,15 @@ class OpenWakeWordEngine(
                 if (a > maxAmp) maxAmp = a
             }
             if (++frameCount % 25 == 0) { // ~alle 2s
-                android.util.Log.d("OpenWakeWord", "amp=$maxAmp maxScore=$maxScore melBuf=${melBuffer.size} embBuf=${embBuffer.size}")
+                val zeile = "amp=$maxAmp maxScore=$maxScore melBuf=${melBuffer.size} embBuf=${embBuffer.size}"
+                if (maxScore >= NEAR_MISS_SCORE) {
+                    // Beinahe-Treffer: Rohmaterial für die Fehlalarm-Analyse
+                    // ("ja"/"gut"/"oh ja" lösten 2026-09-27 Lina aus)
+                    Protokoll.d("OpenWakeWord", "knapp: $zeile")
+                } else if (frameCount % 375 == 0) {
+                    // Routine nur alle ~30s – alle 2s flutete den logcat-Puffer
+                    android.util.Log.d("OpenWakeWord", zeile)
+                }
                 maxScore = -1f
                 maxAmp = 0
             }
@@ -126,11 +135,12 @@ class OpenWakeWordEngine(
                 // Schwelle wird sofort geloggt, damit ein kurzer Fehlalarm-Spike
                 // (z.B. "Alina") nicht zwischen zwei periodischen Log-Zeilen verschwindet.
                 consecutiveDetections++
-                android.util.Log.d(
+                Protokoll.d(
                     "OpenWakeWord",
                     "über Schwelle: score=$score consecutive=$consecutiveDetections/$patienceCount",
                 )
                 if (consecutiveDetections >= patienceCount) {
+                    Protokoll.d("OpenWakeWord", "WECKWORT AUSGELÖST (score=$score)")
                     consecutiveDetections = 0
                     embBuffer.clear()
                     onDetected()
@@ -229,6 +239,8 @@ class OpenWakeWordEngine(
     }
 
     companion object {
+        /** Ab hier landet ein 2s-Höchstwert als Beinahe-Treffer im Protokoll. */
+        private const val NEAR_MISS_SCORE = 0.3f
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT

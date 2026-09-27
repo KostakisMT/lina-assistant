@@ -19,6 +19,7 @@ class WakeWordService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        dev.lina.core.log.Protokoll.init(this)
         createNotificationChannel()
         try {
             startForeground(NOTIFICATION_ID, buildNotification())
@@ -26,7 +27,7 @@ class WakeWordService : Service() {
         } catch (e: Exception) {
             // Mikrofon-FGS darf aus dem Hintergrund nicht starten (Android 14+) –
             // nicht crashen, LauncherActivity startet uns bei onResume neu
-            android.util.Log.w("WakeWordService", "startForeground abgelehnt, Service beendet sich", e)
+            dev.lina.core.log.Protokoll.w("WakeWordService", "startForeground abgelehnt, Service beendet sich", e)
             stopSelf()
             return
         }
@@ -162,7 +163,7 @@ class WakeWordService : Service() {
                 // FGS-Start aus dem Hintergrund verboten (App nicht sichtbar,
                 // z.B. Bildschirm aus) – nicht crashen; LauncherActivity
                 // startet uns bei onResume erneut
-                android.util.Log.w("WakeWordService", "Start abgelehnt (Hintergrund?)", e)
+                dev.lina.core.log.Protokoll.w("WakeWordService", "Start abgelehnt (Hintergrund?)", e)
             }
         }
     }

@@ -1,6 +1,7 @@
 package dev.lina.core.tts
 
 import android.content.Context
+import dev.lina.core.log.Protokoll
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
@@ -38,6 +39,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
     }
 
     override fun speak(text: String, priority: TtsPriority, onDone: (() -> Unit)?) {
+        Protokoll.d("AndroidTts", "Lina sagt [$priority]: \"$text\"")
         if (!ready) {
             queue.add(Triple(text, priority, onDone))
             return
@@ -55,6 +57,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine, TextToSpeech.OnInitListene
     }
 
     override fun stop() {
+        if (speaking) Protokoll.d("AndroidTts", "abgebrochen")
         tts.stop()
     }
 

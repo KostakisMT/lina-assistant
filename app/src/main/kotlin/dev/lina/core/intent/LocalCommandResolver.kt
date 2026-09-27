@@ -7,7 +7,10 @@ class LocalCommandResolver : IntentResolver {
     override fun resolve(input: String): ResolvedIntent? {
         val normalized = input.trim().lowercase()
 
-        return resolveTime(normalized)
+        // Hilfe zuerst: "was kannst du mit Hörbüchern" darf nicht im
+        // Hörbuch-Resolver landen (Muster eng gefasst, siehe HelpGuide.erkenne)
+        return HelpGuide.erkenne(normalized)
+            ?: resolveTime(normalized)
             ?: resolveDate(normalized)
             ?: resolveCalendar(normalized)
             ?: resolveReminder(normalized)

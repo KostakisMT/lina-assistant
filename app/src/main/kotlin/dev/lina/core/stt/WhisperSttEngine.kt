@@ -1,10 +1,10 @@
 package dev.lina.core.stt
 
 import android.content.Context
+import dev.lina.core.log.Protokoll
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.util.Log
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
@@ -78,7 +78,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
                 recognizer = OfflineRecognizer(context.assets, config)
                 onReady()
             } catch (e: Exception) {
-                Log.e(TAG, "Whisper-Initialisierung fehlgeschlagen", e)
+                Protokoll.e(TAG, "Whisper-Initialisierung fehlgeschlagen", e)
                 onError(e)
             }
         }, "whisper-init").start()
@@ -93,14 +93,14 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
             val samples = try {
                 recordUntilSilence()
             } catch (e: Exception) {
-                Log.e(TAG, "Aufnahme fehlgeschlagen", e)
+                Protokoll.e(TAG, "Aufnahme fehlgeschlagen", e)
                 listening = false
                 return@Thread
             }
             if (!listening) return@Thread // abgebrochen
             listening = false
             if (samples.size < SAMPLE_RATE / 2) {
-                Log.d(TAG, "Zu wenig Audio (${samples.size} Samples), verworfen")
+                Protokoll.d(TAG, "Zu wenig Audio (${samples.size} Samples), verworfen")
                 onResult("")
                 return@Thread
             }
@@ -115,16 +115,16 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
                 stream.release()
                 result
             } catch (e: Exception) {
-                Log.e(TAG, "Transkription fehlgeschlagen", e)
+                Protokoll.e(TAG, "Transkription fehlgeschlagen", e)
                 ""
             }
-            Log.d(
+            Protokoll.d(
                 TAG,
                 "Transkription \"${text}\" (${samples.size / SAMPLE_RATE.toFloat()}s Audio " +
                     "in ${System.currentTimeMillis() - t0}ms)"
             )
             if (!TranscriptPlausibility.isPlausible(text)) {
-                Log.d(TAG, "Transkript verworfen (Untertitel-Artefakt): \"$text\"")
+                Protokoll.d(TAG, "Transkript verworfen (Untertitel-Artefakt): \"$text\"")
                 onResult("")
                 return@Thread
             }
@@ -197,7 +197,7 @@ class WhisperSttEngine(private val context: Context) : SttEngine {
         // Ohne ausreichend Sprachenergie gar nicht erst transkribieren – sonst
         // halluziniert Whisper Untertitel-Artefakte auf reines Raumrauschen.
         if (!detector.hasEnoughSpeech()) {
-            Log.d(TAG, "Zu wenig Sprachenergie (${detector.speechMs}ms), verworfen")
+            Protokoll.d(TAG, "Zu wenig Sprachenergie (${detector.speechMs}ms), verworfen")
             return FloatArray(0)
         }
 

@@ -43,10 +43,12 @@ import androidx.compose.ui.unit.dp
 import dev.lina.core.accessibility.LinaAccessibilityService
 import dev.lina.core.audio.Earcons
 import dev.lina.core.contacts.Contact
+import dev.lina.core.log.Protokoll
 import dev.lina.core.contacts.ContactMatchResult
 import dev.lina.core.contacts.ContactRepository
 import dev.lina.core.contacts.FuzzyContactMatcher
 import dev.lina.BuildConfig
+import dev.lina.core.intent.HelpGuide
 import dev.lina.core.intent.LocalCommandResolver
 import dev.lina.core.intent.ResolvedIntent
 import dev.lina.core.intent.RoomSpeechFilter
@@ -101,6 +103,8 @@ class LauncherActivity : ComponentActivity() {
     private var claude: ConversationEngine? = null
     private var documentCamera: DocumentCamera? = null
     private var helperCallLauncher: HelperCallLauncher? = null
+    /** Laufendes Hilfe-Gespräch ("Was kannst du?"), sonst null. */
+    private var helpGuide: HelpGuide? = null
     /** Nur während des Dokument-Folgefensters im RAM – wird danach verworfen. */
     private var lastDocumentImage: ByteArray? = null
     /** Im Dokument erkannter Termin, während auf die Ja/Nein-Antwort gewartet wird. */
@@ -214,6 +218,18 @@ class LauncherActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Protokoll.init(this)
+        Protokoll.d("LinaLauncher", "App gestartet")
+        // Nie zwei Linas gleichzeitig: Als Home-App läuft Lina in einer
+        // eigenen Home-Task; ein Start über das App-Symbol (oder `monkey`)
+        // legt trotz singleTask eine zweite Instanz in einer normalen Task an.
+        // Beide hörten dann aufs Weckwort und sprachen jede Antwort doppelt
+        // (2026-09-27 am Gerät beobachtet). Die ältere räumt das Feld.
+        aktiveInstanz?.get()?.takeIf { it !== this && !it.isFinishing }?.let { alt ->
+            Protokoll.w("LinaLauncher", "Zweite Lina-Instanz gestartet – ältere wird beendet")
+            alt.finish()
+        }
+        aktiveInstanz = java.lang.ref.WeakReference(this)
 
         setContent {
             LinaTheme {
@@ -333,7 +349,7 @@ class LauncherActivity : ComponentActivity() {
                 RECEIVER_NOT_EXPORTED,
             )
         } catch (e: Exception) {
-            android.util.Log.w("LinaLauncher", "SIM-Status-Empfänger nicht registrierbar", e)
+            Protokoll.w("LinaLauncher", "SIM-Status-Empfänger nicht registrierbar", e)
         }
 
         if (!PermissionsGuide.allGranted(this)) {
@@ -446,10 +462,10 @@ class LauncherActivity : ComponentActivity() {
         if (onboarding != null) return
         // Echo-Unterdrückung: nicht auf die eigene Stimme reagieren
         if (piperEngine?.isSpeaking() == true) {
-            android.util.Log.d("LinaLauncher", "Weckwort ignoriert (Lina spricht gerade)")
+            Protokoll.d("LinaLauncher", "Weckwort ignoriert (Lina spricht gerade)")
             return
         }
-        android.util.Log.d("LinaLauncher", "Weckwort erkannt – starte STT")
+        Protokoll.d("LinaLauncher", "Weckwort erkannt – starte STT")
         runOnUiThread {
             val stt = sttEngine ?: return@runOnUiThread
             // Wake-Word-Engine stoppen, damit Vosk das Mikrofon exklusiv bekommt
@@ -542,7 +558,7 @@ class LauncherActivity : ComponentActivity() {
             override fun run() {
                 if (onboarding != null) return
                 if (SystemClock.uptimeMillis() > deadline) {
-                    android.util.Log.w(
+                    Protokoll.w(
                         "LinaLauncher",
                         "waitForSilenceThenRun: Timeout nach ${maxWaitMs}ms – TTS reagiert nicht, breche ab",
                     )
@@ -693,7 +709,7 @@ class LauncherActivity : ComponentActivity() {
             return true
         }
         val response = handleIntent(resolved ?: ResolvedIntent.Unknown(input))
-        android.util.Log.d("LinaLauncher", "Eingabe=\"$input\" Intent=${formatIntent(resolved)} Antwort=\"$response\"")
+        Protokoll.d("LinaLauncher", "Eingabe=\"$input\" Intent=${formatIntent(resolved)} Antwort=\"$response\"")
 
         debugLog = "Eingabe: \"$input\"\n" +
             "Intent: ${formatIntent(resolved)}\n" +
@@ -711,6 +727,11 @@ class LauncherActivity : ComponentActivity() {
         }
         if (resolved is ResolvedIntent.ReadDocument) {
             // Kamera + Vision laufen asynchron und übernehmen Ansagen/Folgefenster
+            return true
+        }
+        if (resolved is ResolvedIntent.Help) {
+            ttsEngine?.speak(response)
+            openHelpFollowUp()
             return true
         }
         if (resolved is ResolvedIntent.ImportSimContacts || resolved is ResolvedIntent.ImportVcardContacts) {
@@ -785,7 +806,7 @@ class LauncherActivity : ComponentActivity() {
         // ungeprüft an die Claude-API weiterreicht.
         if (!TranscriptPlausibility.isPlausible(text)) {
             if (text.isNotBlank()) {
-                android.util.Log.d(
+                Protokoll.d(
                     "LinaLauncher",
                     "Folgefenster: unplausibles Transkript verworfen: \"$text\"",
                 )
@@ -796,7 +817,7 @@ class LauncherActivity : ComponentActivity() {
         if (newsMode) {
             val cmd = mapNewsFollowUp(text)
             if (cmd != null) {
-                android.util.Log.d("LinaLauncher", "News-Folge: \"$text\" → ${formatIntent(cmd)}")
+                Protokoll.d("LinaLauncher", "News-Folge: \"$text\" → ${formatIntent(cmd)}")
                 val response = handleIntent(cmd)
                 if (cmd is ResolvedIntent.Stop) {
                     ttsEngine?.speak(response)
@@ -811,7 +832,7 @@ class LauncherActivity : ComponentActivity() {
             // Raumgespräch: Fenster STILL schließen, nicht an Claude schicken
             val direct = intentResolver.resolve(text)
             if (direct == null) {
-                android.util.Log.d("LinaLauncher", "News-Folge ignoriert (nicht an Lina): \"$text\"")
+                Protokoll.d("LinaLauncher", "News-Folge ignoriert (nicht an Lina): \"$text\"")
                 resumeWakeWordListening()
             } else {
                 debugInput = text
@@ -835,6 +856,13 @@ class LauncherActivity : ComponentActivity() {
             resumeWakeWordListening()
             return
         }
+        if (resolved is ResolvedIntent.Help) {
+            // Auch mitten im Gespräch lokal: die Hilfe soll ohne Netz gehen
+            // und nicht davon abhängen, wie Claude "was kannst du" auslegt
+            ttsEngine?.speak(handleIntent(resolved))
+            openHelpFollowUp()
+            return
+        }
         // Lokale Vorfilterung, BEVOR etwas das Gerät verlässt.
         //
         // Das Folgefenster hört ohne Weckwort mit; alles, was im Raum
@@ -848,7 +876,7 @@ class LauncherActivity : ComponentActivity() {
         // bleiben ohnehin lokal) und VOR askClaude().
         val adresse = RoomSpeechFilter.evaluate(text)
         if (!adresse.verdict.mayReachCloud()) {
-            android.util.Log.d(
+            Protokoll.d(
                 "LinaLauncher",
                 "Nicht an Lina gerichtet (${adresse.verdict}, Punkte ${adresse.score}, " +
                     "${adresse.signals.joinToString(", ")}) – bleibt lokal: \"$text\"",
@@ -899,7 +927,7 @@ class LauncherActivity : ComponentActivity() {
                 if (entry.lastModified() < cutoff) {
                     val deleted = entry.deleteRecursively()
                     val status = if (deleted) "gelöscht" else "Löschen fehlgeschlagen"
-                    android.util.Log.d(
+                    Protokoll.d(
                         "LinaLauncher",
                         "Aufräumen: ${entry.name} (Alter über $DEBUG_FILE_RETENTION_DAYS Tage) $status",
                     )
@@ -995,7 +1023,7 @@ class LauncherActivity : ComponentActivity() {
                         .apply { mkdirs() }
                     val file = java.io.File(dir, "test_${System.currentTimeMillis()}.jpg")
                     file.writeBytes(bytes)
-                    android.util.Log.d("LinaLauncher", "Testfoto: ${file.absolutePath} (${bytes.size / 1024} kB)")
+                    Protokoll.d("LinaLauncher", "Testfoto: ${file.absolutePath} (${bytes.size / 1024} kB)")
                     debugLog = "Testfoto: ${file.name}\n\n$debugLog"
                     ttsEngine?.speak("Testfoto gespeichert.", TtsPriority.HIGH)
                 }
@@ -1056,7 +1084,7 @@ class LauncherActivity : ComponentActivity() {
         mainHandler.postDelayed({
             camera.capture { bytes ->
                 if (bytes == null) {
-                    android.util.Log.w("LinaLauncher", "Dokument-Foto fehlgeschlagen")
+                    Protokoll.w("LinaLauncher", "Dokument-Foto fehlgeschlagen")
                     ttsEngine?.speak(
                         "Ich konnte leider kein Foto machen. Versuch es bitte noch einmal.",
                         TtsPriority.HIGH,
@@ -1064,7 +1092,7 @@ class LauncherActivity : ComponentActivity() {
                     resumeWakeWordListening()
                     return@capture
                 }
-                android.util.Log.d("LinaLauncher", "Dokument-Foto: ${bytes.size / 1024} kB")
+                Protokoll.d("LinaLauncher", "Dokument-Foto: ${bytes.size / 1024} kB")
                 statusText = "Ich lese das Dokument…"
                 linaActivity = LinaActivity.Thinking
                 Earcons.thinking()
@@ -1088,7 +1116,7 @@ class LauncherActivity : ComponentActivity() {
             is LinaReply.Error -> reply.text
             else -> ""
         }
-        android.util.Log.d("LinaLauncher", "Dokument gelesen: ${text.take(80)}…")
+        Protokoll.d("LinaLauncher", "Dokument gelesen: ${text.take(80)}…")
         debugLog = "Dokument: ${text.take(200)}\n\n$debugLog"
 
         val erfolg = reply is LinaReply.Say
@@ -1176,6 +1204,84 @@ class LauncherActivity : ComponentActivity() {
      * nochmal dasselbe, "nochmal/neu" → neues Foto. Alles andere schließt still
      * (Raumgespräch-Schutz).
      */
+    /**
+     * Hilfe-Gespräch: nach dem Überblick bzw. jeder Themen-Erklärung kurz
+     * zuhören, ob er mehr wissen will. Gleiche Mechanik wie das
+     * Dokument-Folgefenster; Schweigen beendet die Hilfe still.
+     */
+    private fun openHelpFollowUp() {
+        val stt = sttEngine ?: return
+        if (onboarding != null) return
+        cancelWakeResume()
+        WakeWordService.pauseListening(this)
+        waitForSilenceThenRun(
+            onReady = {
+                statusText = "Hilfe – ich höre…"
+                linaActivity = LinaActivity.Listening
+                Earcons.go()
+                var handled = false
+                val timeout = Runnable {
+                    if (!handled) {
+                        handled = true
+                        stt.stopListening()
+                        helpGuide = null
+                        resumeWakeWordListening()
+                    }
+                }
+                mainHandler.postDelayed(timeout, STT_TIMEOUT_MS)
+                mainHandler.postDelayed({
+                    if (handled) return@postDelayed
+                    stt.startListening { text ->
+                        runOnUiThread {
+                            if (handled) return@runOnUiThread
+                            handled = true
+                            mainHandler.removeCallbacks(timeout)
+                            handleHelpFollowUp(text)
+                        }
+                    }
+                }, 350)
+            },
+            onTimeout = {
+                helpGuide = null
+                resumeWakeWordListening()
+            },
+        )
+    }
+
+    private fun handleHelpFollowUp(text: String) {
+        val guide = helpGuide
+        if (guide == null || text.isBlank()) {
+            helpGuide = null
+            resumeWakeWordListening()
+            return
+        }
+        val resolved = intentResolver.resolve(text)
+        // Probiert er einen gerade erklärten Befehl gleich aus ("spiel Hörbuch
+        // ab"), wird er ausgeführt. Nur ein Themenwort ("Hörbücher") bleibt
+        // dagegen in der Hilfe – daher die Wortzahl als Unterscheidung.
+        val istBefehl = resolved != null &&
+            resolved !is ResolvedIntent.Help &&
+            resolved !is ResolvedIntent.Stop &&
+            (guide.themaIn(text) == null || text.trim().split(Regex("""\s+""")).size >= 3)
+        if (istBefehl) {
+            Protokoll.d("LinaLauncher", "Hilfe beendet, Befehl ausprobiert: \"$text\"")
+            helpGuide = null
+            debugInput = text
+            val uebernommen = processDebugInput()
+            if (!uebernommen) resumeWakeWordListening()
+            return
+        }
+        val antwort = if (resolved is ResolvedIntent.Help) guide.start(resolved.thema) else guide.antwort(text)
+        Protokoll.d("LinaLauncher", "Hilfe-Folge: \"$text\" → weiter=${antwort.weiterZuhoeren}")
+        ttsEngine?.speak(antwort.text)
+        if (antwort.weiterZuhoeren) {
+            openHelpFollowUp()
+        } else {
+            helpGuide = null
+            resumeWakeWordListening()
+        }
+    }
+
     private fun openDocFollowUp(lastText: String) {
         val stt = sttEngine ?: return
         if (onboarding != null) return
@@ -1225,7 +1331,7 @@ class LauncherActivity : ComponentActivity() {
             }
             listOf("ja", "alles", "ganze", "vollständig", "vollstaendig", "kompletten")
                 .any { t.contains(it) } && bild != null -> {
-                android.util.Log.d("LinaLauncher", "Dokument-Folge: ganzer Text")
+                Protokoll.d("LinaLauncher", "Dokument-Folge: ganzer Text")
                 readDocumentAloud(verbatimOf = bild)
             }
             listOf("wiederhol", "nochmal sagen", "noch mal sagen").any { t.contains(it) } -> {
@@ -1234,7 +1340,7 @@ class LauncherActivity : ComponentActivity() {
             }
             listOf("nochmal", "noch mal", "neu", "nächste seite", "naechste seite", "umgeblättert")
                 .any { t.contains(it) } -> {
-                android.util.Log.d("LinaLauncher", "Dokument-Folge: neues Foto")
+                Protokoll.d("LinaLauncher", "Dokument-Folge: neues Foto")
                 lastDocumentImage = null
                 readDocumentAloud()
             }
@@ -1247,7 +1353,7 @@ class LauncherActivity : ComponentActivity() {
                     val uebernommen = processDebugInput()
                     if (!uebernommen) resumeWakeWordListening()
                 } else {
-                    android.util.Log.d("LinaLauncher", "Dokument-Folge ignoriert: \"$text\"")
+                    Protokoll.d("LinaLauncher", "Dokument-Folge ignoriert: \"$text\"")
                     resumeWakeWordListening()
                 }
             }
@@ -1298,7 +1404,7 @@ class LauncherActivity : ComponentActivity() {
             // hören, dass er nicht zustande kommt. Am 2026-08-30 am Gerät
             // beobachtet: während der laufenden Einrichtung verschwand der
             // Anrufwunsch spurlos, ohne Wählen und ohne jede Rückmeldung.
-            android.util.Log.w(
+            Protokoll.w(
                 "LinaLauncher",
                 "Sondernummer ${contact.displayName}: Rückfrage nicht möglich " +
                     "(stt=${stt != null}, onboarding=${onboarding != null}) – kein Anruf",
@@ -1311,7 +1417,7 @@ class LauncherActivity : ComponentActivity() {
             return
         }
         pendingRiskyCall = contact
-        android.util.Log.d(
+        Protokoll.d(
             "LinaLauncher",
             "Sondernummer erkannt: ${contact.displayName} (${contact.phoneNumber}) – " +
                 "nicht gewählt, frage nach",
@@ -1330,7 +1436,7 @@ class LauncherActivity : ComponentActivity() {
                         handled = true
                         stt.stopListening()
                         pendingRiskyCall = null
-                        android.util.Log.d("LinaLauncher", "Sondernummer: keine Antwort – kein Anruf")
+                        Protokoll.d("LinaLauncher", "Sondernummer: keine Antwort – kein Anruf")
                         ttsEngine?.speak("Ich habe nicht angerufen.", TtsPriority.NORMAL)
                         resumeWakeWordListening()
                     }
@@ -1362,13 +1468,13 @@ class LauncherActivity : ComponentActivity() {
         when {
             contact == null -> resumeWakeWordListening()
             listOf("ja", "klar", "genau", "trotzdem", "mach", "bitte").any { t.contains(it) } -> {
-                android.util.Log.d("LinaLauncher", "Sondernummer bestätigt: \"$text\" – wähle ${contact.displayName}")
+                Protokoll.d("LinaLauncher", "Sondernummer bestätigt: \"$text\" – wähle ${contact.displayName}")
                 callHandler?.dialContact(contact)
             }
             // Alles andere gilt als Nein – auch Unverstandenes. Eine teure
             // Nummer im Zweifel NICHT zu wählen ist die sichere Richtung.
             else -> {
-                android.util.Log.d("LinaLauncher", "Sondernummer abgelehnt: \"$text\" – kein Anruf")
+                Protokoll.d("LinaLauncher", "Sondernummer abgelehnt: \"$text\" – kein Anruf")
                 ttsEngine?.speak("Alles klar, ich rufe nicht an.", TtsPriority.NORMAL)
                 resumeWakeWordListening()
             }
@@ -1575,7 +1681,7 @@ class LauncherActivity : ComponentActivity() {
             val text = try {
                 contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
             } catch (e: Exception) {
-                android.util.Log.w("LinaLauncher", "Kontaktdatei nicht lesbar", e)
+                Protokoll.w("LinaLauncher", "Kontaktdatei nicht lesbar", e)
                 null
             }
             runOnUiThread {
@@ -1650,7 +1756,7 @@ class LauncherActivity : ComponentActivity() {
             if (settled) return@Runnable
             settled = true
             mainHandler.removeCallbacks(reassure)
-            android.util.Log.w("LinaLauncher", "Claude-Antwort abgebrochen nach ${CLAUDE_HARD_TIMEOUT_MS}ms: \"$input\"")
+            Protokoll.w("LinaLauncher", "Claude-Antwort abgebrochen nach ${CLAUDE_HARD_TIMEOUT_MS}ms: \"$input\"")
             ttsEngine?.speak(
                 "Das dauert mir zu lange. Frag mich das gern gleich noch einmal.",
                 TtsPriority.HIGH,
@@ -1669,7 +1775,7 @@ class LauncherActivity : ComponentActivity() {
                 // gesprochen werden – sonst redet Lina los, nachdem der Nutzer
                 // die Sache längst abgehakt (oder "stopp" gesagt) hat.
                 if (settled) {
-                    android.util.Log.d("LinaLauncher", "Verspätete Claude-Antwort verworfen: \"$input\"")
+                    Protokoll.d("LinaLauncher", "Verspätete Claude-Antwort verworfen: \"$input\"")
                     return@runOnUiThread
                 }
                 settled = true
@@ -1682,7 +1788,7 @@ class LauncherActivity : ComponentActivity() {
                     is LinaReply.Error -> reply.text
                     is LinaReply.End -> "" // Raumgespräch – still zurück zum Weckwort
                 }
-                android.util.Log.d("LinaLauncher", "Eingabe=\"$input\" Intent=Claude(${reply::class.simpleName}) Antwort=\"$response\"")
+                Protokoll.d("LinaLauncher", "Eingabe=\"$input\" Intent=Claude(${reply::class.simpleName}) Antwort=\"$response\"")
                 debugLog = "Eingabe: \"$input\"\n" +
                     "Intent: Claude (${reply::class.simpleName})\n" +
                     "Lina: $response\n\n$debugLog"
@@ -1770,7 +1876,7 @@ class LauncherActivity : ComponentActivity() {
                     out.write(header.array())
                     out.write(pcm, 0, dataLen)
                 }
-                android.util.Log.d("LinaLauncher", "Aufnahme gespeichert: ${file.absolutePath}")
+                Protokoll.d("LinaLauncher", "Aufnahme gespeichert: ${file.absolutePath}")
                 runOnUiThread {
                     statusText = "Aufnahme gespeichert"
                     linaActivity = LinaActivity.Idle
@@ -1985,6 +2091,11 @@ class LauncherActivity : ComponentActivity() {
             audiobookManager?.listChapters()
             "Kapitel werden aufgelistet…"
         }
+        is ResolvedIntent.Help -> {
+            val guide = HelpGuide(mitCloud = claude != null)
+            helpGuide = guide
+            guide.start(intent.thema).text
+        }
         is ResolvedIntent.CallHelper -> {
             val launcher = helperCallLauncher ?: HelperCallLauncher(this).also { helperCallLauncher = it }
             launcher.open().spokenMessage
@@ -2003,7 +2114,7 @@ class LauncherActivity : ComponentActivity() {
                     .atZone(java.time.ZoneId.systemDefault())
                     .toInstant().toEpochMilli()
             } catch (e: Exception) {
-                android.util.Log.w("LinaLauncher", "Ungültiger Zeitpunkt: ${intent.isoZeit}", e)
+                Protokoll.w("LinaLauncher", "Ungültiger Zeitpunkt: ${intent.isoZeit}", e)
                 null
             }
             if (millis != null) {
@@ -2116,6 +2227,7 @@ class LauncherActivity : ComponentActivity() {
         is ResolvedIntent.RejectCall -> "RejectCall"
         is ResolvedIntent.HangUp -> "HangUp"
         is ResolvedIntent.CallHelper -> "CallHelper"
+        is ResolvedIntent.Help -> "Help(${intent.thema?.name ?: "Überblick"})"
         is ResolvedIntent.ReadDocument -> "ReadDocument"
         is ResolvedIntent.SetReminder -> "SetReminder"
         is ResolvedIntent.SetReminderAt -> "SetReminderAt(${intent.isoZeit})"
@@ -2145,10 +2257,17 @@ class LauncherActivity : ComponentActivity() {
         sttEngine?.destroy()
         audiobookManager?.release()
         ttsEngine?.shutdown()
+        // Ausstehende Folgefenster/Weckwort-Neustarts dieser Instanz verwerfen –
+        // sonst hört eine beendete Instanz aus dem Hintergrund weiter zu
+        mainHandler.removeCallbacksAndMessages(null)
+        if (aktiveInstanz?.get() === this) aktiveInstanz = null
         super.onDestroy()
     }
 
     companion object {
+        /** Zuletzt gestartete Instanz – siehe Doppelstart-Schutz in onCreate. */
+        private var aktiveInstanz: java.lang.ref.WeakReference<LauncherActivity>? = null
+
         private const val WAKE_WORD = "Hey Lina"
         // Whisper ist nicht-streamend: bis zu 10s Aufnahme + Transkriptionszeit
         private const val STT_TIMEOUT_MS = 30_000L

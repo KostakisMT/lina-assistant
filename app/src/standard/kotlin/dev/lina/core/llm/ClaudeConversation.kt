@@ -1,6 +1,6 @@
 package dev.lina.core.llm
 
-import android.util.Log
+import dev.lina.core.log.Protokoll
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
@@ -93,7 +93,7 @@ class ClaudeConversation(
         trimHistory()
         return try {
             val response = client.messages().create(buildParams())
-            Log.d(
+            Protokoll.d(
                 TAG,
                 "stopReason=${response.stopReason()} blocks=" +
                     response.content().joinToString(",") { b ->
@@ -136,7 +136,7 @@ class ClaudeConversation(
                 .map { it == StopReason.PAUSE_TURN }
                 .orElse(false)
             if (paused && text.isEmpty()) {
-                Log.w(TAG, "pause_turn ohne Text – Suche abgebrochen")
+                Protokoll.w(TAG, "pause_turn ohne Text – Suche abgebrochen")
                 history.removeLast()
                 return LinaReply.Error(
                     "Die Suche dauert gerade zu lange. Frag mich gleich noch einmal."
@@ -149,19 +149,19 @@ class ClaudeConversation(
             history.addLast(message(MessageParam.Role.ASSISTANT, text))
             LinaReply.Say(text)
         } catch (e: RateLimitException) {
-            Log.e(TAG, "Claude-Anfrage fehlgeschlagen (Rate-Limit)", e)
+            Protokoll.e(TAG, "Claude-Anfrage fehlgeschlagen (Rate-Limit)", e)
             history.removeLast()
             LinaReply.Error("Gerade ist viel los bei mir. Versuch es gleich noch einmal.")
         } catch (e: AnthropicServiceException) {
             // 4xx/5xx vom Dienst (z.B. kein Guthaben, ungültiger Key) – kein Netzproblem
-            Log.e(TAG, "Claude-Anfrage fehlgeschlagen (Dienst)", e)
+            Protokoll.e(TAG, "Claude-Anfrage fehlgeschlagen (Dienst)", e)
             history.removeLast()
             LinaReply.Error(
                 "Mein Sprachdienst meldet ein Problem. " +
                     "Bitte sag deinem Betreuer Bescheid."
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Claude-Anfrage fehlgeschlagen (Verbindung)", e)
+            Protokoll.e(TAG, "Claude-Anfrage fehlgeschlagen (Verbindung)", e)
             history.removeLast()
             LinaReply.Error(
                 "Ich kann gerade nicht nachdenken. " +
@@ -238,7 +238,7 @@ class ClaudeConversation(
                         SuggestedCalendarEvent(titel, datum, arg("zeit")?.takeIf { it.isNotBlank() })
                     } else null
                 }
-            Log.d(
+            Protokoll.d(
                 TAG,
                 "readDocument(verbatim=$verbatim): ${text.length} Zeichen, " +
                     "termin_erkannt=${suggestedEvent != null}",
@@ -249,17 +249,17 @@ class ClaudeConversation(
                 result(LinaReply.Say(text), suggestedEvent)
             }
         } catch (e: RateLimitException) {
-            Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Rate-Limit)", e)
+            Protokoll.e(TAG, "Dokument-Auswertung fehlgeschlagen (Rate-Limit)", e)
             result(LinaReply.Error("Gerade ist viel los bei mir. Versuch es gleich noch einmal."))
         } catch (e: AnthropicServiceException) {
-            Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Dienst)", e)
+            Protokoll.e(TAG, "Dokument-Auswertung fehlgeschlagen (Dienst)", e)
             result(
                 LinaReply.Error(
                     "Mein Sprachdienst meldet ein Problem. Bitte sag deinem Betreuer Bescheid."
                 )
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Dokument-Auswertung fehlgeschlagen (Verbindung)", e)
+            Protokoll.e(TAG, "Dokument-Auswertung fehlgeschlagen (Verbindung)", e)
             result(
                 LinaReply.Error(
                     "Ich kann das Dokument gerade nicht auswerten. " +

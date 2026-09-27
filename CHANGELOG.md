@@ -5,6 +5,44 @@
 
 ---
 
+## [2026-09-27] Hilfe-Gespräch, Gesprächsprotokoll, Doppelstart-Schutz
+
+**Was:**
+- **Hilfe** (`HelpGuide`, Intent `Help`): "Was kannst du?", "Womit kannst du
+  mir helfen?" u.ä. → kurzer Überblick, dann Folgefenster "Worüber möchtest
+  du mehr wissen?" → Thema mit sagbaren Beispielsätzen → "Noch etwas?".
+  "Was kannst du mit Hörbüchern?" springt direkt zum Thema. Lokal, auch ohne
+  Netz; ohne Cloud (ngo) fehlen Nachrichten/Gespräch. Probiert der Nutzer
+  einen erklärten Befehl gleich aus, wird er ausgeführt. Test prüft jeden
+  vorgelesenen Beispielsatz gegen den LocalCommandResolver. "Hilfe" allein
+  und "ich brauche Hilfe" starten bewusst KEIN Tutorial (Notfall-Nähe).
+- **Gesprächsprotokoll** (`core/log/Protokoll.kt`): Weckwort-Treffer und
+  Beinahe-Treffer (≥0.3) mit Score, Transkripte, Intents, jeder gesprochene
+  Satz, Abbrüche, Claude-Fehler – eine Datei pro Tag unter
+  `files/protokoll/`, 30 Tage. `remote.sh protokoll [live]`.
+  OpenWakeWord-Routinezeile nur noch alle 30s (flutete logcat).
+- **Doppelstart-Schutz:** Zwei LauncherActivity-Instanzen liefen parallel
+  (Home-Task + Launcher-Task, singleTask verhindert das seit Android 12
+  nicht) – jede Antwort kam doppelt. Ältere Instanz beendet sich jetzt;
+  `remote.sh` startet über HOME statt `monkey`.
+
+**Befund Weckwort (für das Nachtraining):** Echte "Hey Lina" und Fehlalarme
+auf "ja"/"oh ja"/"gut" erreichen beide Scores ≥0.99 – eine höhere Schwelle
+trennt sie nicht. In `training/gen_samples.py` fehlen genau diese Wörter als
+Hard Negatives. Auch Linas eigene Ansage löste mit 0.999 aus (Echo-Sperre
+griff).
+
+**Dateien:** `HelpGuide.kt`, `ResolvedIntent.kt`, `LocalCommandResolver.kt`,
+`Protokoll.kt`, `LauncherActivity.kt`, `OpenWakeWordEngine.kt`,
+`WakeWordService.kt`, `WhisperSttEngine.kt`, `PiperTtsEngine.kt`,
+`AndroidTtsEngine.kt`, `ClaudeConversation.kt`, `scripts/remote.sh`, Tests
+
+**Offen:** Hilfe-Folgefenster per Sprache am Gerät (nur Einstieg per
+Debug-Befehl getestet); Weckwort nachtrainieren; Be My Eyes fehlt auf dem
+Testgerät (Thema daher nicht in der Hilfe).
+
+---
+
 ## [2026-09-27] Fix: remote.sh deploy installierte eine Wochen alte APK
 
 **Was:** `deploy` baut jetzt `assembleStandardDebug` und installiert

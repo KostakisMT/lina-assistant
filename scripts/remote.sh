@@ -61,6 +61,11 @@ set_volume() {
   done
   echo "WARNUNG: Lautstärke steht bei $(speaker_volume) statt $target" >&2
 }
+# Lina ist die Home-App: über HOME starten, nicht über das App-Symbol
+# (monkey/LAUNCHER) – das legte eine zweite, parallel sprechende Instanz an.
+start_lina() {
+  adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME > /dev/null
+}
 debug_input() { adb shell "am broadcast -a dev.lina.DEBUG_INPUT --es text '$1'" > /dev/null; }
 
 case "${1:-help}" in
@@ -93,10 +98,19 @@ case "${1:-help}" in
     adb install -r "$APK"
     echo "Installiert. App neu starten:"
     adb shell am force-stop dev.lina
-    adb shell monkey -p dev.lina -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+    start_lina
     # Android schaltet Accessibility-Dienste bei jeder Neuinstallation still ab
     enable_a11y
     echo "Fertig." ;;
+  protokoll)
+    # Gesprächsprotokoll (WARTUNG.md Punkt 8): "protokoll" holt alle Tage ab,
+    # "protokoll live" zeigt den heutigen Tag fortlaufend
+    if [ "${2:-}" = live ]; then
+      adb shell "tail -n 30 -f $FILES/protokoll/\$(date +%F).log"
+    else
+      mkdir -p tablet-data
+      adb pull "$FILES/protokoll" tablet-data/ >/dev/null && echo "→ tablet-data/protokoll/" && ls tablet-data/protokoll/
+    fi ;;
   pull-onboarding)
     mkdir -p tablet-data
     adb pull "$FILES/onboarding" tablet-data/ && echo "→ tablet-data/onboarding/" ;;
@@ -108,7 +122,7 @@ case "${1:-help}" in
     scrcpy ;;
   restart-app)
     adb shell am force-stop dev.lina
-    adb shell monkey -p dev.lina -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+    start_lina
     echo "Lina neu gestartet." ;;
   stop)
     # Lina hört sofort auf zu reden/vorzulesen (wie der Sprachbefehl "Stopp")
@@ -141,6 +155,7 @@ Lina-Fernwartung – Befehle:
   logs              Live-Logs des Lina-Prozesses
   logs save         Kompletten Log-Puffer nach tablet-data/ sichern
   deploy            Baut Debug-APK, installiert sie remote, startet Lina neu
+  protokoll [live]  Gesprächsprotokoll abholen (live: fortlaufend ansehen)
   pull-onboarding   Einrichtungs-Aufnahmen + Antworten abholen
   pull-recordings   Alle App-Dateien (Aufnahmen etc.) abholen
   screen            Bildschirm spiegeln (scrcpy)

@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
+import dev.lina.core.log.Protokoll
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
@@ -128,6 +129,7 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
             onDone?.invoke()
             return
         }
+        Protokoll.d(TAG, "Lina sagt [$priority]: \"$text\"")
         val item = QueueItem(text, priority, onDone)
         if (priority == TtsPriority.INTERRUPT) {
             queue.clear()
@@ -139,6 +141,9 @@ class PiperTtsEngine(private val context: Context) : TtsEngine {
     }
 
     override fun stop() {
+        if (!shuttingDown && (isSpeaking() || queue.isNotEmpty())) {
+            Protokoll.d(TAG, "abgebrochen (${queue.size} Sätze verworfen)")
+        }
         queue.clear()
         stopPlayback()
     }

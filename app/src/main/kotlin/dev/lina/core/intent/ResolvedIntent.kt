@@ -66,6 +66,8 @@ sealed class ResolvedIntent {
     data object ShowCalendar : ResolvedIntent()
     data object HideCalendar : ResolvedIntent()
     data object ClearCalendarEvents : ResolvedIntent()
+    /** "Was kannst du?" – gesprochene Anleitung, optional direkt zu einem Thema. */
+    data class Help(val thema: HelpGuide.Thema?) : ResolvedIntent()
     data object Stop : ResolvedIntent()
     data class Unknown(val rawInput: String) : ResolvedIntent()
 }

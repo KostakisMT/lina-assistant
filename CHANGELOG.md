@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-09-27] Fix: remote.sh deploy installierte eine Wochen alte APK
+
+**Was:** `deploy` baut jetzt `assembleStandardDebug` und installiert
+`apk/standard/debug/app-standard-debug.apk` (zeigt das Build-Datum an). Die
+Altlast `apk/debug/app-debug.apk` vom 12.08. gelöscht.
+
+**Warum:** Seit den Build-Flavors (ADR-034) entsteht die APK unter
+`standard/`; der alte Pfad existierte noch und wurde still installiert. Der
+darin eingebaute API-Key war ungültig (401) – Foto, Vorlesen und freie Fragen
+endeten alle mit "Bitte sag deinem Betreuer Bescheid". Die frühere Angabe,
+der Deploy-Test habe den ADR-037-Stand aufgespielt, war falsch.
+
+**Dateien:** `scripts/remote.sh`, `WARTUNG.md` (Einwilligung Punkt 8)
+
+---
+
 ## [2026-09-27] Fernwartung: Notfall-Befehle in remote.sh
 
 **Was:** `remote.sh` kann jetzt `stop`, `nacht` (Stopp + Schlafmodus +

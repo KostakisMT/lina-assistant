@@ -60,6 +60,13 @@ Vor der Übergabe muss die Nutzer:in **informiert zustimmen**:
    Play-Store-Seite. Lina selbst sieht, hört oder speichert vom eigentlichen
    Anruf nichts – der läuft komplett innerhalb von Be My Eyes.
 
+8. **Protokoll für die Entwicklung (zugestimmt 2026-09-27, mündlich beim
+   Besuch):** Betreuer:innen dürfen mitlesen, was Lina verstanden und
+   geantwortet hat (Logs, auch aus der Ferne), um Fehler zu finden und Lina zu
+   verbessern. Die Logs enthalten Gesagtes wörtlich – auch Raumgespräche im
+   Folgefenster und Anfänge vorgelesener Briefe. Nur für die Entwicklung,
+   nicht weitergeben, ausgewertete Dateien aus `tablet-data/` löschen.
+
 Am besten kurz und einfach erklären und die Zustimmung schriftlich oder als
 Sprachnotiz festhalten.
 

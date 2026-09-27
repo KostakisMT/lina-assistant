@@ -13,7 +13,9 @@ command -v adb >/dev/null 2>&1 || { echo "adb nicht gefunden" >&2; exit 1; }
 
 IP="${LINA_TABLET_IP:-}"
 PORT="${LINA_TABLET_PORT:-5555}"
-APK="app/build/outputs/apk/debug/app-debug.apk"
+# Seit den Build-Flavors (ADR-034) liegt die APK unter standard/ – der alte
+# Pfad apk/debug/ existiert als Altlast weiter und wurde still installiert.
+APK="app/build/outputs/apk/standard/debug/app-standard-debug.apk"
 FILES="/sdcard/Android/data/dev.lina/files"
 
 die() { echo "Fehler: $*" >&2; exit 1; }
@@ -86,7 +88,8 @@ case "${1:-help}" in
     # java_home findet das Homebrew-JDK nicht (nicht in /Library/Java registriert)
     [ -n "${JAVA_HOME:-}" ] || JAVA_HOME="$(/usr/libexec/java_home -v 17 2>/dev/null || echo /opt/homebrew/opt/openjdk@17)"
     export JAVA_HOME
-    ./gradlew assembleDebug -q
+    ./gradlew assembleStandardDebug -q
+    echo "Installiere $APK (gebaut $(stat -f '%Sm' -t '%d.%m. %H:%M' "$APK"))"
     adb install -r "$APK"
     echo "Installiert. App neu starten:"
     adb shell am force-stop dev.lina

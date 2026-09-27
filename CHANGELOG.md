@@ -20,9 +20,19 @@ dazwischen". `force-stop` hilft dort nicht (Home-App startet sofort neu).
 Default-Device, nicht den Lautsprecher – daher Lautstärketasten mit
 Nachmessen. Beim Test war der AccessibilityService erneut aus.
 
+Außerdem: `logs` zeigt den ganzen Lina-Prozess (die feste Tag-Liste war
+veraltet, `WakeWord` statt `OpenWakeWord`), `logs save` sichert den Puffer;
+`deploy` findet das Homebrew-JDK auch ohne `java_home`; die
+Accessibility-Prüfung wartet bis zu 10 s auf das Binden.
+
+**Getestet** über Tailscale (Tablet 100.x, direkte Verbindung): connect,
+status, a11y, stop, nacht (Lautsprecher 0), laut (8), restart-app,
+logs save, deploy (49 s, inkl. ADR-037-Stand). WARTUNG.md um Tailscale-ACL
+und den Hinweis ergänzt, dass `adb tcpip` keinen Neustart überlebt.
+
 **Dateien:** `scripts/remote.sh`, `WARTUNG.md`
 
-**Offen:** Tailscale auf dem Tablet, Test von außerhalb des WLANs.
+**Offen:** Zugriff von außerhalb des Nutzer-WLANs testen; scrcpy remote.
 
 ---
 

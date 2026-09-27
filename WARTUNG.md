@@ -76,6 +76,30 @@ Sprachnotiz festhalten.
 3. In Tailscale für das Tablet **„Disable key expiry"** setzen, sonst fällt der
    Zugang nach Ablauf des Schlüssels aus.
 4. Auf dem Betreuer-Rechner: `export LINA_TABLET_IP=100.x.y.z` (z.B. in ~/.zshrc).
+5. **Tailscale-ACL setzen** (Admin-Konsole → Access Controls). Die
+   Standardregel erlaubt jedem Gerät im Tailnet alles – mit ADB heißt das
+   volle Kontrolle über Anrufe, SMS und Kontakte des Nutzers. Nur der
+   Betreuer-Rechner darf aufs Tablet, und nur auf Port 5555:
+
+   ```jsonc
+   {
+     "hosts": {"betreuer-mac": "100.a.b.c", "lina-tablet": "100.x.y.z"},
+     "acls":  [{"action": "accept", "src": ["betreuer-mac"], "dst": ["lina-tablet:5555"]}],
+     "ssh":   [],
+     "tests": [
+       {"src": "betreuer-mac", "accept": ["lina-tablet:5555"], "deny": ["lina-tablet:22"]},
+       {"src": "lina-tablet",  "deny": ["betreuer-mac:22", "betreuer-mac:445"]},
+     ],
+   }
+   ```
+
+   Ping vom Mac zum Tablet geht danach nicht mehr – gewollt, `remote.sh`
+   braucht nur ADB. Jedes weitere Gerät im Tailnet bekommt ohne eigene Regel
+   keinen Zugriff.
+6. **`adb tcpip 5555` überlebt keinen Neustart.** Nach einem Reboot des
+   Tablets (Update, Stromausfall) ist der Fernzugriff weg, bis jemand vor Ort
+   ein USB-Kabel anschließt oder WLAN-Debugging neu koppelt. Deshalb:
+   Tablet am Netzteil, Updates nur bei Anwesenheit.
 
 ## Täglicher Umgang
 
@@ -95,6 +119,7 @@ Notfälle (Lina hängt, tut Falsches, redet nachts dazwischen):
 ./scripts/remote.sh nacht            # Stopp + Schlafmodus + Lautsprecher auf 0
 ./scripts/remote.sh laut [0-15]      # Lautstärke zurück (Standard 8) + Schlafmodus aus
 ./scripts/remote.sh restart-app      # Lina neu starten, wenn sie hängt
+./scripts/remote.sh logs save        # Log-Puffer sichern, BEVOR man neu startet
 ./scripts/remote.sh a11y             # AccessibilityService wieder einschalten
 ```
 

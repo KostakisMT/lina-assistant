@@ -148,10 +148,10 @@ Eine echte Vodafone-SIM lieferte 21 Einträge, **keinen persönlichen**, 13 mit
 
 ## 6. Betrieb und Auslieferung
 
-- [ ] **Fernwartung ist nie getestet worden.** Tailscale fehlt auf Mac und
-      Tablet (`brew install --cask tailscale-app` braucht das Nutzerpasswort).
-      Im Entwickler-WLAN verhinderte Client-Isolation jede direkte Verbindung –
-      beim Nutzer kann das genauso sein. Ohne Tailscale kein Fernzugriff.
+- [x] **Fernwartung getestet (2026-09-27)** – Tailscale auf Mac + Tablet,
+      alle remote.sh-Befehle inkl. deploy übers Tailnet. Die frühere
+      „Client-Isolation" war vermutlich die fehlende macOS-Freigabe
+      „Lokales Netzwerk". Offen: Test von außerhalb des Nutzer-WLANs.
 - [ ] **Be My Eyes installieren** – sonst öffnet „ruf einen Helfer an" nur die
       Play-Store-Seite (ADR-033).
 - [ ] Release-Keystore + signiertes `assembleRelease`.

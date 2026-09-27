@@ -28,11 +28,15 @@ A11Y="dev.lina/dev.lina.core.accessibility.LinaAccessibilityService"
 enable_a11y() {
   adb shell settings put secure enabled_accessibility_services "$A11Y"
   adb shell settings put secure accessibility_enabled 1
-  if adb shell dumpsys accessibility | grep -q 'label=Lina'; then
-    echo "AccessibilityService aktiv."
-  else
-    echo "WARNUNG: AccessibilityService NICHT aktiv – eingehende Anrufe gehen nicht!" >&2
-  fi
+  # Nach einem (Neu-)Start bindet Android den Dienst erst nach einigen Sekunden
+  local i
+  for i in 1 2 3 4 5; do
+    if adb shell dumpsys accessibility | grep -q 'label=Lina'; then
+      echo "AccessibilityService aktiv."; return 0
+    fi
+    sleep 2
+  done
+  echo "WARNUNG: AccessibilityService NICHT aktiv – eingehende Anrufe gehen nicht!" >&2
 }
 # Lautstärke per simulierter Taste: "cmd media_session volume --set" trifft auf
 # dem Lenovo nur das Default-Device, nicht den Lautsprecher. Einzelne Tasten
@@ -66,13 +70,27 @@ case "${1:-help}" in
     adb shell "uptime; echo; dumpsys battery | grep -E 'level|AC powered'; echo; \
       dumpsys activity services dev.lina | grep -E 'WakeWordService|app=' | head -5" ;;
   logs)
-    adb logcat -s LinaLauncher:D WhisperStt:D ClaudeConversation:D VoiceOnboarding:D WakeWord:D ;;
+    # Alles aus dem Lina-Prozess statt fester Tag-Liste (die veraltet leise).
+    # Die PID wechselt bei jedem Neustart – dann "logs" neu aufrufen.
+    PID="$(adb shell pidof dev.lina | tr -d '\r')"
+    [ -n "$PID" ] || die "Lina läuft nicht (./scripts/remote.sh restart-app)"
+    if [ "${2:-}" = save ]; then
+      mkdir -p tablet-data
+      OUT="tablet-data/logcat-$(date +%Y%m%d-%H%M%S).txt"
+      adb logcat -d -v time > "$OUT"   # ganzer Puffer: auch Abstürze/Neustarts
+      echo "→ $OUT ($(wc -l < "$OUT" | tr -d ' ') Zeilen)"
+    else
+      adb logcat -v time --pid="$PID"
+    fi ;;
   deploy)
-    JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home -v 17)}" ./gradlew assembleDebug -q
+    # java_home findet das Homebrew-JDK nicht (nicht in /Library/Java registriert)
+    [ -n "${JAVA_HOME:-}" ] || JAVA_HOME="$(/usr/libexec/java_home -v 17 2>/dev/null || echo /opt/homebrew/opt/openjdk@17)"
+    export JAVA_HOME
+    ./gradlew assembleDebug -q
     adb install -r "$APK"
     echo "Installiert. App neu starten:"
     adb shell am force-stop dev.lina
-    adb shell monkey -p dev.lina -c android.intent.category.LAUNCHER 1 > /dev/null
+    adb shell monkey -p dev.lina -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
     # Android schaltet Accessibility-Dienste bei jeder Neuinstallation still ab
     enable_a11y
     echo "Fertig." ;;
@@ -87,7 +105,7 @@ case "${1:-help}" in
     scrcpy ;;
   restart-app)
     adb shell am force-stop dev.lina
-    adb shell monkey -p dev.lina -c android.intent.category.LAUNCHER 1 > /dev/null
+    adb shell monkey -p dev.lina -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
     echo "Lina neu gestartet." ;;
   stop)
     # Lina hört sofort auf zu reden/vorzulesen (wie der Sprachbefehl "Stopp")
@@ -117,7 +135,8 @@ case "${1:-help}" in
 Lina-Fernwartung – Befehle:
   connect           Tablet über Tailscale verbinden (LINA_TABLET_IP setzen)
   status            Uptime, Akku/Netzteil, Lina-Service-Status
-  logs              Live-Logs der Lina-Komponenten
+  logs              Live-Logs des Lina-Prozesses
+  logs save         Kompletten Log-Puffer nach tablet-data/ sichern
   deploy            Baut Debug-APK, installiert sie remote, startet Lina neu
   pull-onboarding   Einrichtungs-Aufnahmen + Antworten abholen
   pull-recordings   Alle App-Dateien (Aufnahmen etc.) abholen

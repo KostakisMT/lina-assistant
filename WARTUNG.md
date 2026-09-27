@@ -88,6 +88,26 @@ Sprachnotiz festhalten.
 ./scripts/remote.sh screen           # Bildschirm spiegeln (scrcpy)
 ```
 
+Notfälle (Lina hängt, tut Falsches, redet nachts dazwischen):
+
+```bash
+./scripts/remote.sh stop             # sofort still (wie Sprachbefehl "Stopp")
+./scripts/remote.sh nacht            # Stopp + Schlafmodus + Lautsprecher auf 0
+./scripts/remote.sh laut [0-15]      # Lautstärke zurück (Standard 8) + Schlafmodus aus
+./scripts/remote.sh restart-app      # Lina neu starten, wenn sie hängt
+./scripts/remote.sh a11y             # AccessibilityService wieder einschalten
+```
+
+> `am force-stop` allein beendet Lina nicht dauerhaft: Sie ist die Home-App
+> und wird von Android sofort neu gestartet. `stop`/`nacht` wirken über den
+> Debug-Befehlskanal (nur Debug-Build) und die Lautstärketasten.
+
+> **Mac-seitig vorher prüfen** (2026-09-27 beim Nutzer gefunden): Erreicht
+> der Mac nichts im LAN (`No route to host`, selbst zum Router), fehlt der
+> Terminal-/Claude-App die macOS-Freigabe *Datenschutz & Sicherheit → Lokales
+> Netzwerk*, oder ein anderer VPN-Client (OVPN) blockiert das LAN. Das ist
+> keine WLAN-Client-Isolation.
+
 „Änderungen automatisch laden" = `deploy`: baut die aktuelle lokale Version und
 installiert sie übers Netz; Lina startet danach neu. Kein App-Store, keine
 Wartezeit.

@@ -5,6 +5,27 @@
 
 ---
 
+## [2026-09-27] Fernwartung: Notfall-Befehle in remote.sh
+
+**Was:** `remote.sh` kann jetzt `stop`, `nacht` (Stopp + Schlafmodus +
+Lautsprecher 0), `laut [n]` und `a11y`. `deploy` schaltet den
+AccessibilityService nach der Installation automatisch wieder ein und prüft
+ihn. Mit gesetzter `LINA_TABLET_IP` wird per `ANDROID_SERIAL` immer das
+Netzwerk-Gerät angesprochen (kein "more than one device" bei USB+WLAN).
+
+**Warum:** Tablet bleibt beim Testnutzer; Hauptszenarien für die
+Fernhilfe sind "Lina hängt", "Lina tut Falsches" und "Lina redet nachts
+dazwischen". `force-stop` hilft dort nicht (Home-App startet sofort neu).
+`cmd media_session volume --set` trifft auf dem Lenovo nur das
+Default-Device, nicht den Lautsprecher – daher Lautstärketasten mit
+Nachmessen. Beim Test war der AccessibilityService erneut aus.
+
+**Dateien:** `scripts/remote.sh`, `WARTUNG.md`
+
+**Offen:** Tailscale auf dem Tablet, Test von außerhalb des WLANs.
+
+---
+
 ## [2026-09-20] Diensteintraege koennen nicht mehr erraten werden (ADR-037)
 
 **Was:** `PhoneNumberRisk.isServiceEntry(name, nummer)` neu; der

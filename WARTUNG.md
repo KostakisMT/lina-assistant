@@ -93,9 +93,10 @@ Sprachnotiz festhalten.
    }
    ```
 
-   Ping vom Mac zum Tablet geht danach nicht mehr – gewollt, `remote.sh`
-   braucht nur ADB. Jedes weitere Gerät im Tailnet bekommt ohne eigene Regel
-   keinen Zugriff.
+   Ping geht weiterhin (Tailscale erlaubt ICMP, sobald irgendeine Regel
+   zwischen zwei Geräten existiert). Jedes weitere Gerät im Tailnet bekommt
+   ohne eigene Regel keinen Zugriff. Geprüft 2026-09-27: Tablet → Mac-Ports
+   5000/7000 über WLAN offen, über Tailscale blockiert; ADB vom Mac geht.
 6. **`adb tcpip 5555` überlebt keinen Neustart.** Nach einem Reboot des
    Tablets (Update, Stromausfall) ist der Fernzugriff weg, bis jemand vor Ort
    ein USB-Kabel anschließt oder WLAN-Debugging neu koppelt. Deshalb:
